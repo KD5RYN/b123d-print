@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.collections  # noqa: E402
 import matplotlib.patches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.path import Path as MPath  # noqa: E402
 import numpy as np  # noqa: E402
 from build123d import Mesher, Part, Plane, Unit, Vector, export_step, export_stl, section as _section  # noqa: E402
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: E402
@@ -149,13 +150,15 @@ def section_view(parts, plane: str, at: float, path: str | Path, title: str) -> 
     for part, color, label in _as_list(parts):
         drew = False
         for face in section_faces(part, plane, at):
-            v, t = face.tessellate(0.02)
-            if not t:
+            # fill from the face's own outline + holes (no tessellation seams)
+            from .checks import _loops
+
+            loops = _loops(face, plane, 0.05)
+            if not loops:
                 continue
-            v = np.array([[(p.X, p.Y, p.Z)[keep[0]], (p.X, p.Y, p.Z)[keep[1]]] for p in v])
-            ax.add_collection(
-                matplotlib.collections.PolyCollection(v[np.array(t)], facecolors=color, edgecolors=color, linewidths=0.2)
-            )
+            verts = np.concatenate([np.vstack([lp, lp[:1]]) for lp in loops])
+            codes = np.concatenate([[MPath.MOVETO] + [MPath.LINETO] * (len(lp) - 1) + [MPath.CLOSEPOLY] for lp in loops])
+            ax.add_patch(matplotlib.patches.PathPatch(MPath(verts, codes), facecolor=color, edgecolor="none"))
             drew = True
         if drew and label:
             handles.append(matplotlib.patches.Patch(color=color, label=label))
@@ -165,9 +168,9 @@ def section_view(parts, plane: str, at: float, path: str | Path, title: str) -> 
     ax.grid(alpha=0.3)
     ax.set_xlabel(names[keep[0]] + " (mm)")
     ax.set_ylabel(names[keep[1]] + " (mm)")
-    if handles:
-        ax.legend(handles=handles, loc="upper right", fontsize=9)
-    if not ax.collections:
+    if len(handles) > 1:  # outside the plot, so it never hides geometry
+        ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1), fontsize=9, borderaxespad=0)
+    if not ax.patches:
         ax.text(0.5, 0.5, "plane misses every part", transform=ax.transAxes, ha="center")
     ax.set_title(f"{title}: {plane} section at {names[axis]}={round(at, 3):g} mm")
     path = Path(path)

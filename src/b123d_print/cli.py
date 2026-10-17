@@ -16,7 +16,7 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def data(name: str) -> str:
-    return files("b123d_print").joinpath("data", name).read_text()
+    return files("b123d_print").joinpath("data", name).read_text(encoding="utf-8")
 
 
 def workspace(root: str | None) -> tuple[Path, str]:
@@ -32,7 +32,7 @@ def init_workspace(root: Path) -> list[Path]:
     for fname, content in ((WORKSPACE_FILE, data("b123d-print.toml")), ("AGENTS.md", data("AGENTS.md"))):
         p = root / fname
         if not p.exists():
-            p.write_text(content)
+            p.write_text(content, encoding="utf-8")
             made.append(p)
     (root / "parts").mkdir(exist_ok=True)
     return made
@@ -54,10 +54,10 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
         raise FileExistsError(f"{p} already exists")
     p.parent.mkdir(parents=True)
     if example:
-        p.write_text(files("b123d_print").joinpath("examples", example, f"{example}.py").read_text())
+        p.write_text(files("b123d_print").joinpath("examples", example, f"{example}.py").read_text(encoding="utf-8"))
         return p
     title = name.replace("_", " ").capitalize()
-    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."))
+    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8")
     return p
 
 

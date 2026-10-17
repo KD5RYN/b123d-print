@@ -104,13 +104,13 @@ def new_part(name: str, description: str = "", example: str | None = None) -> st
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
-    return f"Created {p.relative_to(_root())}. Edit it with write_part. Current code:\n\n{p.read_text()}"
+    return f"Created {p.relative_to(_root())}. Edit it with write_part. Current code:\n\n{p.read_text(encoding="utf-8")}"
 
 
 @mcp.tool()
 def read_part(name: str) -> str:
     """Return the current code of a part script."""
-    return _script(name).read_text()
+    return _script(name).read_text(encoding="utf-8")
 
 
 @mcp.tool()
@@ -124,7 +124,7 @@ def write_part(name: str, code: str) -> str:
         compile(code, str(p), "exec")
     except SyntaxError as e:
         return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
-    p.write_text(code)
+    p.write_text(code, encoding="utf-8")
     return f"Saved {p.relative_to(_root())} ({len(code.splitlines())} lines). Next: build_part('{name}')."
 
 

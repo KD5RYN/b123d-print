@@ -15,10 +15,10 @@ def test_hole_comp_default_zero(tmp_path, monkeypatch):
 def test_config_layers(tmp_path, monkeypatch):
     cfg = tmp_path / "cfg" / "b123d-print"
     cfg.mkdir(parents=True)
-    (cfg / "config.toml").write_text("[print]\nhole_comp = 0.4\nclearance = 0.3\n")
+    (cfg / "config.toml").write_text("[print]\nhole_comp = 0.4\nclearance = 0.3\n", encoding="utf-8")
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / "b123d-print.toml").write_text("[print]\nclearance = 0.25\n")
+    (ws / "b123d-print.toml").write_text("[print]\nclearance = 0.25\n", encoding="utf-8")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     s = load_settings(ws)
     assert (s.hole_comp, s.clearance) == (0.4, 0.25)  # workspace overrides user
@@ -38,7 +38,7 @@ def test_formats(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / "b123d-print.toml").write_text('[print]\nformats = ["3mf"]\n')
+    (ws / "b123d-print.toml").write_text('[print]\nformats = ["3mf"]\n', encoding="utf-8")
     assert load_settings(ws).formats == ("3mf",)
     monkeypatch.chdir(ws)
     assert main(["new", "blk"]) == 0
@@ -63,7 +63,7 @@ def test_init_new_build_check(tmp_path, monkeypatch):
 
 def test_agents_md_in_sync():
     """The repo's AGENTS.md is the packaged workflow text, verbatim."""
-    assert (ROOT / "AGENTS.md").read_text() == (ROOT / "src/b123d_print/data/AGENTS.md").read_text()
+    assert (ROOT / "AGENTS.md").read_text(encoding="utf-8") == (ROOT / "src/b123d_print/data/AGENTS.md").read_text(encoding="utf-8")
 
 
 def test_template_renders():

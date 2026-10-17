@@ -7,6 +7,7 @@ Exits non-zero on the first failure. Images are saved next to the workspace for 
 """
 
 import asyncio
+import json
 import base64
 import os
 import shutil
@@ -131,6 +132,11 @@ async def main(keep: bool) -> None:
         expect(text(res).startswith("PASSED"), "example passes its checks")
         res = await c.call_tool("list_parts", {})
         expect('"box"' in text(res) and '"coupon"' in text(res), "list_parts")
+        sb = json.loads(text(res))["sandbox"]
+        print(f"     sandbox: {sb}")
+        want = os.environ.get("B123D_PRINT_EXPECT_SANDBOX")  # e.g. "bubblewrap" in CI on Linux
+        if want:
+            expect(want.lower() in sb.lower(), f"sandbox in use is {want}")
         res = await c.call_tool("read_part", {"name": "../../etc"})
         expect(res.is_error and "bad part name" in text(res), "path traversal in a part name is refused, with a reason")
         res = await c.call_tool("render_preview", {"name": "nosuch"})

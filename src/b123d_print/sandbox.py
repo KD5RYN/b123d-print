@@ -100,7 +100,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
         readable = [_real(workspace)] + _python_roots()
         job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable}
         job_file = os.path.join(tmp, "job.json")
-        with open(job_file, "w") as f:
+        with open(job_file, "w", encoding="utf-8") as f:
             json.dump(job, f)
         env = {
             "PATH": "/usr/bin:/bin",
@@ -123,7 +123,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
         k = kind()
         if k == "sandbox-exec":
             prof = os.path.join(tmp, "profile.sb")
-            with open(prof, "w") as f:
+            with open(prof, "w", encoding="utf-8") as f:
                 f.write(macos_profile(writable, readable))
             cmd = ["sandbox-exec", "-f", prof] + cmd
         elif k == "bwrap":
@@ -149,7 +149,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
         if not rp.exists():
             return {"ok": False, "error": f"worker exited with code {proc.returncode} and no result",
                     "log": _tail(stdout, stderr)}
-        res = json.loads(rp.read_text())
+        res = json.loads(rp.read_text(encoding="utf-8"))
         log = _tail(stdout, stderr)
         if log:
             res["log"] = log

@@ -199,7 +199,7 @@ def do(job: dict) -> dict:
 
 
 def main() -> int:
-    job = json.loads(Path(sys.argv[1]).read_text())
+    job = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     result_path = Path(job["result"])
     os.chdir(job["out_dir"])
     if job.get("guard", True):
@@ -211,7 +211,7 @@ def main() -> int:
         # keep the frames from the part script (and below), drop the b123d-print plumbing above it
         lines = tb.splitlines()
         res = {"ok": False, "error": f"{type(e).__name__}: {e}", "traceback": "\n".join(lines[-40:])}
-    with open(result_path, "w") as f:
+    with open(result_path, "w", encoding="utf-8") as f:
         json.dump(res, f, default=str)
     return 0
 

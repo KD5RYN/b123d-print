@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  LANG: C  # plain-ASCII locale, so missing encoding="utf-8" shows up here and not on users' machines
+
 permissions:
   contents: read
 
@@ -30,8 +33,8 @@ jobs:
       - run: uv run b123d-print check
       - name: MCP end to end (incl. sandbox escapes)
         run: uv run python tests/mcp_smoke.py
-      - name: Which sandbox ran
-        run: uv run python -c "from b123d_print.sandbox import describe; print(describe())"
+        env:
+          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
 
   wheel:
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           uv sync --frozen
-          B123D_PRINT_SMOKE_CMD="uvx --from $(ls dist/*.whl) b123d-print-mcp" uv run python tests/mcp_smoke.py
+          B123D_PRINT_EXPECT_SANDBOX=bubblewrap B123D_PRINT_SMOKE_CMD="uvx --from $(ls dist/*.whl) b123d-print-mcp" uv run python tests/mcp_smoke.py
 
   docker:
     runs-on: ubuntu-latest
