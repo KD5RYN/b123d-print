@@ -1,5 +1,5 @@
-# cadkit workspace settings. Values here override your user config
-# (~/.config/cadkit/config.toml); env vars (CADKIT_HOLE_COMP, ...) override both.
+# b123d-print workspace settings. Values here override your user config
+# (~/.config/b123d-print/config.toml); env vars (B123D_PRINT_HOLE_COMP, ...) override both.
 
 [workspace]
 parts_dir = "parts"
@@ -10,3 +10,4 @@ parts_dir = "parts"
 # clearance = 0.2     # mm default gap between mating parts
 # min_wall = 0.8      # mm; Wall checks fail below this unless they set their own minimum
 # max_overhang = 45   # deg from vertical
+# formats = ["step", "stl", "3mf", "png"]   # what export writes; e.g. ["3mf", "png"]

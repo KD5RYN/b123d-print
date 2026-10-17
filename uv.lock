@@ -52,6 +52,33 @@ wheels = [
 ]
 
 [[package]]
+name = "b123d-print"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "build123d" },
+    { name = "matplotlib" },
+    { name = "mcp" },
+    { name = "numpy" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "build123d", specifier = "==0.13.0" },
+    { name = "matplotlib", specifier = "==3.11.2" },
+    { name = "mcp", specifier = "==2.3.0" },
+    { name = "numpy", specifier = "==2.5.4" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = "==9.1.1" }]
+
+[[package]]
 name = "bd-materials"
 version = "0.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -94,33 +121,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/4b/6c/47b531b579d5238e4
 wheels = [
     { url = "https://files.pythonhosted.org/packages/16/a2/da58cdab8a6978376d66c909b06f4a1c9aafbd23163540741c75a51b675e/build123d-0.13.0-py3-none-any.whl", hash = "sha256:177f114e5f0514054189134346d386c7004048f8e58430b9b84b74a04fbc94fe", size = 387753, upload-time = "2026-09-21T20:24:37.877Z" },
 ]
-
-[[package]]
-name = "cadkit"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "build123d" },
-    { name = "matplotlib" },
-    { name = "mcp" },
-    { name = "numpy" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "build123d", specifier = "==0.13.0" },
-    { name = "matplotlib", specifier = "==3.11.2" },
-    { name = "mcp", specifier = "==2.3.0" },
-    { name = "numpy", specifier = "==2.5.4" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = "==9.1.1" }]
 
 [[package]]
 name = "cadquery-ocp-novtk"

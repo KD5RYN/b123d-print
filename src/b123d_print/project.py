@@ -1,4 +1,4 @@
-"""Part-script convention and the runner behind `cadkit build` / `cadkit check` / the MCP tools.
+"""Part-script convention and the runner behind `b123d-print build` / `b123d-print check` / the MCP tools.
 
 A part script lives at <parts_dir>/<name>/<name>.py and defines:
 
@@ -15,7 +15,7 @@ and optionally:
     def checks(d) -> list[Overhang | Wall | Overlap]  # default: Overhang (report) per part
 
     if __name__ == "__main__":
-        from cadkit import run
+        from b123d_print import run
         run(__file__)
 
 Scripts with only a module-level `part = ...` (no Dims) also work.
@@ -34,7 +34,7 @@ from types import ModuleType
 from build123d import Part
 
 from . import checks as ck
-from .config import Settings, load_settings
+from .config import Settings, load_settings, parse_formats
 from .render import export_files, render, report, section_view
 
 
@@ -52,7 +52,7 @@ class View:
 def load(path: str | Path) -> ModuleType:
     path = Path(path).resolve()
     sys.path.insert(0, str(path.parent))  # sibling helper modules
-    name = f"cadkit_part_{path.stem}"
+    name = f"b123d_print_part_{path.stem}"
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
@@ -128,8 +128,10 @@ def run_checks(mod: ModuleType, key: str, settings: Settings) -> list[ck.Finding
     return out
 
 
-def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None) -> dict:
-    """Export STEP/STL/PNG of every printable part, plus the views. Returns a summary."""
+def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None) -> dict:
+    """Export every printable part in `formats` (default: the `formats` setting), plus the
+    assembly render and section views when png is among them. Returns a summary."""
+    formats = formats or load_settings(script).formats
     out = out or script.parent / "out"
     out.mkdir(parents=True, exist_ok=True)
     d = dims(mod, key)
@@ -138,9 +140,11 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     summary = {"variant": key or "standard", "parts": {}, "files": []}
     for pname, p in parts.items():
         name = out_name(script.stem, key, pname)
-        files = export_files(p, out, name)
+        files = export_files(p, out, name, formats)
         summary["parts"][pname or "part"] = report(p)
         summary["files"] += [str(f) for f in files]
+    if "png" not in formats:
+        return summary
     if asm:
         f = render(asm, out / f"{out_name(script.stem, key, 'assembly')}.png", f"{out_name(script.stem, key, '')} assembly")
         summary["files"].append(str(f))
@@ -166,13 +170,14 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=f"Build {script.stem}")
     ap.add_argument("--variant", choices=[v or "standard" for v in variants(mod)], help="default: all")
     ap.add_argument("--no-check", action="store_true")
+    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png or all (default: the formats setting)")
     args = ap.parse_args(argv)
     settings = load_settings(script)
     worst = 0
     for key in variants(mod):
         if args.variant and variant_key(args.variant) != key:
             continue
-        s = export_variant(mod, script, key)
+        s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None)
         for pname, r in s["parts"].items():
             print(f"{out_name(script.stem, key, '' if pname == 'part' else pname)}: "
                   f"{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, volume {r['volume']:.1f} mm^3, valid={r['valid']}")

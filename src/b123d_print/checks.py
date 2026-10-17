@@ -8,7 +8,7 @@
             in: `is_valid` and hole-diameter checks do not catch a 0.05 mm skin.
 
 Part scripts declare checks with the spec classes `Overlap`, `Overhang` and `Wall` from a
-`checks(d)` function; `cadkit check` runs them (see cadkit.project).
+`checks(d)` function; `b123d-print check` runs them (see b123d_print.project).
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ each hole with calipers (or the largest drill bit / gauge pin that passes), then
 
     HOLE_COMP = average(nominal - measured)          # mm, on the diameter
 
-and put it in your user config, ~/.config/cadkit/config.toml:
+and put it in your user config, ~/.config/b123d-print/config.toml:
 
     [print]
     hole_comp = 0.4
@@ -73,6 +73,6 @@ def build(d: Dims) -> Part:
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

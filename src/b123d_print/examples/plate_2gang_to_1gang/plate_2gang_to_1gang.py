@@ -38,7 +38,7 @@ from build123d import (
     offset,
 )
 
-from cadkit import View, Wall, hole_comp
+from b123d_print import View, Wall, hole_comp
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)  # sit on Z=0
 
@@ -70,7 +70,7 @@ class Dims:
     GANG_SPACING_X: float = 46.0  # 1-13/16"
     DEVICE_SCREW_SPACING_Y: float = 83.3  # 3-9/32", the switch's screws, centered
     # Hole sizes below are the target printed sizes; HOLE_COMP is added when cutting.
-    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from cadkit config (0 until measured)
+    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from b123d_print config (0 until measured)
     CORNER_HOLE_D: float = 3.7  # #6-32 clearance, typed measurement
     CBORE_D: float = 7.3  # counterbore for pan heads (head is 6.6), matches the original
     CBORE_DEPTH: float = 2.5  # straight wall, gets pan heads below the face; original's depth
@@ -247,6 +247,6 @@ def checks(d: Dims):
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

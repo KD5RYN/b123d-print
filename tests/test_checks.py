@@ -5,7 +5,7 @@ import math
 import pytest
 from build123d import Align, Box, Cone, Cylinder, Polygon, Pos, extrude
 
-from cadkit.checks import overhang_faces, overlap, wall_thickness
+from b123d_print.checks import overhang_faces, overlap, wall_thickness
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 

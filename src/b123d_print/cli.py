@@ -1,4 +1,4 @@
-"""`cadkit` command line: init, new, build, check, config, list."""
+"""`b123d-print` command line: init, new, build, check, config, list."""
 
 from __future__ import annotations
 
@@ -10,26 +10,26 @@ from importlib.resources import files
 from pathlib import Path
 
 from . import checks as ck
-from .config import WORKSPACE_FILE, find_workspace, load_settings, user_config_path
+from .config import FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def data(name: str) -> str:
-    return files("cadkit").joinpath("data", name).read_text()
+    return files("b123d_print").joinpath("data", name).read_text()
 
 
 def workspace(root: str | None) -> tuple[Path, str]:
-    """(root, parts_dir) from --root, else the nearest cadkit.toml, else the cwd."""
+    """(root, parts_dir) from --root, else the nearest b123d-print.toml, else the cwd."""
     r = Path(root).resolve() if root else (find_workspace() or Path.cwd())
     return r, load_settings(r).parts_dir
 
 
 def init_workspace(root: Path) -> list[Path]:
-    """Create cadkit.toml, AGENTS.md and parts/ (existing files are left alone)."""
+    """Create b123d-print.toml, AGENTS.md and parts/ (existing files are left alone)."""
     root.mkdir(parents=True, exist_ok=True)
     made = []
-    for fname, content in ((WORKSPACE_FILE, data("cadkit.toml")), ("AGENTS.md", data("AGENTS.md"))):
+    for fname, content in ((WORKSPACE_FILE, data("b123d-print.toml")), ("AGENTS.md", data("AGENTS.md"))):
         p = root / fname
         if not p.exists():
             p.write_text(content)
@@ -39,7 +39,7 @@ def init_workspace(root: Path) -> list[Path]:
 
 
 def examples() -> list[str]:
-    base = files("cadkit").joinpath("examples")
+    base = files("b123d_print").joinpath("examples")
     return sorted(d.name for d in base.iterdir() if d.joinpath(f"{d.name}.py").is_file())
 
 
@@ -54,7 +54,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
         raise FileExistsError(f"{p} already exists")
     p.parent.mkdir(parents=True)
     if example:
-        p.write_text(files("cadkit").joinpath("examples", example, f"{example}.py").read_text())
+        p.write_text(files("b123d_print").joinpath("examples", example, f"{example}.py").read_text())
         return p
     title = name.replace("_", " ").capitalize()
     p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."))
@@ -118,7 +118,7 @@ def cmd_build(args) -> int:
         for key in variants(mod):
             if args.variant and variant_key(args.variant) != key:
                 continue
-            s = export_variant(mod, script, key)
+            s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None)
             for pname, r in s["parts"].items():
                 print(f"{script.stem}{'[' + key + ']' if key else ''} {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, "
                       f"volume {r['volume']:.1f} mm^3, valid={r['valid']}")
@@ -127,20 +127,22 @@ def cmd_build(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="cadkit", description="build123d part workflow: scaffold, build, check")
-    ap.add_argument("--root", help="workspace root (default: nearest cadkit.toml, else the cwd)")
+    ap = argparse.ArgumentParser(prog="b123d-print", description="build123d part workflow: scaffold, build, check")
+    ap.add_argument("--root", help="workspace root (default: nearest b123d-print.toml, else the cwd)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("init", help="create a workspace (cadkit.toml, AGENTS.md, parts/)")
+    p = sub.add_parser("init", help="create a workspace (b123d-print.toml, AGENTS.md, parts/)")
     p.add_argument("dir", nargs="?", default=".")
     p = sub.add_parser("new", help="scaffold parts/<name>/<name>.py from the template")
     p.add_argument("name")
     p.add_argument("-d", "--description", default="")
-    p.add_argument("--from", dest="example", help="start from a bundled example (see `cadkit examples`)")
-    for name, hlp in (("build", "export STEP/STL/PNG + section views"), ("check", "run checks; exit 1 on failure")):
+    p.add_argument("--from", dest="example", help="start from a bundled example (see `b123d-print examples`)")
+    for name, hlp in (("build", "export STEP/STL/3MF/PNG + section views"), ("check", "run checks; exit 1 on failure")):
         p = sub.add_parser(name, help=hlp)
         p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
         p.add_argument("--variant")
+        if name == "build":
+            p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
         if name == "check":
             p.add_argument("--json", action="store_true")
             p.add_argument("-v", "--verbose", action="store_true", help="also list passing checks")

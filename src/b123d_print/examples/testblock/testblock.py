@@ -43,6 +43,6 @@ def build(d: Dims) -> Part:
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

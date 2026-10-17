@@ -1,4 +1,4 @@
-"""End-to-end smoke test of cadkit-mcp over stdio, as an MCP client would use it.
+"""End-to-end smoke test of b123d-print-mcp over stdio, as an MCP client would use it.
 
     uv run python tests/mcp_smoke.py [--keep]
 
@@ -20,7 +20,7 @@ from mcp.client.stdio import StdioServerParameters
 BOX = '''"""Box with a counterbored hole."""
 from dataclasses import dataclass
 from build123d import Align, Box, Cylinder, Mode, Part, Pos
-from cadkit import Wall, View, hole_comp
+from b123d_print import Wall, View, hole_comp
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 
@@ -58,9 +58,9 @@ def images(res):
 
 
 async def main(keep: bool) -> None:
-    ws = Path(tempfile.mkdtemp(prefix="cadkit-smoke-"))
-    # CADKIT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/cadkit-0.1.0-py3-none-any.whl cadkit-mcp"
-    cmd = os.environ.get("CADKIT_SMOKE_CMD", f"{sys.executable} -m cadkit.mcp_server").split()
+    ws = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-"))
+    # B123D_PRINT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/b123d_print-0.1.0-py3-none-any.whl b123d-print-mcp"
+    cmd = os.environ.get("B123D_PRINT_SMOKE_CMD", f"{sys.executable} -m b123d_print.mcp_server").split()
     params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"])
     ok = True
 
@@ -76,7 +76,7 @@ async def main(keep: bool) -> None:
         expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp"}, f"prompts: {sorted(prompts)}")
         g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
         expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
-        r = await c.read_resource("cadkit://guide")
+        r = await c.read_resource("b123d-print://guide")
         expect("Verify before reporting" in r.contents[0].text, "guide resource")
 
         res = await c.call_tool("new_part", {"name": "box"})
@@ -105,17 +105,22 @@ async def main(keep: bool) -> None:
         res = await c.call_tool("check", {"name": "box", "variant": "thin"})
         expect(text(res).startswith("FAILED") and "[FAIL] wall" in text(res), "check catches the thin wall in the 'thin' variant")
         res = await c.call_tool("export", {"name": "box"})
-        expect("box.stl" in text(res) and (ws / "parts/box/out/box_thin.step").exists(), "export writes STEP/STL for each variant")
+        expect("box.stl" in text(res) and (ws / "parts/box/out/box_thin.3mf").exists(), "export writes STEP/STL/3MF/PNG for each variant")
+        shutil.rmtree(ws / "parts/box/out")
+        res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf"})
+        expect(sorted(p.name for p in (ws / "parts/box/out").iterdir()) == ["box.3mf"], "export honors formats='3mf'")
+        res = await c.call_tool("export", {"name": "box", "formats": "obj"})
+        expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
 
         # sandbox: a script that tries to reach the network / escape gets a clear error
         evil = BOX + "\nimport urllib.request\nurllib.request.urlopen('http://example.com')\n"
         await c.call_tool("write_part", {"name": "box", "code": evil})
         res = await c.call_tool("build_part", {"name": "box"})
         expect("ERROR" in text(res) and ("blocked" in text(res) or "not known" in text(res)), "network access from a part script is blocked")
-        evil = BOX + "\nopen('" + str(Path.home() / "cadkit_smoke_escape.txt") + "', 'w').write('x')\n"
+        evil = BOX + "\nopen('" + str(Path.home() / "b123d_print_smoke_escape.txt") + "', 'w').write('x')\n"
         await c.call_tool("write_part", {"name": "box", "code": evil})
         res = await c.call_tool("build_part", {"name": "box"})
-        expect("ERROR" in text(res) and not (Path.home() / "cadkit_smoke_escape.txt").exists(), "writing outside the workspace is blocked")
+        expect("ERROR" in text(res) and not (Path.home() / "b123d_print_smoke_escape.txt").exists(), "writing outside the workspace is blocked")
         await c.call_tool("write_part", {"name": "box", "code": "import time\nwhile True: time.sleep(0.1)\n"})
         res = await c.call_tool("build_part", {"name": "box"})
         expect("timed out" in text(res), "runaway script is killed at the timeout")

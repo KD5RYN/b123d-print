@@ -1,7 +1,7 @@
-"""cadkit MCP server (stdio): design, check and export 3D-printable build123d parts from any MCP
+"""b123d-print MCP server (stdio): design, check and export 3D-printable build123d parts from any MCP
 client. Part scripts are model-written code: every build runs in a sandboxed subprocess.
 
-    cadkit-mcp --workspace ~/parts            # or CADKIT_WORKSPACE=~/parts; default: the cwd
+    b123d-print-mcp --workspace ~/parts            # or B123D_PRINT_WORKSPACE=~/parts; default: the cwd
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import sandbox
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import load_settings
+from .config import load_settings, parse_formats
 from .project import find_parts
 
 MAX_SCRIPT_BYTES = 256_000
@@ -25,13 +25,13 @@ MAX_SCRIPT_BYTES = 256_000
 INSTRUCTIONS = """\
 Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> export. Read the resource cadkit://guide (or the prompt
+check -> fix and repeat -> export. Read the resource b123d-print://guide (or the prompt
 design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
 before reporting. render_preview and section return PNG images."""
 
-mcp = MCPServer("cadkit", instructions=INSTRUCTIONS)
+mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS)
 STATE: dict = {"root": Path.cwd(), "timeout": 120.0}
 
 
@@ -86,7 +86,7 @@ def list_parts() -> str:
             "parts": parts,
             "examples": examples(),
             "settings": {"hole_comp": s.hole_comp, "clearance": s.clearance, "min_wall": s.min_wall,
-                         "max_overhang": s.max_overhang},
+                         "max_overhang": s.max_overhang, "formats": list(s.formats)},
             "sandbox": sandbox.describe(),
         },
         indent=1,
@@ -98,7 +98,7 @@ def new_part(name: str, description: str = "", example: str | None = None) -> st
     """Create parts/<name>/<name>.py from the template (Dims dataclass, build(d), VARIANTS,
     views, checks) and return its code. name: lower_snake_case. example: copy a bundled example
     instead (see list_parts), e.g. 'hole_coupon' to calibrate hole compensation."""
-    if not (_root() / "cadkit.toml").exists():
+    if not (_root() / "b123d-print.toml").exists():
         init_workspace(_root())
     try:
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
@@ -116,7 +116,7 @@ def read_part(name: str) -> str:
 @mcp.tool()
 def write_part(name: str, code: str) -> str:
     """Replace the whole part script with `code` (create the part with new_part first).
-    The script must define build(d) (+ Dims, VARIANTS); see cadkit://guide. Then call build_part."""
+    The script must define build(d) (+ Dims, VARIANTS); see b123d-print://guide. Then call build_part."""
     p = _script(name)
     if len(code.encode()) > MAX_SCRIPT_BYTES:
         raise ToolError(f"script too large (> {MAX_SCRIPT_BYTES} bytes)")
@@ -182,10 +182,17 @@ async def check(name: str, variant: str | None = None) -> str:
 
 
 @mcp.tool()
-async def export(name: str, variant: str | None = None) -> str:
-    """Export STEP, STL and preview PNG for every printable part (and the section views from
-    views(d)) to parts/<name>/out/. Default: all variants."""
-    res = await _job(name, "export", variant=variant)
+async def export(name: str, variant: str | None = None, formats: str | None = None) -> str:
+    """Export every printable part to parts/<name>/out/. Default: all variants.
+    formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
+    (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
+    user's `formats` setting (default: all four). Ask the user which they want if unclear."""
+    if formats:
+        try:
+            parse_formats(formats)
+        except ValueError as e:
+            raise ToolError(str(e)) from None
+    res = await _job(name, "export", variant=variant, formats=formats)
     if not res.get("ok"):
         return _error_text(res)
     out = []
@@ -201,13 +208,13 @@ async def export(name: str, variant: str | None = None) -> str:
 # Resources and prompts (the workflow, model-neutral)
 
 
-@mcp.resource("cadkit://guide", mime_type="text/markdown")
+@mcp.resource("b123d-print://guide", mime_type="text/markdown")
 def guide() -> str:
     """The workflow and print rules (same text as AGENTS.md)."""
     return data("AGENTS.md")
 
 
-@mcp.resource("cadkit://template", mime_type="text/x-python")
+@mcp.resource("b123d-print://template", mime_type="text/x-python")
 def template() -> str:
     """The part-script template new_part starts from."""
     return data("part_template.py")
@@ -221,7 +228,7 @@ def _rules() -> str:
 def design_part_from_photos(description: str = "") -> str:
     """Design a new part from photos and measurements: confirm dimensions first, then model,
     verify and report."""
-    return f"""I want a 3D-printable part designed with the cadkit tools.
+    return f"""I want a 3D-printable part designed with the b123d-print tools.
 
 {description or '(I will describe the part and attach photos.)'}
 
@@ -283,17 +290,17 @@ def calibrate_hole_comp() -> str:
    then export it and tell me where the STL is.
 2. Ask me to print it with my usual material and settings and to measure every hole.
 3. Compute HOLE_COMP = average(nominal - measured) over the sizes I use; point out if the error
-   grows with size. Tell me to set it in ~/.config/cadkit/config.toml:
+   grows with size. Tell me to set it in ~/.config/b123d-print/config.toml:
        [print]
        hole_comp = <value>
-   (or CADKIT_HOLE_COMP). Do not hard-code it in part scripts."""
+   (or B123D_PRINT_HOLE_COMP). Do not hard-code it in part scripts."""
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="cadkit-mcp", description=__doc__.splitlines()[0])
-    ap.add_argument("--workspace", default=os.environ.get("CADKIT_WORKSPACE"),
-                    help="folder with cadkit.toml / parts/ (default: $CADKIT_WORKSPACE, else the cwd)")
-    ap.add_argument("--timeout", type=float, default=float(os.environ.get("CADKIT_TIMEOUT", 120)),
+    ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=__doc__.splitlines()[0])
+    ap.add_argument("--workspace", default=os.environ.get("B123D_PRINT_WORKSPACE"),
+                    help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
+    ap.add_argument("--timeout", type=float, default=float(os.environ.get("B123D_PRINT_TIMEOUT", 120)),
                     help="seconds per build (default 120)")
     args = ap.parse_args()
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()

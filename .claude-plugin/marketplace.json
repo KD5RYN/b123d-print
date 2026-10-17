@@ -1,9 +1,11 @@
 {
-  "name": "cadkit",
-  "owner": { "name": "cadkit contributors" },
+  "name": "b123d-print",
+  "owner": {
+    "name": "KD5RYN"
+  },
   "plugins": [
     {
-      "name": "cadkit",
+      "name": "b123d-print",
       "source": "./",
       "description": "build123d part design workflow: MCP tools (build, render, section, check, export) + skill"
     }

@@ -1,0 +1,4 @@
+# Workspace settings for this repo: the example parts live in src/b123d_print/examples/ (shipped in the package).
+# Printer-specific values (hole_comp) belong in your user config, ~/.config/b123d-print/config.toml.
+[workspace]
+parts_dir = "src/b123d_print/examples"

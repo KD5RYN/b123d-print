@@ -1,12 +1,12 @@
 """Worker process: runs ONE operation on a part script and writes a JSON result.
 
-Started by cadkit.sandbox inside an OS sandbox where one is available. Part scripts are
+Started by b123d_print.sandbox inside an OS sandbox where one is available. Part scripts are
 model-written code, so before the script is imported this process installs an audit hook that
 refuses network access, starting processes, ctypes and file writes outside the allowed folders.
 The hook is defense in depth, not a security boundary on its own: the OS sandbox (or Docker)
 is what enforces the limits.
 
-    python -m cadkit.worker <job.json>
+    python -m b123d_print.worker <job.json>
 """
 
 from __future__ import annotations
@@ -25,10 +25,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot  # noqa: E402,F401
 import numpy  # noqa: E402,F401
 import build123d  # noqa: E402,F401
+import ctypes  # noqa: E402,F401  (opens the process handle at import; must happen before the guard)
+import lib3mf  # noqa: E402,F401  (3MF export)
 
-from cadkit import checks as ck  # noqa: E402
-from cadkit.config import load_settings  # noqa: E402
-from cadkit.project import (  # noqa: E402
+from b123d_print import checks as ck  # noqa: E402
+from b123d_print.config import load_settings, parse_formats  # noqa: E402
+from b123d_print.project import (  # noqa: E402
     assembly,
     dims,
     export_variant,
@@ -37,7 +39,7 @@ from cadkit.project import (  # noqa: E402
     run_checks,
     variants,
 )
-from cadkit.render import render, report, section_view  # noqa: E402
+from b123d_print.render import render, report, section_view  # noqa: E402
 
 BLOCKED_EVENTS = (
     "socket.",  # connect, bind, getaddrinfo, ...
@@ -50,7 +52,6 @@ BLOCKED_EVENTS = (
     "os.spawn",
     "os.startfile",
     "pty.",
-    "ctypes.",
     "webbrowser.",
     "urllib.",
     "http.client.",
@@ -59,12 +60,44 @@ BLOCKED_EVENTS = (
     "telnetlib.",
     "sys.addaudithook",  # no hook that could swallow ours
 )
-BLOCKED_IMPORTS = {"ctypes", "_ctypes", "_posixsubprocess", "socket", "_socket", "ssl", "_ssl", "subprocess"}
+BLOCKED_IMPORTS = {"_posixsubprocess", "socket", "_socket", "ssl", "_ssl", "subprocess"}
 WRITE_EVENTS = {"os.remove", "os.rename", "os.rmdir", "os.mkdir", "shutil.rmtree", "os.truncate", "os.chmod", "os.symlink", "os.link"}
 
 
 class SandboxViolation(PermissionError):
     pass
+
+
+# ctypes is allowed only for the native libraries of known dependencies (lib3mf for 3MF export,
+# loaded lazily by build123d's Mesher). Loading anything else, or looking up symbols in the
+# Python runtime / the process itself (pythonapi, CDLL(None)), is refused.
+def _allowed_native_dirs() -> list[str]:
+    import importlib.util
+
+    out = []
+    for mod in ("lib3mf",):
+        spec = importlib.util.find_spec(mod)
+        if spec and spec.origin:
+            out.append(os.path.realpath(os.path.dirname(spec.origin)))
+    return out
+
+
+ALLOWED_NATIVE = _allowed_native_dirs()
+
+
+def ctypes_guard(event: str, args) -> None:
+    if event == "ctypes.dlopen":
+        name = args[0] if args else None
+        p = os.path.realpath(os.fsdecode(name)) if name else ""
+        if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
+            raise SandboxViolation(f"blocked in part scripts: loading native library {name!r}")
+    elif event == "ctypes.dlsym":
+        name = getattr(args[0], "_name", None) if args else None
+        p = os.path.realpath(os.fsdecode(name)) if isinstance(name, (str, bytes)) else ""
+        if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
+            raise SandboxViolation(f"blocked in part scripts: symbol lookup in {name!r}")
+    elif event in ("ctypes.cdata", "ctypes.dlsym/handle", "ctypes.set_errno", "ctypes.seh_exception"):
+        raise SandboxViolation(f"blocked in part scripts: {event}")
 
 
 def install_guard(writable: list[str]) -> None:
@@ -77,6 +110,9 @@ def install_guard(writable: list[str]) -> None:
         return any(p == r or p.startswith(r + os.sep) for r in roots)
 
     def hook(event: str, args) -> None:
+        if event.startswith("ctypes."):
+            ctypes_guard(event, args)
+            return
         if event.startswith(BLOCKED_EVENTS):
             raise SandboxViolation(f"blocked in part scripts: {event}")
         if event == "import" and args and args[0] in BLOCKED_IMPORTS:
@@ -157,7 +193,8 @@ def do(job: dict) -> dict:
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
     if op == "export":
-        return {"variants": [export_variant(mod, script, kk, out) for kk in (keys if key is None else [key])]}
+        fmts = parse_formats(job["formats"]) if job.get("formats") else None
+        return {"variants": [export_variant(mod, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
     raise ValueError(f"unknown op {op!r}")
 
 
@@ -171,7 +208,7 @@ def main() -> int:
         res = {"ok": True, **do(job)}
     except BaseException as e:  # noqa: BLE001 - report everything, including SystemExit from scripts
         tb = traceback.format_exc()
-        # keep the frames from the part script (and below), drop the cadkit plumbing above it
+        # keep the frames from the part script (and below), drop the b123d-print plumbing above it
         lines = tb.splitlines()
         res = {"ok": False, "error": f"{type(e).__name__}: {e}", "traceback": "\n".join(lines[-40:])}
     with open(result_path, "w") as f:

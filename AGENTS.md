@@ -1,20 +1,20 @@
-# Designing 3D-printable parts with cadkit (instructions for AI agents)
+# Designing 3D-printable parts with b123d-print (instructions for AI agents)
 
 This workspace holds parts for FDM 3D printing, modeled in Python with
-[build123d](https://github.com/gumyr/build123d) and checked with `cadkit`. These rules apply to
+[build123d](https://github.com/gumyr/build123d) and checked with `b123d-print`. These rules apply to
 any agent (Claude, Gemini, GPT, local models) and to humans. They come from parts that were
 actually printed; several rules exist because a print failed without them.
 
 ## Tools
 
-Use the **cadkit MCP server** tools if your client has them (`new_part`, `write_part`,
+Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
 `build_part`, `render_preview`, `section`, `check`, `export`). Otherwise use the CLI:
 
-- `cadkit new <name>` — scaffold `parts/<name>/<name>.py`
-- `uv run parts/<name>/<name>.py [--variant <key>]` or `cadkit build <name>` — export STEP/STL/PNG
-  to `parts/<name>/out/` and run the checks
-- `cadkit check [<name> ...]` — checks only; exit code 1 on any failure
-- `cadkit config` — show the print settings in effect (hole compensation, clearance, limits)
+- `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
+- `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png]` or `b123d-print build <name>` —
+  export to `parts/<name>/out/` and run the checks
+- `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
+- `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
 
 ## The part script
 
@@ -48,6 +48,15 @@ Use the **cadkit MCP server** tools if your client has them (`new_part`, `write_
   span between two walls (a bridge) or get supports. Say in the report what needs supports.
 - **Walls:** keep at least ~1.2 mm (three perimeters) where strength matters.
 
+## Output formats
+
+`export` writes, per printable part: **STEP** (opens in other CAD — Onshape, Fusion, FreeCAD —
+as a plain solid without feature history), **STL** and **3MF** (slicers; 3MF keeps units),
+and **PNG** previews plus the section views. The user picks: the `formats` setting in their
+config, or `formats="3mf,png"` on one export. If the user has not said what they need and the
+setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
+The parametric source is always the `.py` script and its `Dims`.
+
 ## Photos and measurements
 
 - **Before modeling: list every dimension you read from the photos** and which feature it
@@ -77,7 +86,7 @@ Do all of this every time you change geometry, before telling the user the part 
 ## Checks reference
 
 ```python
-from cadkit import Overhang, Probe, Wall
+from b123d_print import Overhang, Probe, Wall
 
 def checks(d):
     return [

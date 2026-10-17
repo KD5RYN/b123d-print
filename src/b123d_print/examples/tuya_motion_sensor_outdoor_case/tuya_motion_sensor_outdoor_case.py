@@ -42,7 +42,7 @@ from build123d import (
     fillet,
 )
 
-from cadkit import Overhang, Probe, View, Wall, hole_comp
+from b123d_print import Overhang, Probe, View, Wall, hole_comp
 
 MIN = Align.MIN
 MAX = Align.MAX
@@ -77,7 +77,7 @@ class Dims:
     MOUNT_CSK_D: float = 8.5  # countersink, head flush under the sensor
     MOUNT_HOLES_Z: tuple = (14.0, 60.0)  # above the plate bottom
     MOUNT_HEAD_SINK: float = 0.3
-    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from cadkit config
+    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from b123d_print config
     TILT: float = 0.0  # deg the case tips down from the wall (wedge behind the plate)
     WEDGE_LIP_T: float = 1.0  # tilt: flat top of the dam bump along the wedge top's front edge
     #                           (keeps water out of the cover joint); height = TOP_T, flush with the
@@ -388,6 +388,6 @@ def checks(d: Dims):
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

@@ -1,4 +1,4 @@
-"""Export (STEP/STL) and matplotlib previews: 6-view render, cross-sections."""
+"""Export (STEP/STL/3MF) and matplotlib previews: 6-view render, cross-sections."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import matplotlib.collections  # noqa: E402
 import matplotlib.patches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
-from build123d import Part, Plane, Vector, export_step, export_stl, section as _section  # noqa: E402
+from build123d import Mesher, Part, Plane, Unit, Vector, export_step, export_stl, section as _section  # noqa: E402
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: E402
 
 # (title, elevation, azimuth, axis whose ticks are hidden) for orthographic views
@@ -181,27 +181,43 @@ def section(part: Part, z: float, path: str | Path, title: str) -> Path:
     return section_view([(part, "#4c8cd9", "")], "XY", z, path, title)
 
 
-def export_files(part: Part, out: Path, name: str, png: bool = True) -> list[Path]:
-    """Write <name>.step, <name>.stl (and <name>.png) into `out`."""
+def export_3mf(part: Part, path: Path) -> Path:
+    """3MF for slicers (Bambu/Orca/Prusa): carries units (mm), unlike STL."""
+    m = Mesher(unit=Unit.MM)
+    m.add_shape(part, linear_deflection=0.005, angular_deflection=0.1, part_number=path.stem)
+    m.write(str(path))
+    return path
+
+
+def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf", "png")) -> list[Path]:
+    """Write <name>.<fmt> into `out` for each of formats: step, stl, 3mf, png (6-view preview)."""
     out.mkdir(parents=True, exist_ok=True)
-    files = [out / f"{name}.step", out / f"{name}.stl"]
-    export_step(part, files[0])
-    export_stl(part, files[1], tolerance=0.005, angular_tolerance=0.1)
-    if png:
+    files = []
+    if "step" in formats:
+        files.append(out / f"{name}.step")
+        export_step(part, files[-1])
+    if "stl" in formats:
+        files.append(out / f"{name}.stl")
+        export_stl(part, files[-1], tolerance=0.005, angular_tolerance=0.1)
+    if "3mf" in formats:
+        files.append(export_3mf(part, out / f"{name}.3mf"))
+    if "png" in formats:
         files.append(render(part, out / f"{name}.png", name))
     return files
 
 
-def export(part: Part, script_file: str, name: str | None = None, sections: tuple[float, ...] = ()) -> dict:
-    """Write out/<name>.{step,stl,png} next to the script (plus <name>_z<Z>.png per section height)
+def export(part: Part, script_file: str, name: str | None = None, sections: tuple[float, ...] = (), formats=None) -> dict:
+    """Write out/<name>.{step,stl,3mf,png} next to the script (plus <name>_z<Z>.png per section height)
     and print the bounding box. `name` defaults to the script's folder name."""
     here = Path(script_file).resolve().parent
     name = name or here.name
     out = here / "out"
-    export_files(part, out, name)
+    from .config import load_settings
+
+    export_files(part, out, name, formats or load_settings(script_file).formats)
     for z in sections:
         section(part, z, out / f"{name}_z{round(z, 3):g}.png", name)
     d = report(part)
     print(f"{name}: {d['x']:.2f} x {d['y']:.2f} x {d['z']:.2f} mm, volume {d['volume']:.1f} mm^3, valid={d['valid']}")
-    print(f"  -> {out}/{name}.{{step,stl,png}}")
+    print(f"  -> {out}/{name}.*")
     return d

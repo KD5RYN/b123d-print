@@ -22,7 +22,7 @@ import sysconfig
 import tempfile
 from pathlib import Path
 
-CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "cadkit"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "b123d-print"
 
 
 def _real(p) -> str:
@@ -71,7 +71,7 @@ def linux_bwrap(writable: list[str], readable: list[str]) -> list[str]:
 
 
 def kind() -> str:
-    if os.environ.get("CADKIT_SANDBOX") == "none":
+    if os.environ.get("B123D_PRINT_SANDBOX") == "none":
         return "none"
     if sys.platform == "darwin" and shutil.which("sandbox-exec"):
         return "sandbox-exec"
@@ -90,11 +90,11 @@ def describe() -> str:
 
 
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:
-    """Run cadkit.worker on `job` and return its result dict (never raises for script errors)."""
+    """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     mpl = CACHE / "matplotlib"
     mpl.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="cadkit-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="b123d-print-") as tmp:
         tmp = _real(tmp)
         writable = [_real(out_dir), tmp, _real(mpl)]
         readable = [_real(workspace)] + _python_roots()
@@ -112,13 +112,14 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
             "PYTHONPATH": os.pathsep.join(p for p in sys.path if p and os.path.isdir(p)),
             "LANG": "C.UTF-8",
         }
-        for var in ("CADKIT_HOLE_COMP", "CADKIT_CLEARANCE", "CADKIT_MIN_WALL", "CADKIT_MAX_OVERHANG", "XDG_CONFIG_HOME"):
+        for var in ("B123D_PRINT_HOLE_COMP", "B123D_PRINT_CLEARANCE", "B123D_PRINT_MIN_WALL", "B123D_PRINT_MAX_OVERHANG",
+                    "B123D_PRINT_FORMATS", "XDG_CONFIG_HOME"):
             if var in os.environ:
                 env[var] = os.environ[var]
         # settings: the worker resolves the user config from the real home, so pass it explicitly
         env.setdefault("XDG_CONFIG_HOME", _real(Path.home() / ".config"))
-        readable.append(_real(Path(env["XDG_CONFIG_HOME"]) / "cadkit"))  # only cadkit's own config
-        cmd = [sys.executable, "-s", "-m", "cadkit.worker", job_file]
+        readable.append(_real(Path(env["XDG_CONFIG_HOME"]) / "b123d-print"))  # only b123d-print's own config
+        cmd = [sys.executable, "-s", "-m", "b123d_print.worker", job_file]
         k = kind()
         if k == "sandbox-exec":
             prof = os.path.join(tmp, "profile.sb")

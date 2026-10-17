@@ -1,20 +1,20 @@
-# cadkit
+# b123d-print
 
 Design 3D-printable parts with an AI assistant — any assistant. You describe a part (photos,
 caliper readings); the model writes a [build123d](https://github.com/gumyr/build123d) Python
-script; cadkit builds it in a sandbox, renders it, cuts cross-sections, runs print checks and
-exports STEP + STL.
+script; b123d-print builds it in a sandbox, renders it, cuts cross-sections, runs print checks and
+exports the formats you pick: STEP, STL, 3MF, PNG.
 
-- **`cadkit`** — Python package + CLI: export (STEP/STL/PNG), 6-view renders, colored
+- **`b123d-print`** — Python package + CLI: export (STEP/STL/3MF/PNG, your choice), 6-view renders, colored
   multi-part cross-sections, and print checks: **overlap** between mating parts, **overhang**
   report in print orientation, **wall thickness** around cuts, plus simple **probes**.
-- **`cadkit-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from Claude
+- **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from Claude
   Desktop / Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part scripts
   are model-written code, so they run in a sandboxed subprocess with a timeout and no network.
 - **The workflow**, model-neutral: MCP prompts + [`AGENTS.md`](AGENTS.md). The rules came from
   real prints (one of them broke through a 0.05 mm skin the model could not see).
 - **Examples**: parts that were designed this way and printed, in
-  [`src/cadkit/examples/`](src/cadkit/examples/), plus a **hole calibration coupon**.
+  [`src/b123d_print/examples/`](src/b123d_print/examples/), plus a **hole calibration coupon**.
 
 > **Images:** `render_preview` and `section` return PNG images. The model can only check its own
 > work if your MCP client passes tool-result images to the model. Claude Desktop and Claude Code
@@ -24,24 +24,24 @@ exports STEP + STL.
 ## Install
 
 Needs [uv](https://docs.astral.sh/uv/); it installs Python 3.12 and the pinned dependencies.
-Below, `<cadkit>` is where cadkit comes from: a local checkout path today
+Below, `<b123d-print>` is where b123d-print comes from: a local checkout path today
 (`/path/to/cad-kit`), or a published location once there is one.
 
 ```bash
-uvx --from <cadkit> cadkit-mcp --help
+uvx --from <b123d-print> b123d-print-mcp --help
 ```
 
 The server works in one folder, the **workspace** (parts go in `parts/<name>/<name>.py`):
-`--workspace DIR`, or `CADKIT_WORKSPACE`, else the folder the client starts it in.
+`--workspace DIR`, or `B123D_PRINT_WORKSPACE`, else the folder the client starts it in.
 
 ### Claude Code
 
 ```bash
-claude mcp add cadkit -- uvx --from <cadkit> cadkit-mcp --workspace ~/parts
+claude mcp add b123d-print -- uvx --from <b123d-print> b123d-print-mcp --workspace ~/parts
 ```
 
 or install the plugin (MCP server + a small skill that points at the same workflow):
-`/plugin marketplace add <cadkit>` then `/plugin install cadkit@cadkit`. The plugin uses the
+`/plugin marketplace add <b123d-print>` then `/plugin install b123d-print@b123d-print`. The plugin uses the
 folder Claude Code starts the server in (the project) as the workspace.
 
 ### Claude Desktop
@@ -51,9 +51,9 @@ folder Claude Code starts the server in (the project) as the workspace.
 ```json
 {
   "mcpServers": {
-    "cadkit": {
+    "b123d-print": {
       "command": "uvx",
-      "args": ["--from", "<cadkit>", "cadkit-mcp", "--workspace", "/Users/you/parts"]
+      "args": ["--from", "<b123d-print>", "b123d-print-mcp", "--workspace", "/Users/you/parts"]
     }
   }
 }
@@ -68,7 +68,7 @@ Always pass `--workspace` here. If `uvx` is not found, use its full path (`which
 ```json
 {
   "mcpServers": {
-    "cadkit": { "command": "uvx", "args": ["--from", "<cadkit>", "cadkit-mcp", "--workspace", "/Users/you/parts"] }
+    "b123d-print": { "command": "uvx", "args": ["--from", "<b123d-print>", "b123d-print-mcp", "--workspace", "/Users/you/parts"] }
   }
 }
 ```
@@ -84,7 +84,7 @@ Always pass `--workspace` here. If `uvx` is not found, use its full path (`which
 ```json
 {
   "servers": {
-    "cadkit": { "type": "stdio", "command": "uvx", "args": ["--from", "<cadkit>", "cadkit-mcp", "--workspace", "${workspaceFolder}"] }
+    "b123d-print": { "type": "stdio", "command": "uvx", "args": ["--from", "<b123d-print>", "b123d-print-mcp", "--workspace", "${workspaceFolder}"] }
   }
 }
 ```
@@ -94,24 +94,24 @@ Always pass `--workspace` here. If `uvx` is not found, use its full path (`which
 `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.cadkit]
+[mcp_servers.b123d-print]
 command = "uvx"
-args = ["--from", "<cadkit>", "cadkit-mcp", "--workspace", "/Users/you/parts"]
+args = ["--from", "<b123d-print>", "b123d-print-mcp", "--workspace", "/Users/you/parts"]
 ```
 
 ### Docker (strongest isolation)
 
 ```bash
-docker build -t cadkit-mcp .
+docker build -t b123d-print-mcp .
 # client config: command "docker", args:
-#   ["run", "-i", "--rm", "--network", "none", "-v", "/Users/you/parts:/work", "cadkit-mcp"]
+#   ["run", "-i", "--rm", "--network", "none", "-v", "/Users/you/parts:/work", "b123d-print-mcp"]
 ```
 
 ## Using it
 
 Start with a prompt: **`design_part_from_photos`** (new part), **`modify_part`**,
 **`verify_part`** (review before printing) or **`calibrate_hole_comp`**. In clients without
-prompt support, just ask: the server's instructions and the `cadkit://guide` resource carry the
+prompt support, just ask: the server's instructions and the `b123d-print://guide` resource carry the
 same rules.
 
 The model first **lists every dimension it read** from your photos and waits for you to
@@ -127,32 +127,32 @@ the checks pass, and reports size, clearances, hole compensation, warnings and p
 | `render_preview(name, variant?, parts?)` | 6-view PNG; `parts="assembly"` shows the fit |
 | `section(name, plane, at, ...)` | colored cross-section PNG, `XY`/`XZ`/`YZ` |
 | `check(name, variant?)` | validity, overlap, overhang, wall, probe checks |
-| `export(name, variant?)` | STEP + STL + PNG (+ section views) to `parts/<name>/out/` |
+| `export(name, variant?, formats?)` | to `parts/<name>/out/`: any of `step,stl,3mf,png` (default: your `formats` setting) |
 
 ### Without MCP (any agent that runs shell commands, or by hand)
 
 ```bash
-uvx --from <cadkit> cadkit init ~/parts     # cadkit.toml, AGENTS.md, parts/
+uvx --from <b123d-print> b123d-print init ~/parts     # b123d-print.toml, AGENTS.md, parts/
 ```
 
-Then, in that folder (with cadkit installed in its environment, e.g. `uv add <cadkit>`):
+Then, in that folder (with b123d-print installed in its environment, e.g. `uv add <b123d-print>`):
 
 ```bash
-cadkit new bracket                  # parts/bracket/bracket.py from the template
-cadkit new coupon --from hole_coupon
-uv run parts/bracket/bracket.py     # or: cadkit build bracket
-cadkit check                        # all parts; exit code 1 on failure
+b123d-print new bracket                  # parts/bracket/bracket.py from the template
+b123d-print new coupon --from hole_coupon
+uv run parts/bracket/bracket.py     # or: b123d-print build bracket
+b123d-print check                        # all parts; exit code 1 on failure
 ```
 
 Agents that read `AGENTS.md` (Codex, Cursor, and others; Claude Code via `@AGENTS.md` in
-`CLAUDE.md`) get the workflow from the file `cadkit init` writes.
+`CLAUDE.md`) get the workflow from the file `b123d-print init` writes.
 
 ## A part script
 
 ```python
 from dataclasses import dataclass
 from build123d import Align, Box, Cylinder, Mode, Part
-from cadkit import View, Wall, hole_comp
+from b123d_print import View, Wall, hole_comp
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 
@@ -180,7 +180,7 @@ def checks(d):                   # how much material is left around the counterb
     return [Wall("", "XY", d.CBORE_DEPTH / 2, near=(0, 0), radius=d.W, label="around the counterbore")]
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
     run(__file__)
 ```
 
@@ -191,19 +191,31 @@ mate with (a PCB, a sensor); the overlap check makes sure nothing printed hits t
 ## Settings and hole compensation
 
 FDM printers print small holes undersize, by an amount that depends on printer, nozzle,
-material and slicer. cadkit never assumes a value: `hole_comp` defaults to **0**. Print the
+material and slicer. b123d-print never assumes a value: `hole_comp` defaults to **0**. Print the
 `hole_coupon` example, measure the holes, and set the average error:
 
 ```toml
-# ~/.config/cadkit/config.toml       (`cadkit config` shows what is in effect)
+# ~/.config/b123d-print/config.toml       (`b123d-print config` shows what is in effect)
 [print]
 hole_comp = 0.4      # mm added to hole diameters when cutting
 clearance = 0.2      # default mating gap
 min_wall = 0.8       # Wall checks fail below this unless they set their own limit
 max_overhang = 45    # degrees from vertical
+formats = ["step", "stl", "3mf", "png"]   # what export writes (default: all four)
 ```
 
-A workspace `cadkit.toml` overrides the user config; `CADKIT_HOLE_COMP` etc. override both.
+| Format | For |
+| --- | --- |
+| `.py` (always) | the parametric source: change a `Dims` value, rebuild |
+| `step` | editing in other CAD (Onshape, Fusion, FreeCAD, SolidWorks): a solid without feature history |
+| `stl` | any slicer |
+| `3mf` | slicers that read it (Bambu Studio, OrcaSlicer, PrusaSlicer); keeps units |
+| `png` | 6-view preview and the section views from `views(d)` |
+
+Per run: `b123d-print build part --formats 3mf,png`, `uv run part.py --formats step`, or
+`formats="3mf"` on the MCP `export` tool. `B123D_PRINT_FORMATS=3mf,png` works too.
+
+A workspace `b123d-print.toml` overrides the user config; `B123D_PRINT_HOLE_COMP` etc. override both.
 
 ## The checks
 
@@ -219,7 +231,7 @@ A workspace `cadkit.toml` overrides the user config; `CADKIT_HOLE_COMP` etc. ove
 
 ## Sandbox
 
-Part scripts are written by a model, so `cadkit-mcp` runs each one in a separate process:
+Part scripts are written by a model, so `b123d-print-mcp` runs each one in a separate process:
 
 | Platform | Isolation |
 | --- | --- |
@@ -229,7 +241,7 @@ Part scripts are written by a model, so `cadkit-mcp` runs each one in a separate
 | Docker | the container (`--network none`, only `/work` mounted) |
 
 Every build also gets a timeout (default 120 s, `--timeout`) and a CPU limit. The audit hook is
-defense in depth, not a boundary by itself. `cadkit build`/`check` and `uv run part.py` on the
+defense in depth, not a boundary by itself. `b123d-print build`/`check` and `uv run part.py` on the
 command line are **not** sandboxed: they run your scripts like any Python.
 
 ## Development
@@ -237,14 +249,14 @@ command line are **not** sandboxed: they run your scripts like any Python.
 ```bash
 uv sync
 uv run pytest                       # unit tests
-uv run cadkit check                 # all bundled examples
+uv run b123d-print check                 # all bundled examples
 uv run python tests/mcp_smoke.py    # end to end over MCP stdio, incl. sandbox escapes
 ```
 
 ## Credits and license
 
-cadkit stands on [build123d](https://github.com/gumyr/build123d) (Apache-2.0),
+b123d-print stands on [build123d](https://github.com/gumyr/build123d) (Apache-2.0),
 [OCP](https://github.com/CadQuery/OCP) and [Open CASCADE Technology](https://dev.opencascade.org)
 (LGPL-2.1 with exception), [matplotlib](https://matplotlib.org), [NumPy](https://numpy.org) and
 the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk). See
-[THIRD_PARTY.md](THIRD_PARTY.md). cadkit itself is [MIT](LICENSE).
+[THIRD_PARTY.md](THIRD_PARTY.md). b123d-print itself is [MIT](LICENSE).

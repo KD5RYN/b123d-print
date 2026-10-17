@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from build123d import Align, Axis, Box, Part, chamfer
 
-from cadkit import Overhang, View, Wall, clearance, hole_comp  # noqa: F401
+from b123d_print import Overhang, View, Wall, clearance, hole_comp  # noqa: F401
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)  # sit on Z=0
 
@@ -58,6 +58,6 @@ def checks(d: Dims):
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

@@ -1,6 +1,6 @@
 # Third-party software and credits
 
-cadkit is a thin layer over other people's work. It does **not** copy or bundle their code:
+b123d-print is a thin layer over other people's work. It does **not** copy or bundle their code:
 they are installed as dependencies, under their own licenses. Versions are the ones pinned in
 `pyproject.toml` / `uv.lock`.
 
@@ -20,11 +20,11 @@ ezdxf (MIT), sympy (BSD), scipy (BSD), anytree (Apache-2.0), svgpathtools (MIT) 
 
 ## Notes for redistribution
 
-- **Python package (wheel/sdist):** contains only cadkit's own code (MIT). Dependencies are
+- **Python package (wheel/sdist):** contains only b123d-print's own code (MIT). Dependencies are
   fetched from PyPI by the installer, so no third-party license texts need to ship with it.
 - **Docker image:** the image *does* contain the dependencies, including the OpenCascade shared
   libraries (LGPL-2.1). Anyone publishing the image should keep the license files that come with
   each installed package (they are in each `*.dist-info/` folder, left in place by the
   Dockerfile) and point to the OCCT source (https://github.com/Open-Cascade-SAS/OCCT); LGPL
   lets users replace the library, which a pip-installable stack already allows.
-- **Example parts** in `src/cadkit/examples/` are original designs, MIT like the rest.
+- **Example parts** in `src/b123d_print/examples/` are original designs, MIT like the rest.

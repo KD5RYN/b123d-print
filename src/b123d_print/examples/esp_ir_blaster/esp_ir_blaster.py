@@ -38,7 +38,7 @@ from build123d import (
     offset,
 )
 
-from cadkit import View, Wall, hole_comp
+from b123d_print import View, Wall, hole_comp
 
 MIN = Align.MIN
 CEN = Align.CENTER
@@ -94,7 +94,7 @@ class Dims:
     CORNER_LIP_ARM: float = 5.0  # arm length along each edge, from the corner
     CORNER_LIP_ABOVE: float = 1.5  # how far the lips rise above the PCB top
     TOP_CLEAR: float = 1.5  # above the module / header
-    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from cadkit config
+    HOLE_COMP: float = hole_comp(__file__)  # your printer's, from b123d_print config
     FIT_CLEARANCE: float = 0.2  # lid lip in the walls, LED holder (per side)
     PART_CLEAR: float = 0.5  # pockets around board parts the box would otherwise touch
 
@@ -356,6 +356,6 @@ def checks(d: Dims):
 
 
 if __name__ == "__main__":
-    from cadkit import run
+    from b123d_print import run
 
     run(__file__)

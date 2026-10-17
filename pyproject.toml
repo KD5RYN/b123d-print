@@ -1,9 +1,10 @@
 [project]
-name = "cadkit"
+name = "b123d-print"
 version = "0.1.0"
 description = "Design, check and export 3D-printable parts with build123d, from any LLM via MCP"
 readme = "README.md"
 license = "MIT"
+authors = [{ name = "KD5RYN" }, { name = "b123d-print contributors" }]
 license-files = ["LICENSE", "THIRD_PARTY.md"]
 keywords = ["cad", "3d-printing", "build123d", "mcp", "llm"]
 requires-python = "==3.12.*"
@@ -15,8 +16,8 @@ dependencies = [
 ]
 
 [project.scripts]
-cadkit = "cadkit.cli:main"
-cadkit-mcp = "cadkit.mcp_server:main"
+b123d-print = "b123d_print.cli:main"
+b123d-print-mcp = "b123d_print.mcp_server:main"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]

@@ -1,4 +1,4 @@
-"""cadkit: helpers for 3D-printable parts modeled in build123d.
+"""b123d-print: helpers for 3D-printable parts modeled in build123d.
 
 Export (STEP/STL/PNG), previews and cross-sections, print checks (overlap, overhang, wall
 thickness), per-user print settings (hole compensation, clearance) and the part-script runner.
