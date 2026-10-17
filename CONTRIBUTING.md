@@ -54,4 +54,8 @@ The [Reference](https://kd5ryn.github.io/b123d-print/reference/) page (every com
   `.github/workflows/docs.yml`.
 - The printer table is generated: `python tools/sync_orca_printers.py` refreshes
   `src/b123d_print/data/printers_orca.json` from OrcaSlicer (records the commit it used).
+  `.github/workflows/orca-sync.yml` runs it monthly (or by hand from the Actions tab) and opens
+  a PR only when the printer data changed; close and reopen that PR to run the full CI.
+- Dependency updates: Dependabot (`.github/dependabot.yml`) opens weekly PRs for the pinned
+  Python packages, the GitHub Actions and the Docker base image; CI runs on them as on any PR.
 - Releasing: `docs/contributing/releasing.md`.
