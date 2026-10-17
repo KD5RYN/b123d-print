@@ -21,12 +21,18 @@ import sys
 import sysconfig
 import tempfile
 import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 _LIVE: set[subprocess.Popen] = set()  # running workers, so a server shutdown can stop them
 _LIVE_LOCK = threading.Lock()
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "b123d-print"
+# builds at once across every server process of this user (each SSH session runs its own server);
+# mcp_server sets it from --max-builds / $B123D_PRINT_MAX_BUILDS
+MAX_BUILDS = int(os.environ.get("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2)
+SLOT_DIR = CACHE / "build-slots"
 
 
 def _real(p) -> str:
@@ -94,6 +100,33 @@ def describe() -> str:
         "OS sandbox off (B123D_PRINT_SANDBOX=none): process isolation + audit hook; in the Docker image the container is the sandbox")
 
 
+@contextmanager
+def build_slot(n: int | None = None, poll: float = 0.2):
+    """Hold one of `n` build slots shared by all processes of this user (lock files in SLOT_DIR,
+    released by the OS if the process dies); waits while all are taken."""
+    try:
+        import fcntl
+    except ImportError:  # no flock (Windows): the per-process limit is all there is
+        yield None
+        return
+    n = max(1, n or MAX_BUILDS)
+    SLOT_DIR.mkdir(parents=True, exist_ok=True)
+    while True:
+        for i in range(n):
+            fd = os.open(SLOT_DIR / f"slot-{i}", os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                os.close(fd)
+                continue
+            try:
+                yield i
+            finally:
+                os.close(fd)  # closing the descriptor releases the lock
+            return
+        time.sleep(poll)
+
+
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -142,19 +175,20 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
             except Exception:
                 pass
 
-        proc = subprocess.Popen(cmd, env=env, cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                start_new_session=True, preexec_fn=limits)
-        with _LIVE_LOCK:
-            _LIVE.add(proc)
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _killpg(proc)
-            stdout, stderr = proc.communicate()
-            return {"ok": False, "error": f"timed out after {timeout:g} s (killed)", "log": _tail(stdout, stderr)}
-        finally:
+        with build_slot():  # shared with every other server process of this user
+            proc = subprocess.Popen(cmd, env=env, cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    start_new_session=True, preexec_fn=limits)
             with _LIVE_LOCK:
-                _LIVE.discard(proc)
+                _LIVE.add(proc)
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _killpg(proc)
+                stdout, stderr = proc.communicate()
+                return {"ok": False, "error": f"timed out after {timeout:g} s (killed)", "log": _tail(stdout, stderr)}
+            finally:
+                with _LIVE_LOCK:
+                    _LIVE.discard(proc)
         if proc.returncode in (-signal.SIGKILL, -signal.SIGTERM) and not Path(job["result"]).exists():
             return {"ok": False, "error": "worker was killed (server shutting down, or out of memory)", "log": _tail(stdout, stderr)}
         rp = Path(job["result"])

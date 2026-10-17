@@ -45,6 +45,9 @@ b123d-print check
 | `printer hole-comp <value>` | store a measured hole compensation for the active printer + material |
 | `printer calibrate <key> <value>` | store a value measured with a calibration coupon (`hole_comp`, `hole_comp_h`, `clearance`, `press_fit`, `free_fit`, `pip_clearance`, `max_overhang`, `max_bridge`) for the active printer + material |
 | `compare <reference> <candidate> [--json] [--image png] [--threshold name=value] [--samples n] [--no-icp] [--seed n]` | measure a part against a reference (STL, 3MF or STEP): differences, a 0-100 score, pass/fail; exit code 1 on fail ([comparing parts](../using/compare.md)) |
+| `setup-ssh --key <file.pub> --workspace <name> [--host h] [--add] [--authorized-keys file]` | on the server: the `authorized_keys` line that gives one client key the MCP server in one workspace, and the client config to match; `--add` writes it ([Remote over SSH](ssh.md)) |
+| `ssh-serve --workspace <folder> [--dest user@host] [--timeout s]` | the forced command in that line: runs the MCP server, `pull` or `version` as `$SSH_ORIGINAL_COMMAND` asks, refuses anything else; not for running by hand |
+| `pull <part> --from user@host [--formats f] [-o/--out folder] [--ssh cmd]` | on the client: copy a part's exported files from an SSH server (`--ssh` passes ssh options, e.g. `'ssh -i key -p 2222'`) |
 | `config` | the settings in effect, and which config files were found |
 | `list` | parts in the workspace |
 | `examples` | the bundled example parts |

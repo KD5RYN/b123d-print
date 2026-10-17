@@ -1,4 +1,5 @@
-"""`b123d-print` command line: init, new, build, check, compare, config, list."""
+"""`b123d-print` command line: init, new, build, check, compare, config, list, and MCP over SSH
+(setup-ssh, ssh-serve, pull)."""
 
 from __future__ import annotations
 
@@ -192,6 +193,27 @@ def cmd_compare(args) -> int:
     return 0 if r.passed else 1
 
 
+def cmd_ssh(args) -> int:
+    import os
+
+    from . import ssh
+
+    if args.cmd == "ssh-serve":
+        return ssh.serve(args.workspace, args.dest, args.timeout, os.environ.get("SSH_ORIGINAL_COMMAND"))
+    if args.cmd == "setup-ssh":
+        try:
+            return ssh.setup(args.key, args.workspace, args.host, args.add,
+                             Path(args.authorized_keys).expanduser() if args.authorized_keys else None)
+        except (OSError, ValueError) as e:
+            sys.exit(f"setup-ssh: {e}")
+    try:
+        got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh)
+    except (RuntimeError, ValueError) as e:
+        sys.exit(f"pull: {e}")
+    print("\n".join(str(p) for p in got))
+    return 0
+
+
 def _version() -> str:
     from importlib.metadata import version
 
@@ -245,6 +267,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-icp", action="store_true", help="skip the ICP refinement after the axis search")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--image", help="also write a deviation view (PNG) here")
+    p = sub.add_parser("setup-ssh", help="on the server: the authorized_keys line that gives one client key the MCP server "
+                                         "in one workspace, and the client config to match")
+    p.add_argument("--key", required=True, help="the client's public key file (.pub), or - for stdin")
+    p.add_argument("--workspace", required=True, help="a name (-> ~/parts/<name>) or a folder path")
+    p.add_argument("--host", help="the name clients reach this machine by (default: its FQDN)")
+    p.add_argument("--add", action="store_true", help="also put the line into authorized_keys (replaces this key's earlier b123d-print line)")
+    p.add_argument("--authorized-keys", help="file to add it to (default: ~/.ssh/authorized_keys)")
+    p = sub.add_parser("ssh-serve", help="the forced command in authorized_keys (written by setup-ssh): runs the MCP "
+                                         "server, `pull` or `version` for $SSH_ORIGINAL_COMMAND, refuses anything else")
+    p.add_argument("--workspace", required=True, help="the workspace this key is pinned to")
+    p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
+    p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
+    p = sub.add_parser("pull", help="on the client: copy a part's exported files from an SSH server")
+    p.add_argument("part")
+    p.add_argument("--from", dest="source", required=True, metavar="USER@HOST", help="the server, as in your MCP config")
+    p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
+    p.add_argument("-o", "--out", default=".", help="folder to write the files to (default: the current folder)")
+    p.add_argument("--ssh", default="ssh", help="ssh command and options, e.g. 'ssh -i ~/.ssh/b123d_print -p 2222' (default: ssh)")
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
@@ -275,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_printer(args)
         except (KeyError, ValueError) as e:
             sys.exit(str(e).strip('"'))
+    if args.cmd in ("setup-ssh", "ssh-serve", "pull"):
+        return cmd_ssh(args)
     if args.cmd == "examples":
         print("\n".join(examples()))
         return 0
