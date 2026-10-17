@@ -24,3 +24,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # the project pins Python 3.12 (requires-python ==3.12.*); only take 3.12.x base-image updates
+      - dependency-name: python
+        versions: [">=3.13"]
