@@ -96,6 +96,9 @@ Over HTTP the files the server writes stay on the server. The tools hand them to
 - **Resource links.** The same results carry MCP resource links
   (`b123d-print://files/<workspace>/parts/<part>/out/<file>`) that a client can read over the MCP
   connection itself. A session can read only its own workspace's files.
+- **Images.** `render_preview`, `section` and `compare` still return their image inline, so the
+  model sees the part. `size="small"` makes it ~800 px wide; `inline=false` returns only the
+  link, for clients that do not show images.
 - **Embedded files.** `export(..., embed=true)` also puts each file up to 2 MB (8 MB in all) into
   the result, for clients that can neither fetch URLs nor read resources. It is off by default:
   embedded models cost a lot of context.

@@ -185,6 +185,17 @@ def hole_comp_source(start: str | Path | None = None) -> str | None:
     return None
 
 
+def formats_configured(start: str | Path | None = None) -> bool:
+    """True if the user, the workspace or the environment chose export formats (False: the built-in all four)."""
+    if os.environ.get("B123D_PRINT_FORMATS"):
+        return True
+    user = user_config_path()
+    if user.is_file() and "formats" in _read(user):
+        return True
+    ws = find_workspace(start)
+    return ws is not None and "formats" in _read(ws / WORKSPACE_FILE)
+
+
 def hole_comp(script_file: str | Path | None = None, horizontal: bool = False) -> float:
     """HOLE_COMP for a part script: `HOLE_COMP: float = hole_comp(__file__)`; with
     horizontal=True the value for holes whose axis lies in XY (hole_comp_h)."""

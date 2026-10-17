@@ -62,9 +62,35 @@ def _as_list(parts) -> list[tuple[Part, str, str]]:
     return [(parts, PALETTE[0], "")]
 
 
-def render(parts, path: str | Path, title: str, tol: float = 0.02) -> Path:
+SIZES = ("normal", "small")  # image size: "small" is about 800 px wide (cheaper to send to a model)
+
+
+def _size(size: str) -> str:
+    if size not in SIZES:
+        raise ValueError(f"size must be one of {list(SIZES)}, got {size!r}")
+    return size
+
+
+def side_by_side(parts: list[tuple[Part, str]], gap: float | None = None) -> list[tuple[Part, None, str]]:
+    """Printable parts all sit at the origin in print orientation; lay them out along X on the bed,
+    left to right with a gap, centered on Y, for a preview: [(part, label)] -> [(moved, None, label)]."""
+    from build123d import Pos
+
+    boxes = [p.bounding_box() for p, _ in parts]
+    if gap is None:
+        gap = max(5.0, 0.1 * max(max(b.size.X, b.size.Y) for b in boxes))
+    out, x = [], 0.0
+    for (p, label), bb in zip(parts, boxes):
+        out.append((Pos(x - bb.min.X, -(bb.min.Y + bb.max.Y) / 2, 0) * p, None, label))
+        x += bb.size.X + gap
+    return out
+
+
+def render(parts, path: str | Path, title: str, tol: float = 0.02, size: str = "normal") -> Path:
     """Six orthographic/iso views of one part, or several as [(part, color, label)]. A part may
-    also be a compare.Mesh, and its color one RGB row per triangle."""
+    also be a compare.Mesh, and its color one RGB row per triangle. size: "normal" (~2000 px wide)
+    or "small" (~800 px)."""
+    small = _size(size) == "small"
     items = _as_list(parts)
     all_faces, all_colors = [], []
     light = np.array([0.4, -0.6, 0.8])
@@ -94,7 +120,7 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02) -> Path:
     ctr, r = (lo + hi) / 2, (hi - lo).max() / 2 * 1.05
     size = hi - lo
 
-    fig = plt.figure(figsize=(18, 10))
+    fig = plt.figure(figsize=(12, 6.7) if small else (18, 10))
     fig.suptitle(f"{title}   —   {size[0]:.2f} × {size[1]:.2f} × {size[2]:.2f} mm (X×Y×Z)", fontsize=14)
     for i, (name, elev, azim, hidden) in enumerate(VIEWS):
         ax = fig.add_subplot(2, 3, i + 1, projection="3d")
@@ -118,7 +144,7 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02) -> Path:
         )
     fig.tight_layout()
     path = Path(path)
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=67 if small else 110)
     plt.close(fig)
     return path
 
@@ -143,14 +169,15 @@ def section_faces(part: Part, plane: str, at: float):
     return list(s.faces()) if s is not None else []
 
 
-def section_view(parts, plane: str, at: float, path: str | Path, title: str) -> Path:
+def section_view(parts, plane: str, at: float, path: str | Path, title: str, size: str = "normal") -> Path:
     """Colored cross-section of one or several parts. plane: 'XY' (at=Z), 'XZ' (at=Y), 'YZ' (at=X).
     parts: a Part, {label: part} or [(part, color, label)]. Clearer than the 3D render for ribs,
-    walls and how parts fit together."""
+    walls and how parts fit together. size: "normal" (~1100 px wide) or "small" (~800 px)."""
+    small = _size(size) == "small"
     plane = plane.upper()
     axis = AXES[plane]
     keep = [i for i in range(3) if i != axis]
-    fig, ax = plt.subplots(figsize=(11, 8))
+    fig, ax = plt.subplots(figsize=(8, 5.8) if small else (11, 8))
     handles = []
     for part, color, label in _as_list(parts):
         drew = False

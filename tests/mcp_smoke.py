@@ -171,6 +171,78 @@ async def flow(c, pw, expect) -> None:
     expect(res.is_error and "bad part name" in text(res), "path traversal in a part name is refused, with a reason")
     res = await c.call_tool("render_preview", {"name": "nosuch"})
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
+    await multipart_checks(c, expect)
+
+
+TWO = '''"""Base and lid, both in print orientation at the origin."""
+from dataclasses import dataclass
+from build123d import Align, Box, Part, Pos
+
+BED = (Align.CENTER, Align.CENTER, Align.MIN)
+
+@dataclass(frozen=True)
+class Dims:
+    W: float = 40.0
+    H: float = 12.0
+    LID_T: float = 3.0
+
+def build(d: Dims) -> dict:
+    return {"base": Box(d.W, d.W, d.H, align=BED), "lid": Box(d.W - 4, d.W - 4, d.LID_T, align=BED)}
+'''
+
+ASSEMBLY = '''
+def assembly(d):
+    parts = build(d)
+    return [(parts["base"], "steelblue", "base"), (Pos(0, 0, d.H) * parts["lid"], "orange", "lid")]
+'''
+
+
+def summary(res) -> dict:
+    """The JSON at the start of a render_preview result (a download line may follow over HTTP)."""
+    return json.JSONDecoder().raw_decode(text(res))[0]
+
+
+def png_width(img) -> int:
+    return int.from_bytes(base64.b64decode(img.data)[16:20], "big")
+
+
+async def multipart_checks(c, expect) -> None:
+    """Issue #11: multi-part previews, image size and inline, export parts= and the formats note."""
+    await c.call_tool("new_part", {"name": "two"})
+    await c.call_tool("write_part", {"name": "two", "code": TWO})
+    res = await c.call_tool("render_preview", {"name": "two"})
+    info = summary(res)
+    expect(info["layout"] == "side by side" and info["drawn"] == ["base", "lid"] and images(res),
+           "two printable parts, no assembly(): drawn side by side")
+    expect(info["parts"]["lid"]["min"][0] < 0, "the reported parts keep their own coordinates (print orientation)")
+    await c.call_tool("write_part", {"name": "two", "code": TWO + ASSEMBLY})
+    res = await c.call_tool("render_preview", {"name": "two"})
+    expect(summary(res)["layout"] == "assembly", "with assembly(): the assembly is drawn")
+    res = await c.call_tool("render_preview", {"name": "two", "parts": "base,lid"})
+    expect(summary(res)["layout"] == "side by side", "parts='base,lid': side by side")
+    res = await c.call_tool("render_preview", {"name": "two", "parts": "lid"})
+    expect(summary(res)["layout"] == "single", "parts='lid': just the lid")
+    big = images(await c.call_tool("render_preview", {"name": "two", "parts": "lid"}))[0]
+    small = images(await c.call_tool("render_preview", {"name": "two", "parts": "lid", "size": "small"}))[0]
+    expect(700 <= png_width(small) <= 900 and png_width(big) > 1500,
+           f"size='small' renders ~800 px wide ({png_width(small)} vs {png_width(big)} px)")
+    res = await c.call_tool("section", {"name": "two", "plane": "XZ", "at": 0, "size": "small"})
+    expect(images(res) and png_width(images(res)[0]) <= 900, f"section size='small' ({png_width(images(res)[0])} px)")
+    res = await c.call_tool("render_preview", {"name": "two", "inline": False})
+    expect(not images(res) and ("Image file:" in text(res) or links_in(res)), "inline=False: the file or its link, no image bytes")
+    res = await c.call_tool("render_preview", {"name": "two", "size": "huge"})
+    expect(res.is_error and "size must be" in text(res), "a bad size is refused")
+    res = await c.call_tool("export", {"name": "two", "parts": "lid", "formats": "3mf"})
+    lines = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]
+    expect(lines == ["parts/two/out/two_lid.3mf"] and "Exported 1 file(s)" in text(res),
+           f"export parts='lid' formats='3mf': one file, counted ({lines})")
+    expect("default formats" not in text(res), "no formats note when formats= is given")
+    res = await c.call_tool("export", {"name": "two"})
+    n = len([x for x in text(res).splitlines() if x.strip().startswith("parts/")])
+    expect(f"Exported {n} file(s)" in text(res) and " MB in all" in text(res) and "default formats" in text(res)
+           and "3MF for Bambu" in text(res), f"bare export: {n} files counted, with the note to narrow formats")
+    res = await c.call_tool("export", {"name": "two", "parts": "nope"})
+    expect(res.is_error or "no part(s) ['nope']" in text(res), "export parts= with an unknown part is refused")
 
 
 SAVE = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-img-"))
