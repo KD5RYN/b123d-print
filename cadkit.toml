@@ -1,0 +1,4 @@
+# Workspace settings for this repo: the example parts live in src/cadkit/examples/ (shipped in the package).
+# Printer-specific values (hole_comp) belong in your user config, ~/.config/cadkit/config.toml.
+[workspace]
+parts_dir = "src/cadkit/examples"

@@ -1,0 +1,11 @@
+{
+  "name": "cadkit",
+  "owner": { "name": "cadkit contributors" },
+  "plugins": [
+    {
+      "name": "cadkit",
+      "source": "./",
+      "description": "build123d part design workflow: MCP tools (build, render, section, check, export) + skill"
+    }
+  ]
+}

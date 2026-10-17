@@ -1,0 +1,12 @@
+# cadkit workspace settings. Values here override your user config
+# (~/.config/cadkit/config.toml); env vars (CADKIT_HOLE_COMP, ...) override both.
+
+[workspace]
+parts_dir = "parts"
+
+[print]
+# Printer-specific: usually better in the user config. Measure it with the hole_coupon example.
+# hole_comp = 0.0     # mm added to hole diameters when cutting
+# clearance = 0.2     # mm default gap between mating parts
+# min_wall = 0.8      # mm; Wall checks fail below this unless they set their own minimum
+# max_overhang = 45   # deg from vertical

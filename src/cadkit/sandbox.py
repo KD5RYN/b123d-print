@@ -1,0 +1,161 @@
+"""Run a worker job in a separate, restricted process.
+
+Layers (strongest available is used; see `describe()`):
+  - macOS: sandbox-exec profile: no network, no process spawning, writes only to the part's out/
+    folder and a scratch folder, no reads of your home folder outside the workspace and Python.
+  - Linux: bubblewrap (`bwrap`) if installed: read-only root, no network, the same writable
+    folders, home folder hidden except the workspace.
+  - Always: a timeout (process group killed), CPU-time limit, scrubbed environment and the
+    worker's audit hook (no sockets, subprocesses or ctypes; writes only to allowed folders).
+  - For untrusted input, run the whole server in the Docker image with --network none.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import sysconfig
+import tempfile
+from pathlib import Path
+
+CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "cadkit"
+
+
+def _real(p) -> str:
+    return os.path.realpath(str(p))
+
+
+def _python_roots() -> list[str]:
+    """Folders the interpreter and installed packages live in (must stay readable)."""
+    paths = {sys.prefix, sys.base_prefix, sys.exec_prefix, os.path.dirname(sys.executable)}
+    for key in ("stdlib", "platstdlib", "purelib", "platlib"):
+        paths.add(sysconfig.get_paths().get(key, ""))
+    paths.update(p for p in sys.path if p and os.path.isdir(p))
+    paths = {p for p in paths if p}
+    return sorted({_real(p) for p in paths} | {os.path.abspath(p) for p in paths})
+
+
+def _sbpl_str(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def macos_profile(writable: list[str], readable: list[str]) -> str:
+    home = _real(Path.home())
+    w = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in writable)
+    r = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in readable + writable)
+    return f"""(version 1)
+(allow default)
+(deny network*)
+(deny process-fork)
+(deny file-write*)
+(allow file-write* {w} (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr"))
+(deny file-read* (subpath {_sbpl_str(home)}))
+(allow file-read* (literal {_sbpl_str(home)}) {r})
+(allow file-read-metadata)
+"""
+
+
+def linux_bwrap(writable: list[str], readable: list[str]) -> list[str]:
+    home = _real(Path.home())
+    cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net",
+           "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
+    for p in readable:
+        cmd += ["--ro-bind-try", p, p]
+    for p in writable:
+        cmd += ["--bind", p, p]
+    return cmd
+
+
+def kind() -> str:
+    if os.environ.get("CADKIT_SANDBOX") == "none":
+        return "none"
+    if sys.platform == "darwin" and shutil.which("sandbox-exec"):
+        return "sandbox-exec"
+    if sys.platform.startswith("linux") and shutil.which("bwrap"):
+        return "bwrap"
+    return "none"
+
+
+def describe() -> str:
+    k = kind()
+    return {
+        "sandbox-exec": "macOS sandbox-exec (no network, no subprocesses, writes limited to out/ and scratch, home hidden)",
+        "bwrap": "Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden)",
+        "none": "process isolation + audit hook only (install bubblewrap on Linux, or use the Docker image)",
+    }[k]
+
+
+def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:
+    """Run cadkit.worker on `job` and return its result dict (never raises for script errors)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mpl = CACHE / "matplotlib"
+    mpl.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="cadkit-") as tmp:
+        tmp = _real(tmp)
+        writable = [_real(out_dir), tmp, _real(mpl)]
+        readable = [_real(workspace)] + _python_roots()
+        job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable}
+        job_file = os.path.join(tmp, "job.json")
+        with open(job_file, "w") as f:
+            json.dump(job, f)
+        env = {
+            "PATH": "/usr/bin:/bin",
+            "HOME": tmp,
+            "TMPDIR": tmp,
+            "MPLCONFIGDIR": _real(mpl),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": os.pathsep.join(p for p in sys.path if p and os.path.isdir(p)),
+            "LANG": "C.UTF-8",
+        }
+        for var in ("CADKIT_HOLE_COMP", "CADKIT_CLEARANCE", "CADKIT_MIN_WALL", "CADKIT_MAX_OVERHANG", "XDG_CONFIG_HOME"):
+            if var in os.environ:
+                env[var] = os.environ[var]
+        # settings: the worker resolves the user config from the real home, so pass it explicitly
+        env.setdefault("XDG_CONFIG_HOME", _real(Path.home() / ".config"))
+        readable.append(_real(Path(env["XDG_CONFIG_HOME"]) / "cadkit"))  # only cadkit's own config
+        cmd = [sys.executable, "-s", "-m", "cadkit.worker", job_file]
+        k = kind()
+        if k == "sandbox-exec":
+            prof = os.path.join(tmp, "profile.sb")
+            with open(prof, "w") as f:
+                f.write(macos_profile(writable, readable))
+            cmd = ["sandbox-exec", "-f", prof] + cmd
+        elif k == "bwrap":
+            cmd = linux_bwrap(writable, readable) + cmd
+
+        def limits():  # in the child, before exec
+            try:
+                import resource
+
+                resource.setrlimit(resource.RLIMIT_CPU, (int(timeout) + 5, int(timeout) + 10))
+            except Exception:
+                pass
+
+        proc = subprocess.Popen(cmd, env=env, cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                start_new_session=True, preexec_fn=limits)
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            stdout, stderr = proc.communicate()
+            return {"ok": False, "error": f"timed out after {timeout:g} s (killed)", "log": _tail(stdout, stderr)}
+        rp = Path(job["result"])
+        if not rp.exists():
+            return {"ok": False, "error": f"worker exited with code {proc.returncode} and no result",
+                    "log": _tail(stdout, stderr)}
+        res = json.loads(rp.read_text())
+        log = _tail(stdout, stderr)
+        if log:
+            res["log"] = log
+        res["sandbox"] = k
+        return res
+
+
+def _tail(stdout: bytes, stderr: bytes, n: int = 4000) -> str:
+    s = (stdout or b"").decode(errors="replace") + (stderr or b"").decode(errors="replace")
+    return s[-n:].strip()

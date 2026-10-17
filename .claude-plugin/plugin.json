@@ -1,0 +1,7 @@
+{
+  "name": "cadkit",
+  "version": "0.1.0",
+  "description": "Design, check and export 3D-printable parts with build123d: the cadkit MCP server plus a skill that points Claude at the shared workflow.",
+  "license": "MIT",
+  "keywords": ["cad", "3d-printing", "build123d", "mcp"]
+}

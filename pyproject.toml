@@ -1,0 +1,33 @@
+[project]
+name = "cadkit"
+version = "0.1.0"
+description = "Design, check and export 3D-printable parts with build123d, from any LLM via MCP"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY.md"]
+keywords = ["cad", "3d-printing", "build123d", "mcp", "llm"]
+requires-python = "==3.12.*"
+dependencies = [
+    "build123d==0.13.0",
+    "matplotlib==3.11.2",
+    "mcp==2.3.0",
+    "numpy==2.5.4",
+]
+
+[project.scripts]
+cadkit = "cadkit.cli:main"
+cadkit-mcp = "cadkit.mcp_server:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.uv.build-backend]
+# generated previews/STEP/STL next to the bundled examples stay out of the packages
+source-exclude = ["**/out/**", "**/__pycache__/**"]
+wheel-exclude = ["**/out/**", "**/__pycache__/**"]
