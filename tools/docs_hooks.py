@@ -2,7 +2,7 @@
 
 A page asks for a block with a marker line, e.g. `<!-- generated: cli -->`. Blocks:
 cli (every `b123d-print` command's --help), mcp-cli (`b123d-print-mcp --help`), mcp (tools,
-prompts and resources the server registers) and settings (the config.Settings fields).
+prompts, resources and resource templates the server registers) and settings (the config.Settings fields).
 """
 
 from __future__ import annotations
@@ -55,6 +55,11 @@ def _text(s: str) -> str:
     return "".join(p if p.startswith("`") else p.replace("<", "&lt;") for p in re.split(r"(`[^`]*`)", s))
 
 
+def _cell(s: str) -> str:
+    """Docstring text for a table cell: one line."""
+    return " ".join(_text(s).split())
+
+
 def _signature(schema: dict) -> str:
     req = set(schema.get("required", []))
     args = []
@@ -72,9 +77,10 @@ def mcp() -> str:
     from b123d_print.mcp_server import mcp as server
 
     async def collect():
-        return await server.list_tools(), await server.list_prompts(), await server.list_resources()
+        return (await server.list_tools(), await server.list_prompts(), await server.list_resources(),
+                await server.list_resource_templates())
 
-    tools, prompts, resources = anyio.run(collect)
+    tools, prompts, resources, templates = anyio.run(collect)
     out = ["### Tools", ""]
     for t in tools:
         out += [f"#### `{t.name}`", "", "```python", f"{t.name}({_signature(t.input_schema)})", "```", "",
@@ -85,7 +91,9 @@ def mcp() -> str:
         out += [f"#### `{p.name}`", "", f"Arguments: {args or 'none'}.", "", _text(p.description), ""]
     out += ["### Resources", "", "| URI | Type | What |", "| --- | --- | --- |"]
     for r in resources:
-        out.append(f"| `{r.uri}` | `{r.mime_type}` | {_text(r.description)} |")
+        out.append(f"| `{r.uri}` | `{r.mime_type}` | {_cell(r.description)} |")
+    for t in templates:  # parameterized resources, e.g. b123d-print://files/{workspace}/{+path}
+        out.append(f"| `{t.uri_template}` | `{t.mime_type or '(per file)'}` | {_cell(t.description)} |")
     return "\n".join(out)
 
 
@@ -100,7 +108,7 @@ def settings() -> str:
         if f.name == "root":
             continue
         default = list(f.default) if isinstance(f.default, tuple) else f.default
-        out.append(f"| `{f.name}` | `{json.dumps(default)}` | {_text(comments.get(f.name, ''))} |")
+        out.append(f"| `{f.name}` | `{json.dumps(default)}` | {_cell(comments.get(f.name, ''))} |")
     return "\n".join(out)
 
 
