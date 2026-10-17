@@ -47,6 +47,7 @@ nav:
   - Getting started:
       - Quick start: getting-started/quick-start.md
       - Connect your MCP client: getting-started/mcp-clients.md
+      - Over the network (HTTP): getting-started/http.md
       - Docker: getting-started/docker.md
       - CLI and Python: getting-started/cli.md
   - Using it:

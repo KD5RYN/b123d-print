@@ -16,7 +16,7 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `section(name, plane, at, variant?, parts?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
 | `check(name, variant?)` | validity, overlap, overhang, wall, probe and fit checks ([the checks](checks.md)) |
 | `export(name, variant?, formats?)` | files to `parts/<name>/out/` ([formats](formats.md)) |
-| `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)) |
+| `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP it is saved per workspace |
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.

@@ -157,9 +157,10 @@ def printer(script_file: str | Path | None = None):
     return load_printer(name) if name else None
 
 
-def set_user_setting(key: str, value: str | None) -> Path:
-    """Set (or with None remove) `key` under [print] in the user config, keeping the rest."""
-    path = user_config_path()
+def set_user_setting(key: str, value: str | None, path: Path | None = None) -> Path:
+    """Set (or with None remove) `key` under [print] in the user config (or the TOML file
+    `path`, e.g. a workspace's b123d-print.toml), keeping the rest."""
+    path = path or user_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
     out, section, done = [], None, False
