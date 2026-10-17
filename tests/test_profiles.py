@@ -10,7 +10,9 @@ from b123d_print.config import load_settings, set_user_setting
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
-    for v in ("B123D_PRINT_HOLE_COMP", "B123D_PRINT_MIN_WALL", "B123D_PRINT_PRINTER"):
+    from b123d_print.config import _ENV
+
+    for v in (*_ENV.values(), "B123D_PRINT_PRINTER"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.chdir(tmp_path)
     return tmp_path / "cfg" / "b123d-print"
@@ -54,3 +56,33 @@ def test_printer_settings_and_fit_check(cfg):
     assert main(["printer", "use", "generic"]) == 0
     assert load_settings().printer == ""
     assert "[print]" in (cfg / "config.toml").read_text(encoding="utf-8")
+
+
+def test_new_settings_defaults(cfg):
+    s = load_settings()
+    assert (s.press_fit, s.clearance, s.free_fit, s.pip_clearance, s.max_bridge) == (0.05, 0.2, 0.3, 0.3, 10.0)
+    assert s.hole_comp_h == s.hole_comp == 0.0
+    set_user_setting("hole_comp", "0.3")
+    assert load_settings().hole_comp_h == 0.3  # follows hole_comp until set
+    set_user_setting("hole_comp_h", "0.5")
+    from b123d_print.config import hole_comp
+
+    assert (hole_comp(), hole_comp(horizontal=True)) == (0.3, 0.5)
+
+
+def test_calibrate_every_key(cfg, monkeypatch):
+    (cfg / "printers").mkdir(parents=True)
+    (cfg / "printers" / "tiny.toml").write_text('bed_x = 50\nbed_y = 50\nheight = 50\nmax_bridge = 15\n', encoding="utf-8")
+    set_user_setting("free_fit", "0.35")
+    assert main(["printer", "use", "tiny", "--material", "pla"]) == 0
+    s = load_settings()
+    assert (s.max_bridge, s.free_fit) == (15.0, 0.35)  # from the printer; user config until calibrated
+    for key, value in (("free_fit", "0.25"), ("pip_clearance", "0.2"), ("max_bridge", "30"), ("hole_comp_h", "0.4")):
+        assert main(["printer", "calibrate", key, value]) == 0
+    s = load_settings()
+    assert (s.free_fit, s.pip_clearance, s.max_bridge, s.hole_comp_h) == (0.25, 0.2, 30.0, 0.4)
+    assert pf.calibrated("tiny", "petg") == {}  # another material: nothing measured
+    monkeypatch.setenv("B123D_PRINT_MAX_BRIDGE", "12")
+    assert load_settings().max_bridge == 12.0  # the environment still wins
+    with pytest.raises(SystemExit):
+        main(["printer", "calibrate", "min_wall", "1"])  # not a calibration value
