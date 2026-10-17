@@ -611,17 +611,29 @@ def _clamp01(x: float) -> float:
     return min(1.0, max(0.0, x))
 
 
-def subdivided(mesh: Mesh, max_edge: float) -> Mesh:
-    """Split triangles in 4 until no edge is longer than max_edge (for per-triangle coloring)."""
-    tri, done = mesh.triangles, []
-    while len(tri):
-        big = np.max(np.linalg.norm(tri - np.roll(tri, 1, axis=1), axis=2), axis=1) > max_edge
-        done.append(tri[~big])
-        a, b, c = tri[big, 0], tri[big, 1], tri[big, 2]
-        ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
-        tri = np.concatenate([np.stack(x, axis=1) for x in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))])
-    t = np.concatenate(done)
-    return Mesh(t.reshape(-1, 3), np.arange(3 * len(t)).reshape(-1, 3), mesh.source)
+def subdivided(mesh: Mesh, max_edge: float, max_tris: int = 40_000) -> Mesh:
+    """Split each triangle across its longest edge until no edge is longer than max_edge (for
+    per-triangle coloring). Bisection keeps long slivers linear in count; max_edge is raised
+    until the result stays under max_tris."""
+    while True:
+        tri, done, n = mesh.triangles, [], 0
+        while len(tri):
+            e = np.stack([np.linalg.norm(tri[:, (i + 1) % 3] - tri[:, i], axis=1) for i in range(3)], axis=1)
+            big = e.max(axis=1) > max_edge
+            done.append(tri[~big])
+            n += int((~big).sum())
+            t, k = tri[big], e[big].argmax(axis=1)
+            if n + 2 * len(t) > max_tris * 4:  # hopeless at this size: give up early
+                break
+            # rotate so the longest edge is (p0, p1), then split it at its midpoint
+            idx = (np.arange(3)[None, :] + k[:, None]) % 3
+            t = np.take_along_axis(t, idx[:, :, None], axis=1)
+            mid = (t[:, 0] + t[:, 1]) / 2
+            tri = np.concatenate([np.stack([t[:, 0], mid, t[:, 2]], axis=1), np.stack([mid, t[:, 1], t[:, 2]], axis=1)])
+        if not len(tri) and n <= max_tris:
+            t = np.concatenate(done)
+            return Mesh(t.reshape(-1, 3), np.arange(3 * len(t)).reshape(-1, 3), mesh.source)
+        max_edge *= 1.5
 
 
 def deviation_colors(ref: Mesh, cand_aligned: Mesh, scale_mm: float) -> np.ndarray:

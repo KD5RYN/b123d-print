@@ -153,3 +153,15 @@ def test_cli(tmp_path, capsys):
     assert out["passed"] is False and out["checks"]["hausdorff_mm"]["ok"] is False
     assert (tmp_path / "d.png").stat().st_size > 10_000
     assert main(["compare", str(tmp_path / "a.stl"), str(tmp_path / "b.stl"), "--threshold", "hausdorff_mm=6"]) == 0
+
+
+def test_deviation_mesh_stays_small(tmp_path):
+    """A 3MF export is full of long slivers; subdividing it for the deviation view must stay
+    bounded (it once made 300k triangles and took the MCP compare past its timeout)."""
+    from b123d_print.compare import subdivided
+
+    export_3mf(Box(30, 30, 8) - Cylinder(1.7, 50) - Pos(0, 0, 2.5) * Cylinder(3.25, 3), tmp_path / "b.3mf")
+    m = load_mesh(tmp_path / "b.3mf")
+    s = subdivided(m, float(np.linalg.norm(m.size)) / 40)
+    assert len(s.tris) <= 40_000
+    assert s.area == pytest.approx(m.area)
