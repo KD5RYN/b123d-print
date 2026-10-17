@@ -1,0 +1,69 @@
+# Settings
+
+Settings come from four layers; later ones win:
+
+1. built-in defaults;
+2. your **user config**, `~/.config/b123d-print/config.toml` (or `$XDG_CONFIG_HOME/b123d-print/config.toml`);
+3. the **workspace config**, the nearest `b123d-print.toml` at or above the part script (or the
+   current folder);
+4. **environment variables**.
+
+`b123d-print config` shows the settings in effect and which files were found; over MCP,
+`list_parts` does. Printer-specific values (`hole_comp`, `printer`, `material`) belong in the
+user config; the workspace config is for values that belong to the project.
+
+```toml
+# ~/.config/b123d-print/config.toml
+[print]
+hole_comp = 0.4      # mm added to hole diameters when cutting
+clearance = 0.2      # default mating gap
+min_wall = 0.8       # Wall checks fail below this unless they set their own limit
+max_overhang = 45    # degrees from vertical
+formats = ["step", "stl", "3mf", "png"]
+```
+
+## Keys
+
+Keys go under `[print]` or `[workspace]` (the template puts `parts_dir` under `[workspace]`).
+An unknown key is an error, so typos don't pass silently.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `hole_comp` | `0.0` | mm added to hole diameters when cutting; see [Hole compensation](hole-compensation.md) |
+| `clearance` | `0.2` | default gap between mating parts, in mm; part scripts read it with `clearance(__file__)` |
+| `min_wall` | `0.8` | Wall checks fail below this (mm) unless a check sets its own `min` |
+| `max_overhang` | `45` | degrees from vertical; steeper downward faces are reported |
+| `printer` | `""` (generic) | optional [printer profile](printer-profiles.md) |
+| `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
+| `formats` | all four | what export writes: `step`, `stl`, `3mf`, `png` ([formats](formats.md)) |
+| `parts_dir` | `"parts"` | folder in the workspace that holds `<name>/<name>.py` |
+
+With a printer set, `min_wall` and `max_overhang` come from the printer and `hole_comp` from
+its calibration, unless a config file or the environment sets them; a material's `clearance`
+replaces the default the same way.
+
+## Environment variables
+
+| Variable | Does |
+| --- | --- |
+| `B123D_PRINT_HOLE_COMP` | overrides `hole_comp` |
+| `B123D_PRINT_CLEARANCE` | overrides `clearance` |
+| `B123D_PRINT_MIN_WALL` | overrides `min_wall` |
+| `B123D_PRINT_MAX_OVERHANG` | overrides `max_overhang` |
+| `B123D_PRINT_FORMATS` | overrides `formats`, e.g. `step,3mf` |
+| `B123D_PRINT_PRINTER` | overrides `printer` |
+| `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
+| `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given |
+| `B123D_PRINT_SANDBOX` | `none` turns the OS [sandbox](sandbox.md) off (the Docker image does; the container is the sandbox) |
+| `B123D_PRINT_MAX_BUILDS` | the MCP server's limit on build processes at once when `--max-builds` is not given |
+| `B123D_PRINT_TRANSPORT` | `stdio` or `http` when `--transport` is not given |
+| `B123D_PRINT_HOST` | HTTP bind address when `--host` is not given (the Docker image sets `0.0.0.0`) |
+| `B123D_PRINT_PORT` | HTTP port when `--port` is not given |
+| `B123D_PRINT_ALLOWED_HOSTS` | HTTP Host header values to accept when `--allowed-hosts` is not given |
+| `B123D_PRINT_SHUTDOWN_GRACE` | seconds running calls get on SIGTERM when `--shutdown-grace` is not given |
+| `B123D_PRINT_TOKEN` | the bearer token HTTP clients must send |
+| `B123D_PRINT_TOKEN_FILE` | a file holding the token, instead of `B123D_PRINT_TOKEN` |
+| `B123D_PRINT_CONFIG_IN_WORKSPACE` | `1` keeps the user config in `<workspace>/.config/` (set in the Docker image, whose home folder does not last) |
+
+A generated table of the keys with the comments from the code is in the
+[Reference](../reference.md#settings).

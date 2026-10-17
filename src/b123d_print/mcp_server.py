@@ -462,9 +462,10 @@ def _healthcheck(args) -> int:
         return 1
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """The server's command line; the docs' reference is generated from it."""
     env = os.environ.get
-    ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=" ".join(__doc__.split("\n\n")[0].split()))
     ap.add_argument("--workspace", default=env("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
     ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
@@ -483,7 +484,12 @@ def main() -> None:
     ap.add_argument("--insecure-no-auth", action="store_true",
                     help="http: run without a token (otherwise $B123D_PRINT_TOKEN or $B123D_PRINT_TOKEN_FILE is required)")
     ap.add_argument("--healthcheck", action="store_true", help="check the running HTTP server's /health and exit (for Docker)")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> None:
+    env = os.environ.get
+    args = build_parser().parse_args()
     if args.healthcheck:
         sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
