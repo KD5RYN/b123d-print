@@ -45,4 +45,5 @@ docker build -t b123d-print-mcp .
 
 Then use `b123d-print-mcp` instead of `ghcr.io/kd5ryn/b123d-print-mcp` in the client config.
 
-To update, see [Updating](../updating.md).
+To run the image as a network service for several clients, see
+[Over the network (HTTP)](http.md#in-docker). To update, see [Updating](../updating.md).

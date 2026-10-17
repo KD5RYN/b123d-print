@@ -27,34 +27,16 @@ In place of `b123d-print` in any config on this page:
 | --- | --- | --- |
 | `--workspace <folder>` | `$B123D_PRINT_WORKSPACE`, else the current folder | where parts and the workspace config live |
 | `--timeout <seconds>` | `$B123D_PRINT_TIMEOUT`, else 120 | time limit for each build, render, section, check or export |
-| `--max-builds <n>` | `$B123D_PRINT_MAX_BUILDS`, else half the CPU cores | build processes at once, across all clients; further calls wait |
-| `--transport stdio\|http` | `$B123D_PRINT_TRANSPORT`, else `stdio` | `http` serves [Streamable HTTP](#over-the-network-http) at `/mcp` |
+| `--max-builds <n>` | `$B123D_PRINT_MAX_BUILDS`, else half the CPU cores | build processes at once, across all clients; more calls wait |
+| `--transport <mode>` | `$B123D_PRINT_TRANSPORT`, else `stdio` | `stdio` or `http`; `http` serves Streamable HTTP at `/mcp`: see [Over the network](http.md) |
 | `--host <address>` | `$B123D_PRINT_HOST`, else `127.0.0.1` | HTTP: address to bind |
 | `--port <port>` | `$B123D_PRINT_PORT`, else 8000 | HTTP: port |
-| `--allowed-hosts <list>` | `$B123D_PRINT_ALLOWED_HOSTS` | HTTP: Host header values to accept (DNS-rebinding check, e.g. behind a reverse proxy) |
-| `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM, time for running calls to finish before their builds are killed |
-| `--insecure-no-auth` | off | HTTP: run without a token |
-| `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's HEALTHCHECK) |
+| `--allowed-hosts <names>` | `$B123D_PRINT_ALLOWED_HOSTS` | HTTP: comma-separated `Host` header values to accept (DNS-rebinding check, behind a proxy) |
+| `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
+| `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |
+| `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's health check) |
 
 The full `--help` output is in the [Reference](../reference.md#b123d-print-mcp).
-
-## Over the network (HTTP)
-
-```bash
-export B123D_PRINT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-b123d-print-mcp --transport http --host 0.0.0.0 --workspace ~/parts
-```
-
-Every request needs `Authorization: Bearer <token>` (`$B123D_PRINT_TOKEN`, or a file named by
-`$B123D_PRINT_TOKEN_FILE`; at least 16 characters); the server will not start without one.
-Each client picks its own workspace with `/mcp?workspace=<name>`, which is the folder
-`<workspace>/workspaces/<name>`. `GET /health` needs no token. For Docker, see `deploy/compose.yaml`
-in the repository.
-
-```bash
-claude mcp add --transport http b123d-print "http://<host>:8000/mcp?workspace=me" \
-  --header "Authorization: Bearer $B123D_PRINT_TOKEN"
-```
 
 ## Claude Desktop
 
@@ -124,6 +106,7 @@ args = ["--from", "b123d-print", "b123d-print-mcp", "--workspace", "/Users/you/p
 
 ## Other clients
 
-Any client that can start a stdio MCP server: command `uvx`, arguments as above.
+Any client that can start a stdio MCP server: command `uvx`, arguments as above. To share one
+server between several clients or machines, see [Over the network (HTTP)](http.md).
 
 To run the server in a container instead of through `uvx`, see [Docker](docker.md).

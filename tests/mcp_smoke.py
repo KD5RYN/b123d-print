@@ -227,38 +227,39 @@ async def http_checks(url: str, token: str, expect) -> None:
         expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
 
 
-SPIN = """import os, pathlib
-out = pathlib.Path(__file__).parent / "out"
-out.mkdir(exist_ok=True)
-(out / "pid").write_text(str(os.getpid()))
+# a build that never ends and keeps writing a heartbeat (a PID would be meaningless from here:
+# bubblewrap runs the worker in its own PID namespace)
+SPIN = """import pathlib, time
+beat = pathlib.Path(__file__).parent / "out" / "beat"
+beat.parent.mkdir(exist_ok=True)
 while True:
-    pass
+    beat.write_text(repr(time.monotonic()))
+    time.sleep(0.05)
 """
 
 
-def alive(pid: int) -> bool:
+def beating(path: Path) -> bool:
+    """True while something keeps rewriting the heartbeat file."""
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
+        first = path.read_text()
+        time.sleep(0.6)
+        return path.read_text() != first
+    except OSError:
         return False
-    except PermissionError:
-        return True
 
 
 async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None:
     """SIGTERM while a build runs: the server waits --shutdown-grace, kills the build, exits 0."""
-    pidfile = ws / "workspaces/shutdown/parts/spin/out/pid"
+    beat = ws / "workspaces/shutdown/parts/spin/out/beat"
     async with http_client(with_workspace(url, "shutdown"), token) as c:
         await c.call_tool("new_part", {"name": "spin"})
         await c.call_tool("write_part", {"name": "spin", "code": SPIN})
         call = asyncio.ensure_future(c.call_tool("build_part", {"name": "spin"}))
         for _ in range(150):
             await asyncio.sleep(0.2)
-            if pidfile.exists() and pidfile.read_text():
+            if beat.exists():
                 break
-        pid = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text() else 0
-        expect(pid and alive(pid), "a build is running before shutdown")
+        expect(await asyncio.to_thread(beating, beat), "a build is running before shutdown")
         t0 = time.monotonic()
         server.terminate()
         code = await asyncio.to_thread(server.wait, 30)
@@ -268,8 +269,7 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
         except BaseException:
             pass
     expect(code == 0 and took < 15, f"SIGTERM: server exits cleanly after the grace period (code {code}, {took:.1f} s)")
-    time.sleep(0.5)
-    expect(pid and not alive(pid), "no build process left behind")
+    expect(not beating(beat), "no build process left behind")
 
 
 async def main(keep: bool, http: bool) -> None:

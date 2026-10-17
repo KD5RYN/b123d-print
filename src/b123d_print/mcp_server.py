@@ -441,7 +441,7 @@ def http_app(host: str, token: str | None, allowed_hosts: str | None = None):
     from mcp.server.transport_security import TransportSecuritySettings
 
     sec = None  # SDK default: Host/Origin checks on when bound to localhost, off otherwise
-    if allowed_hosts:  # e.g. behind a reverse proxy: "cad.lan.cqspot.com,cad.lan.cqspot.com:*"
+    if allowed_hosts:  # e.g. behind a reverse proxy: "cad.example.com,cad.example.com:*"
         hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
         sec = TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=hosts)
     app = mcp.streamable_http_app(stateless_http=True, host=host, transport_security=sec)

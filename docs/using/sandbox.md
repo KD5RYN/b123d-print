@@ -17,6 +17,9 @@ defense in depth, not a boundary on its own.
 `list_parts` reports the sandbox in use. `B123D_PRINT_SANDBOX=none` turns the OS sandbox off;
 the Docker image does this because the container is the sandbox.
 
+Over [HTTP](../getting-started/http.md) the same sandbox applies to every client's builds; the
+bearer token decides who may run them at all, and `--max-builds` how many run at once.
+
 The [CLI](../getting-started/cli.md) does **not** sandbox: it runs your own scripts like any
 Python.
 

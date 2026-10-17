@@ -54,15 +54,15 @@ replaces the default the same way.
 | `B123D_PRINT_PRINTER` | overrides `printer` |
 | `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
 | `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given |
+| `B123D_PRINT_MAX_BUILDS` | the MCP server's `--max-builds` |
+| `B123D_PRINT_TRANSPORT` | the MCP server's `--transport` (`stdio` or `http`) |
+| `B123D_PRINT_HOST` | the MCP server's `--host` (HTTP; the Docker image sets `0.0.0.0`) |
+| `B123D_PRINT_PORT` | the MCP server's `--port` (HTTP) |
+| `B123D_PRINT_ALLOWED_HOSTS` | the MCP server's `--allowed-hosts` (HTTP) |
+| `B123D_PRINT_SHUTDOWN_GRACE` | the MCP server's `--shutdown-grace` (HTTP) |
+| `B123D_PRINT_TOKEN` | the bearer token HTTP clients must send ([Over the network](../getting-started/http.md)) |
+| `B123D_PRINT_TOKEN_FILE` | path of a file holding that token, instead of `B123D_PRINT_TOKEN` |
 | `B123D_PRINT_SANDBOX` | `none` turns the OS [sandbox](sandbox.md) off (the Docker image does; the container is the sandbox) |
-| `B123D_PRINT_MAX_BUILDS` | the MCP server's limit on build processes at once when `--max-builds` is not given |
-| `B123D_PRINT_TRANSPORT` | `stdio` or `http` when `--transport` is not given |
-| `B123D_PRINT_HOST` | HTTP bind address when `--host` is not given (the Docker image sets `0.0.0.0`) |
-| `B123D_PRINT_PORT` | HTTP port when `--port` is not given |
-| `B123D_PRINT_ALLOWED_HOSTS` | HTTP Host header values to accept when `--allowed-hosts` is not given |
-| `B123D_PRINT_SHUTDOWN_GRACE` | seconds running calls get on SIGTERM when `--shutdown-grace` is not given |
-| `B123D_PRINT_TOKEN` | the bearer token HTTP clients must send |
-| `B123D_PRINT_TOKEN_FILE` | a file holding the token, instead of `B123D_PRINT_TOKEN` |
 | `B123D_PRINT_CONFIG_IN_WORKSPACE` | `1` keeps the user config in `<workspace>/.config/` (set in the Docker image, whose home folder does not last) |
 
 A generated table of the keys with the comments from the code is in the
