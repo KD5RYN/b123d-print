@@ -1,7 +1,8 @@
 # Releasing
 
-Released: **0.1.0** on [PyPI](https://pypi.org/project/b123d-print/) and as
-`ghcr.io/kd5ryn/b123d-print-mcp:0.1.0` (+ `latest`, public). This page is how the pieces ship
+Released: **0.2.0** on [PyPI](https://pypi.org/project/b123d-print/) and as
+`ghcr.io/kd5ryn/b123d-print-mcp:0.2.0` (+ `latest`, public); changes in
+[CHANGELOG.md](https://github.com/KD5RYN/b123d-print/blob/main/CHANGELOG.md). This page is how the pieces ship
 and how to cut the next release.
 
 ## What gets distributed
@@ -51,4 +52,4 @@ While 0.x, the part-script convention may still change; say so in the release no
    environment, then uploads to PyPI and pushes `ghcr.io/kd5ryn/b123d-print-mcp:X.Y.Z` + `latest`.
 4. Write the release notes as a GitHub release on the tag (say when the part-script
    convention changed).
-5. Update the pinned-version examples in the docs (`b123d-print==0.1.0`) if they should follow.
+5. Update the pinned-version examples in the docs (`b123d-print==0.2.0`) if they should follow.

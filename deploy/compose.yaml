@@ -4,8 +4,8 @@
 # part scripts; `worker` runs the model-written part scripts and has NO network (network_mode:
 # none). They talk only through a job folder on the shared volume.
 #
-# Needs the image >= 0.2.0 (`:latest` is 0.1.0 until that release, which has no HTTP mode); or
-# build it from this repo: B123D_PRINT_IMAGE=b123d-print-mcp, `docker build -t b123d-print-mcp ..`.
+# Needs the image >= 0.2.0 (HTTP mode). To build it from this repo instead:
+# B123D_PRINT_IMAGE=b123d-print-mcp, `docker build -t b123d-print-mcp ..`.
 #
 #   mkdir -p parts config && sudo chown 1000:1000 parts config   # the image runs as uid 1000 ("cad")
 #   docker compose run --rm b123d-print token add claude-laptop --workspace 'claude-*'   # prints the token ONCE

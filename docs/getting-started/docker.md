@@ -28,7 +28,7 @@ Then point your client at Docker instead of `uvx` (Claude Desktop shown):
 - On Linux, add `"--user", "1000:1000"` (your `id -u`:`id -g`) so exported files belong to you.
 - The image turns the OS sandbox off (`B123D_PRINT_SANDBOX=none`): bubblewrap cannot run inside
   a container without extra privileges, and the container already isolates the scripts.
-- Tags: `latest` and each release (`ghcr.io/kd5ryn/b123d-print-mcp:0.1.0`); pin one if you
+- Tags: `latest` and each release (`ghcr.io/kd5ryn/b123d-print-mcp:0.2.0`); pin one if you
   want updates only when you choose.
 
 ## Building the image yourself

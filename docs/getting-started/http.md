@@ -8,9 +8,7 @@ Use it when the parts should live on one machine, such as a home server, while t
 elsewhere.
 
 !!! note
-    HTTP mode needs b123d-print **0.2.0 or later**. Until that release the `latest` image and
-    `b123d-print` from PyPI are 0.1.0, which has no HTTP mode: install from the git URL (see
-    [Which version](mcp-clients.md#which-version)) or build the Docker image from a clone.
+    HTTP mode needs b123d-print **0.2.0 or later** (PyPI and `ghcr.io/kd5ryn/b123d-print-mcp`).
 
 !!! tip "Just you, from a laptop?"
     For one person reaching a home server, running the server over SSH (stdio) is simpler and
