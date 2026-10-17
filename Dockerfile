@@ -5,6 +5,13 @@
 #   docker run -i --rm --network none -v "$PWD:/work" b123d-print-mcp
 #
 # MCP clients: command "docker", args ["run","-i","--rm","--network","none","-v","/abs/path/to/parts:/work","b123d-print-mcp"]
+#
+# The same image as a network service (Streamable HTTP at /mcp, bearer token required):
+#
+#   docker run -d --name b123d-print -p 127.0.0.1:8000:8000 -v "$PWD:/work" \
+#     -e B123D_PRINT_TRANSPORT=http -e B123D_PRINT_TOKEN="$(cat token)" b123d-print-mcp
+#
+# Select HTTP with the environment (not only with arguments) so the HEALTHCHECK knows to probe /health.
 FROM python:3.12-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /usr/local/bin/
@@ -23,8 +30,11 @@ RUN uv sync --frozen --no-dev
 
 # The container is the sandbox here (bubblewrap cannot nest without extra privileges).
 ENV PATH=/opt/b123d-print/.venv/bin:$PATH B123D_PRINT_SANDBOX=none MPLCONFIGDIR=/tmp/mpl XDG_CACHE_HOME=/tmp/cache \
-    B123D_PRINT_CONFIG_IN_WORKSPACE=1
+    B123D_PRINT_CONFIG_IN_WORKSPACE=1 B123D_PRINT_HOST=0.0.0.0 B123D_PRINT_PORT=8000
 RUN useradd --create-home cad && mkdir /work && chown cad /work
 USER cad
 WORKDIR /work
+EXPOSE 8000
+# stdio: always healthy while it runs; http: GET /health
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --start-interval=2s CMD ["b123d-print-mcp", "--healthcheck"]
 ENTRYPOINT ["b123d-print-mcp", "--workspace", "/work"]
