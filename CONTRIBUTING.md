@@ -10,6 +10,9 @@ git clone https://github.com/KD5RYN/b123d-print && cd b123d-print && uv sync
 uv run pytest && uv run b123d-print check && uv run python tests/mcp_smoke.py
 ```
 
+The smoke test drives every MCP tool; `--http` runs it over HTTP, `--ssh` through the SSH
+forced command (sshd simulated), and `sh tests/ssh_e2e.sh` over a real local sshd.
+
 ```bash
 uv run mkdocs serve        # the docs site at http://127.0.0.1:8000, rebuilt as you edit
 ```

@@ -2,6 +2,10 @@
 
     uv run python tests/mcp_smoke.py [--keep]          # stdio: starts the server itself
     uv run python tests/mcp_smoke.py --http [--keep]   # starts it with --transport http and a token
+    uv run python tests/mcp_smoke.py --ssh [--keep]    # through the SSH forced command (`ssh-serve`),
+                                                       # with sshd simulated by tests/fake_ssh.py
+    B123D_PRINT_SMOKE_SSH="ssh -p 2222 me@host" B123D_PRINT_SMOKE_WORKSPACE_DIR=... uv run python tests/mcp_smoke.py --ssh
+                                                       # over real ssh, to a key set up with setup-ssh
     B123D_PRINT_SMOKE_URL=https://host/mcp B123D_PRINT_SMOKE_TOKEN=... uv run python tests/mcp_smoke.py
                                                        # a running server (e.g. the Docker image)
 
@@ -118,6 +122,11 @@ async def flow(c, pw, expect) -> None:
     files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
     expect(files == ["parts/box/out/box.3mf"] and (pw is None or [p.name for p in (pw / "parts/box/out").iterdir()] == ["box.3mf"]),
            "export honors formats='3mf'")
+    res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "embed": True})
+    emb = blobs(res)
+    got = next((v for k, v in emb.items() if k.endswith("/parts/box/out/box.3mf")), None)
+    expect(got and (pw is None or got == (pw / "parts/box/out/box.3mf").read_bytes()),
+           f"export embed=True puts the file into the result ({len(emb)} embedded)")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
 
@@ -430,7 +439,29 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
     expect(not beating(beat), "no build process left behind")
 
 
-async def main(keep: bool, http: bool) -> None:
+async def ssh_checks(c, ssh_cmd: list[str], dest: str, pw: Path | None, expect) -> None:
+    """After the tool tour over SSH: export names the pull command, pull fetches the files, and the
+    key gives nothing but the MCP server, pull and version."""
+    await c.call_tool("write_part", {"name": "box", "code": BOX})
+    res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf,stl"})
+    expect(f"b123d-print pull box --formats 3mf,stl --from {dest}" in text(res), "export over SSH gives the exact pull command")
+    got = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-pull-"))
+    r = subprocess.run([sys.executable, "-m", "b123d_print.cli", "pull", "box", "--from", dest, "--formats", "3mf,stl",
+                        "-o", str(got), "--ssh", " ".join(ssh_cmd)], capture_output=True, text=True, timeout=120)
+    names = sorted(p.name for p in got.iterdir())
+    same = pw is None or all((got / n).read_bytes() == (pw / "parts/box/out" / n).read_bytes() for n in names)
+    expect(r.returncode == 0 and names == ["box.3mf", "box.stl"] and same,
+           f"b123d-print pull copies the files byte for byte ({names}{'' if r.returncode == 0 else ': ' + r.stderr[-500:]})")
+    shutil.rmtree(got, ignore_errors=True)
+    r = subprocess.run(ssh_cmd + [dest, "version"], capture_output=True, text=True, timeout=60)
+    expect(r.returncode == 0 and "workspace:" in r.stdout, "ssh <dest> version answers")
+    for bad in ("bash", "sh -c id", "internal-sftp", "scp -f parts/box/out/box.3mf", "b123d-print-mcp --workspace /tmp",
+                "pull ../../etc", "pull box; id"):
+        r = subprocess.run(ssh_cmd + [dest, bad], capture_output=True, text=True, timeout=60)
+        expect(r.returncode != 0 and "refused" in r.stderr and not r.stdout, f"refused over SSH: {bad!r}")
+
+
+async def main(keep: bool, http: bool, over_ssh: bool = False) -> None:
     ws = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-"))
     # B123D_PRINT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/b123d_print-0.1.0-py3-none-any.whl b123d-print-mcp"
     cmd = os.environ.get("B123D_PRINT_SMOKE_CMD", f"{sys.executable} -m b123d_print.mcp_server").split()
@@ -479,6 +510,26 @@ async def main(keep: bool, http: bool) -> None:
             if server:
                 server.terminate()
                 server.wait(10)
+    elif over_ssh:
+        real = os.environ.get("B123D_PRINT_SMOKE_SSH")  # e.g. "ssh -p 2222 -i key me@127.0.0.1"
+        if real:
+            words = real.split()
+            ssh_cmd, dest = words[:-1], words[-1]
+            wd = os.environ.get("B123D_PRINT_SMOKE_WORKSPACE_DIR")
+            pw = Path(wd) if wd else None
+        else:  # the line setup-ssh writes, run the way sshd runs it
+            from b123d_print import ssh
+
+            key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKCbiyMIpQvcOhoPsC6yzJoIhRkkG7wuIPlTJDRKILTV smoke"
+            dest, pw = "smoke@cad.example", ws
+            line = ssh.key_line(key, ws, dest, prog=[sys.executable, "-m", "b123d_print.cli"])
+            env["B123D_PRINT_FAKE_SSH_FORCED"] = ssh.line_command(line) + " --timeout 60"
+            os.environ["B123D_PRINT_FAKE_SSH_FORCED"] = env["B123D_PRINT_FAKE_SSH_FORCED"]
+            ssh_cmd = [sys.executable, str(Path(__file__).with_name("fake_ssh.py"))]
+        print(f"     ssh: {' '.join(ssh_cmd)} {dest}")
+        async with Client(StdioServerParameters(command=ssh_cmd[0], args=ssh_cmd[1:] + [dest], env=env)) as c:
+            await flow(c, pw, expect)
+            await ssh_checks(c, ssh_cmd, dest, pw, expect)
     else:
         params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"], env=env)
         async with Client(params) as c:
@@ -492,4 +543,4 @@ async def main(keep: bool, http: bool) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main("--keep" in sys.argv, "--http" in sys.argv))
+    asyncio.run(main("--keep" in sys.argv, "--http" in sys.argv, "--ssh" in sys.argv))

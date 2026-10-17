@@ -42,10 +42,11 @@ check -> fix and repeat -> export. Read the resource b123d-print://guide (or the
 design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
-before reporting. render_preview and section return PNG images. When this server is remote (HTTP),
-the files it writes stay on it: download them from the links that export returns (plain HTTPS GET,
-no token, they expire; e.g. curl -fO <url>) or read the b123d-print://files/ resources. Never try
-to SSH into the server for them."""
+before reporting. render_preview and section return PNG images. When this server is remote, the
+files it writes stay on it. Over HTTP: download them from the links that export returns (plain
+HTTPS GET, no token, they expire; e.g. curl -fO <url>) or read the b123d-print://files/ resources.
+Over SSH: export gives the exact `b123d-print pull ...` command that copies them to the client.
+Never try to open a shell on the server for them."""
 
 WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _WORKSPACE: contextvars.ContextVar[str | None] = contextvars.ContextVar("b123d_print_workspace", default=None)
@@ -68,7 +69,8 @@ async def _request_workspace(ctx, call_next):
 
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
 STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None,
-               "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": []}
+               "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
+               "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
 EMBED_MAX = 2_000_000  # bytes: export(embed=True) inlines files up to this size ...
 EMBED_TOTAL = 8_000_000  # ... and this much in all
 
@@ -170,17 +172,21 @@ def _base_url() -> str:
     return f"{req.url.scheme}://{h.get('host') or req.url.netloc}"
 
 
-def _file_info(path: Path) -> dict | None:
-    """HTTP: how a client gets a file the server wrote (None if it is not one the server serves)."""
+def _file_info(path: Path, link: bool = True) -> dict | None:
+    """How a client gets a file the server wrote (None if it is not one the server serves): its
+    resource URI and, over HTTP with link=True, a signed download link."""
     root = _root()
     try:
         rel = path.resolve().relative_to(root.resolve()).as_posix()
         links.servable(root, load_settings(root).parts_dir, rel)
     except (ValueError, links.LinkError):
         return None
-    url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"])
-    return {"path": rel, "url": _base_url() + url, "expires": expires, "size": path.stat().st_size,
-            "mime": links.content_type(rel), "uri": f"b123d-print://files/{_ws_name()}/{rel}"}
+    info = {"path": rel, "size": path.stat().st_size, "mime": links.content_type(rel),
+            "uri": f"b123d-print://files/{_ws_name()}/{rel}"}
+    if link and _http():
+        url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"])
+        info.update(url=_base_url() + url, expires=expires)
+    return info
 
 
 def _expiry_note(expires: int) -> str:
@@ -281,14 +287,14 @@ def _printer_summary(s) -> dict:
 @mcp.tool()
 def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     """Optional printer profile (default is generic mode). search: find printer names
-    ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config, or over HTTP in
-    this workspace's b123d-print.toml; "generic" clears it). material: pla, petg, asa, abs, tpu or
+    ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config, or over HTTP and
+    SSH in this workspace's b123d-print.toml; "generic" clears it). material: pla, petg, asa, abs, tpu or
     the user's own. Only change the printer when the user asks for it."""
     from .config import set_user_setting as _set
     from .profiles import load_material, load_printer, search as find
 
     path = None
-    if STATE["transport"] == "http":  # shared server: never change other clients' printer
+    if STATE["transport"] == "http" or STATE["ssh_dest"]:  # shared server: never change other clients' printer
         init_workspace(_root())
         path = _root() / WORKSPACE_FILE
 
@@ -423,7 +429,8 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
     user's `formats` setting (default: all four). Ask the user which they want if unclear.
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
-    and a b123d-print://files/ resource link; embed=True also puts files up to 2 MB into the
+    and a b123d-print://files/ resource link; over SSH the result gives the `b123d-print pull`
+    command that copies the files to the client. embed=True also puts files up to 2 MB into the
     result itself, for clients that can neither fetch URLs nor read resources."""
     if formats:
         try:
@@ -445,19 +452,36 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         for pname, r in v["parts"].items():
             out.append(f"  {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, valid={r['valid']}")
         for f in v["files"]:
-            info = _file_info(Path(f)) if _http() else None
+            info = _file_info(Path(f)) if (_http() or embed) else None
             if not info:
                 out.append(f"  {Path(f).relative_to(_root())}")
                 continue
-            out.append(f"  {info['path']}  {info['url']}")
-            extra.append(_resource_link(info))
-            expires = info["expires"]
+            if "url" in info:
+                out.append(f"  {info['path']}  {info['url']}")
+                extra.append(_resource_link(info))
+                expires = info["expires"]
+            else:
+                out.append(f"  {info['path']}")
             if embed and info["size"] <= min(EMBED_MAX, budget):
                 extra.append(_embedded(Path(f), info))
                 budget -= info["size"]
     if expires:
         out.append("\n" + _expiry_note(expires))
+    if STATE["ssh_dest"]:
+        out.append("\n" + _pull_note(name, formats, len(files)))
     return ["\n".join(out), *extra]
+
+
+def _pull_note(name: str, formats: str | None, n: int) -> str:
+    """SSH: the files are on the server; this is the command that copies them to the client."""
+    import shlex
+
+    cmd = f"b123d-print pull {name}"
+    if formats:
+        cmd += f" --formats {shlex.quote(formats)}"
+    return (f"These {n} file(s) are on the SSH server ({STATE['ssh_dest']}). To copy them to the client machine, "
+            f"run there (it uses the same SSH key as this MCP connection; add -o DIR to choose the folder):\n"
+            f"  {cmd} --from {STATE['ssh_dest']}")
 
 
 def _workspace_file(rel: str) -> Path:
@@ -717,7 +741,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
                     help="seconds per build (default 120)")
     ap.add_argument("--max-builds", type=int, default=int(env("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2),
-                    help="build processes at once, across all clients; more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
+                    help="build processes at once, across all clients and all server processes of this user (one per SSH session); "
+                         "more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
     ap.add_argument("--transport", choices=("stdio", "http"), default=env("B123D_PRINT_TRANSPORT", "stdio"),
                     help="stdio (default) or http: Streamable HTTP at /mcp ($B123D_PRINT_TRANSPORT)")
     ap.add_argument("--host", default=env("B123D_PRINT_HOST", "127.0.0.1"),
@@ -738,9 +763,11 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     env = os.environ.get
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
+    # also the limit across server processes (one per SSH session); set before any early exit
+    sandbox.MAX_BUILDS = max(1, args.max_builds)
     if args.healthcheck:
         sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
