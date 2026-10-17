@@ -12,7 +12,7 @@
 #     -e B123D_PRINT_TRANSPORT=http -e B123D_PRINT_TOKEN="$(cat token)" b123d-print-mcp
 #
 # Select HTTP with the environment (not only with arguments) so the HEALTHCHECK knows to probe /health.
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /usr/local/bin/
 
