@@ -7,8 +7,9 @@ Use it when the parts should live on one machine, such as a home server, while t
 elsewhere.
 
 !!! note
-    HTTP mode is newer than the 0.1.0 release. Until the next release, install from the git URL
-    (see [Which version](mcp-clients.md#which-version)) or build the Docker image from a clone.
+    HTTP mode is newer than the 0.1.0 release, so the `latest` image and `b123d-print` from PyPI
+    don't have it yet. Until the next release, install from the git URL (see
+    [Which version](mcp-clients.md#which-version)) or build the Docker image from a clone.
 
 ## Start it
 
@@ -39,8 +40,30 @@ b123d-print-mcp --transport http --workspace ~/parts --host 0.0.0.0 --port 8000
   check against DNS rebinding.
 
 Every option also has an environment variable (`B123D_PRINT_TRANSPORT`, `B123D_PRINT_HOST`,
-`B123D_PRINT_PORT`, `B123D_PRINT_MAX_BUILDS`, `B123D_PRINT_ALLOWED_HOSTS`); see
+`B123D_PRINT_PORT`, `B123D_PRINT_MAX_BUILDS`, `B123D_PRINT_ALLOWED_HOSTS`,
+`B123D_PRINT_SHUTDOWN_GRACE`); see
 [Server options](mcp-clients.md#server-options) and [Settings](../using/settings.md#environment-variables).
+
+### If it does not start
+
+The server checks its setup before it listens and stops with a one-line message and a non-zero
+exit code when something is wrong:
+
+| Message | Fix |
+| --- | --- |
+| `HTTP needs a token: set B123D_PRINT_TOKEN ...` | set `B123D_PRINT_TOKEN` or `B123D_PRINT_TOKEN_FILE` |
+| `B123D_PRINT_TOKEN is too short` | use at least 16 characters; the `secrets` command above makes a good one |
+| `cannot read B123D_PRINT_TOKEN_FILE` | check the path and that the server's user can read the file |
+| `workspace ... is not writable` | fix the folder's owner; in Docker the image runs as uid 1000 |
+| `address already in use` (from uvicorn) | another process has the port; pick another `--port` |
+
+### Stopping
+
+On SIGTERM (`docker stop`, `systemctl stop`) or Ctrl-C the server stops accepting requests and
+gives calls that are running `--shutdown-grace` seconds (default 30) to finish. Builds still
+running after that are killed, and the server exits with code 0. Give the service manager a
+longer stop timeout than that: `stop_grace_period` in Compose, `docker stop -t`,
+`TimeoutStopSec` in systemd.
 
 ## Several clients at once
 
@@ -96,6 +119,30 @@ async with Client(streamable_http_client("http://HOST:8000/mcp?workspace=run1", 
 ```
 
 ## In Docker
+
+### Compose
+
+The repository has a ready-to-copy Compose file,
+[`deploy/compose.yaml`](https://github.com/KD5RYN/b123d-print/blob/main/deploy/compose.yaml): the
+image from GHCR, the token in an env file, the port on localhost only, a stop grace period
+longer than `--shutdown-grace`, and an optional Caddy service for TLS in front. Next to it:
+
+```bash
+mkdir -p parts && sudo chown 1000:1000 parts
+```
+
+```bash
+python3 -c 'import secrets; print("B123D_PRINT_TOKEN=" + secrets.token_urlsafe(32))' > b123d-print.env && chmod 600 b123d-print.env
+```
+
+```bash
+docker compose up -d && docker compose ps
+```
+
+`docker compose ps` shows the service as `(healthy)` once `/health` answers. The `parts` folder
+must be writable by uid 1000, the user the image runs as.
+
+### `docker run`
 
 The same image serves HTTP when the environment selects it (so the image's health check knows
 to probe `/health`):

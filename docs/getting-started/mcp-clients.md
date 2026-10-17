@@ -32,6 +32,7 @@ In place of `b123d-print` in any config on this page:
 | `--host <address>` | `$B123D_PRINT_HOST`, else `127.0.0.1` | HTTP: address to bind |
 | `--port <port>` | `$B123D_PRINT_PORT`, else 8000 | HTTP: port |
 | `--allowed-hosts <names>` | `$B123D_PRINT_ALLOWED_HOSTS` | HTTP: comma-separated `Host` header values to accept (DNS-rebinding check, behind a proxy) |
+| `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
 | `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |
 | `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's health check) |
 
