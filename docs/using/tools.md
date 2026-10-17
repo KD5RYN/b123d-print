@@ -14,7 +14,7 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `build_part(name, variant?)` | run it: bounding box, volume, validity, dimensions, errors; writes no files |
 | `render_preview(name, variant?, parts?)` | 6-view PNG; `parts="assembly"` shows the fit |
 | `section(name, plane, at, variant?, parts?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
-| `check(name, variant?)` | validity, overlap, overhang, wall, probe and fit checks ([the checks](checks.md)) |
+| `check(name, variant?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
 | `export(name, variant?, formats?)` | files to `parts/<name>/out/` ([formats](formats.md)) |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)) |
 

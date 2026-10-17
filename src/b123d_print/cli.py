@@ -10,7 +10,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from . import checks as ck
-from .config import FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, user_config_path
+from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -160,11 +160,12 @@ def cmd_printer(args) -> int:
             set_user_setting("material", args.material)
         print(f"{pr.summary()}\nsaved to {path}")
         return 0
-    if args.pcmd == "hole-comp":
+    if args.pcmd in ("hole-comp", "calibrate"):
+        key = "hole_comp" if args.pcmd == "hole-comp" else args.key
         s = load_settings()
         if not s.printer:
-            sys.exit("set a printer first (b123d-print printer use <name>), or put hole_comp in your config")
-        print(f"hole_comp {args.value:g} for {s.printer}/{s.material or 'any'} -> {pf.save_hole_comp(s.printer, s.material, args.value)}")
+            sys.exit(f"set a printer first (b123d-print printer use <name>), or put {key} in your config")
+        print(f"{key} {args.value:g} for {s.printer}/{s.material or 'any'} -> {pf.save_calibration(s.printer, s.material, key, args.value)}")
         return 0
     return 1
 
@@ -208,6 +209,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("name")
     q.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
     q = psub.add_parser("hole-comp", help="store a measured hole compensation for the active printer + material")
+    q.add_argument("value", type=float)
+    q = psub.add_parser("calibrate", help="store a value measured with a calibration coupon for the active printer + material")
+    q.add_argument("key", choices=CALIBRATED)
     q.add_argument("value", type=float)
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")

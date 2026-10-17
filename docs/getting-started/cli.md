@@ -43,6 +43,7 @@ b123d-print check
 | `printer show [name]` | show a printer (default: the active one) |
 | `printer use <name> [--material m]` | set the active printer (and material); `generic` clears it |
 | `printer hole-comp <value>` | store a measured hole compensation for the active printer + material |
+| `printer calibrate <key> <value>` | store a value measured with a calibration coupon (`hole_comp`, `hole_comp_h`, `clearance`, `press_fit`, `free_fit`, `pip_clearance`, `max_overhang`, `max_bridge`) for the active printer + material |
 | `config` | the settings in effect, and which config files were found |
 | `list` | parts in the workspace |
 | `examples` | the bundled example parts |

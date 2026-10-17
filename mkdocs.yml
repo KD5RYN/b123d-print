@@ -63,6 +63,7 @@ nav:
       - Checks API: scripts/checks-api.md
       - Examples: scripts/examples.md
       - Workflow rules (AGENTS.md): scripts/rules.md
+      - Design rules (sourced): BEST_PRACTICES.md
   - Reference: reference.md
   - Updating: updating.md
   - Troubleshooting: troubleshooting.md

@@ -13,8 +13,9 @@ and exports the formats you pick: STEP, STL, 3MF, PNG.
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
 
 **Scope: parts for FDM 3D printing, nothing else.** Everything is built around a printed part:
-print orientation with the bed at Z=0, hole compensation, mating clearance, and overhang,
-wall-thickness and overlap checks. It is not a general CAD framework.
+print orientation with the bed at Z=0, hole compensation, mating clearance, calibration coupons,
+and print checks built on [sourced FDM design rules](BEST_PRACTICES.md). It is not a general CAD
+framework.
 
 ## What's in it
 

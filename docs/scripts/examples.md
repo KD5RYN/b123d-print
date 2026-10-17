@@ -55,6 +55,31 @@ fillet, one cut.
 
 ![Hole calibration coupon](../images/hole_coupon.png)
 
-The calibration coupon for [hole compensation](../using/hole-compensation.md): holes cut at
-their nominal size, labeled.
+The calibration coupon for [hole compensation](../using/hole-compensation.md): vertical holes in
+the plate and horizontal ones in the tab (round, and teardrop), cut at their nominal size and
+labeled. Measures `hole_comp` and `hole_comp_h`.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/hole_coupon/hole_coupon.py)
+
+## `fit_coupon`
+
+![Fit coupon, holes plate](../images/fit_coupon_holes.png)
+
+Measures the fits, per side, for your printer and material: a 6 mm peg (part `peg`) tried in
+holes 0 to 0.40 mm bigger per side (part `holes`; the label is hundredths of a mm), and discs
+printed inside rings with gaps of 0.10 to 0.40 mm (part `pip`). The results go into
+`press_fit`, `clearance`, `free_fit` and `pip_clearance` ([Settings](../using/settings.md#keys)).
+Its `checks(d)` shows a declared `Gap` (the discs are closer than `pip_clearance` on purpose)
+and `ThinFeature` ignoring the engraved labels.
+
+![Fit coupon, print-in-place discs](../images/fit_coupon_pip.png)
+
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/fit_coupon/fit_coupon.py)
+
+## `overhang_bridge_coupon`
+
+![Overhang and bridge coupon](../images/overhang_bridge_coupon.png)
+
+Measures your printer's limits: ledges whose undersides are 40° to 75° from vertical, and
+bridges of 5 to 40 mm between pillars. The steepest clean ledge is your `max_overhang`, the
+longest clean bridge your `max_bridge`. The overhang and bridge checks warn on it on purpose.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/overhang_bridge_coupon/overhang_bridge_coupon.py)

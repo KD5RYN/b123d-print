@@ -1,10 +1,15 @@
-# FDM design best practices: sourced rules and proposal
+# FDM design rules (sourced)
 
-**Status: proposal for review (phase 1).** Nothing here is implemented yet. It collects
-design-for-FDM rules from makers' design guides, slicer documentation and published tests,
-keeps the rules that independent sources agree on, and proposes for each one whether
-b123d-print should **check** it, **tell the agent** about it, or **measure** it with a calibration
-print. The prioritized plan and the open questions are at the end.
+These are the design-for-FDM rules behind b123d-print's checks and its
+[workflow rules](scripts/rules.md). They were collected from makers' design guides, slicer
+documentation and published tests, and kept only where independent sources agree. For each
+rule the tables say whether b123d-print **checks** it, **tells the agent** about it, or
+**measures** it with a calibration print.
+
+**Status:** the checks and coupons of plans P1 and P2 are implemented
+([§17](#17-implementation-plan-and-status)); P3 is not yet. The code and AGENTS.md cite the
+rule IDs (`BP-H3` in code, `[H3]` in AGENTS.md), and `tests/test_rules.py` keeps them in step
+with this page.
 
 Every source was fetched on 2026-10-17. Claims come from the fetched page, PDF or source file,
 never from memory. Pages that could not be reached are listed under [Sources](#sources).
@@ -58,7 +63,7 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | W4 | Strength comes from walls/perimeters, not infill. Add walls before infill. | — | PRUSA-INFILL: strength is set "mostly" by perimeters; 10–15% infill usual. CNCK-BEG, CNCK-NOZ, CNCK-EW: tests where wall thickness drives strength (2 → 4 perimeters: 20 → 33 kg). HUBS-SHELL: more shell rather than more infill. | — | **b** | AGENTS.md: a loaded feature's strength ≈ its wall thickness. Size walls and ribs for strength instead of relying on infill. Say in the report which features need extra perimeters. |
 | W5 | Minimum vertical pin diameter. Pins under ~5 mm are perimeter-only and weakly attached: fillet the base, or use a metal pin. | min 1–3 mm (1 "possible", 2–3 "reliable"). Perimeter-only below 5 mm | HUBS-FDM: <5 mm perimeter only, fillet the base, metal pin if critical. UZH 3. FORMLABS-FDM 3 (from Hubs). HLH 1 reliable. XOM-PRO 1.2 capability / 1.5 recommended. JLC 2 mm at H ≤ 2D. SSD ≈2 mm (0.08 in). | P | **a** | **Pins** (new, automatic): convex cylinders with vertical axis. **Warn** at d < 2 mm. Info at d < 5 mm suggests a base fillet. |
 | W6 | Free-standing pin/post height ≤ 5 × diameter. | H/D ≤ 5 | MF: avoid posts with H > 5D (they shear on layer lines). XOM-WEB: about 5×, 1.5 mm minimum. JLC: offers pins only up to H ≈ 2D. FR: high aspect ratios warp. | — | **a** | Pins: **warn** at H/D > 5. |
-| W7 | Minimum gap between features (slot, gap between walls). | 0.5 (bureaus); 0.2–0.3 (desktop) | XOM-PRO 0.5 capability / 1 recommended. HLH 0.5. UZH 0.5. MAT 0.4. PRUSA-MODEL accuracy 0.2. OAK 0.15–0.3 radial. | P | **c** | Measured by the fit coupon (K2). An automatic "narrow slot" check is possible later (§13, idea list). |
+| W7 | Minimum gap between features (slot, gap between walls). | 0.5 (bureaus); 0.2–0.3 (desktop) | XOM-PRO 0.5 capability / 1 recommended. HLH 0.5. UZH 0.5. MAT 0.4. PRUSA-MODEL accuracy 0.2. OAK 0.15–0.3 radial. | P | **c** | Measured by the fit coupon (K2). An automatic "narrow slot" check is possible later. |
 
 ## 2. Holes
 
@@ -78,7 +83,7 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | O1 | Unsupported overhangs: design to 45°. 45–60° usually prints. Up to ~75° with strong (360°) cooling. Below 45° with a 0.25 mm nozzle. | 45° design; 45–75° by printer | HUBS-FDM 45°. XOM-PRO 45°. WEVOLVER-OH 45°. PRUSA-MODEL 45–60°, 75° on Nextruder/360° cooling, <45° at 0.25 nozzle. ORCA-WIKI 45–60°. CURA-DEF support default 50°. FAB22 test: 60° limit. | P | **a** + **c** | Exists (Overhang, `max_overhang` in the profile). Add the overhang ladder to the bridge coupon (K3), so `max_overhang` becomes a measured number per printer. |
 | O2 | Downward edges and edges on the bed: chamfer, not fillet. A fillet's lowest part is a near-flat overhang. | 45° chamfer | PRUSA-MODEL, UM, BIGREP, MF: chamfer on the bed, fillets on vertical edges. BAMBU-FORUM-WARP: fillet only above 45°. *Disagree:* HUBS-FDM allows "chamfer or radius"; FACFOX says fillet. | — | **a** | Exists in AGENTS.md. New **BedEdge** check (automatic): curved faces meeting the bed whose lowest band is steeper than `max_overhang` → **warn** "fillet on a bed edge; use a chamfer". The overhang check today only catches this when `ignore_below` is 0. |
 | O3 | Bridge length: no universal maximum. Design guides cap it for surface quality; tuned printers do far more. | 5–10 mm design limit. ~20–37 mm in tests. 50–80 mm with sag | HUBS-FDM <5 mm. XOM-PRO 10 mm. 3DMAG: UltiMaker 10 mm guideline; one PLA study 33–37 mm. FAB22: 22 mm clean. QIDI-BRIDGE (vendor): <20 clean, 50–80 sag. | P | **a** + **c** | **Bridge span** in the Overhang check: for each flat downward face, span ≈ 2 × the largest inscribed circle radius. **Warn** above `max_bridge` (new printer field, default 10 mm, measured by K3). |
-| O4 | A flat ceiling must be held on two opposite sides. A ceiling off one wall is a cantilever and needs support. | — | HUBS-FDM, PRUSA-MODEL: bridges print between supports; a hanging ceiling needs support. Existing AGENTS.md rule. | — | **a** | Overhang: classify each flat downward face by its supported boundary. An edge is anchored when a face rises from it. Anchored on ≥2 sides → bridge; else **cantilever**. Cantilevers stop being exempt under `bridges_ok` and fail when `fail=True`. Today the code comment asks the agent to check this in a section. |
+| O4 | A flat ceiling must be held on two opposite sides. A ceiling off one wall is a cantilever and needs support. | — | HUBS-FDM, PRUSA-MODEL: bridges print between supports; a hanging ceiling needs support. Existing AGENTS.md rule. | — | **a** | Overhang: classify each flat downward face by its supported boundary. An edge is anchored when there is material just beyond it and just below the ceiling (a wall the bridge rests on). Points held by anchors on two opposite sides → bridge; else **cantilever**. Cantilevers are not exempt under `bridges_ok` and fail when `fail=True`. |
 | O5 | Holes or pockets in a ceiling (counterbore over air, nut trap roof): print a one-layer sacrificial bridge, then drill it out. | ≥1 layer | HACKADAY-SB (tag page; no numbers). Search-level mentions of Orca's counterbore bridging, not verified. **(1 src)** | — | **b** (provisional) | Mention it as a technique in AGENTS.md next to nut traps. Leave it out of checks until a second source or a coupon confirms it. |
 | O6 | Bridge flow, speed and fan; overhang cooling, temperature and layer height. | — | CURA-DEF, ORCA-WIKI, QIDI-BRIDGE, WEVOLVER-OH | P | **d** | Slicer tuning. |
 
@@ -121,12 +126,12 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | N2 | Root fillet ≥ 0.5 × arm thickness. | r ≥ 0.5 t | HUBS-SNAP, FICTIV-SNAP, SOVOL (vendor; min 0.8–1.0 at 0.4 nozzle). BASF/UL: "generous", no number. | — | **b** | AGENTS.md. A `snap_arm()` helper could build the root fillet in. |
 | N3 | Taper the arm (thick at the root, thinner at the tip). | e.g. 100% → 50% | SOVOL, FICTIV-SNAP, FORMLABS-SNAP | — | **b** | AGENTS.md. |
 | N4 | Size the arm with the cantilever strain formula and the material's allowable strain. | PLA 4–8%, ABS 7%, nylon 4–15%. No sourced PETG value | FICTIV-SNAP only, for FDM numbers. BASF/UL: the formula is valid for L/t > 10. **(1 src for the numbers)** | P | **b** (provisional) | AGENTS.md: use the formula and say it is an estimate. No material constants until a second source. A snap-fit coupon is a possible later addition. |
-| N5 | L/t ratios: PLA 8–10, PETG 5–8. | — | SOVOL only | P | **d** | (1 src, vendor blog) |
+| N5 | L/t ratios: PLA 8–10, PETG 5–8. | — | SOVOL only | P | **b** (provisional) | (1 src, vendor blog). AGENTS.md, labeled provisional. |
 | N6 | Snap-fit mating clearance. | 0.1–0.5 | FICTIV-SNAP 0.1–0.3. HUBS-SNAP 0.5. SOVOL 0.2–0.4 per side | P | **c** | K2 covers it. |
 | N7 | Living hinge: 0.4–0.6 mm thick (≥2 layers). | 0.4–0.6 (up to 0.8) | HUBS-HINGE, FACFOX, 3ERP (~0.6). MH: molded 0.25–0.38 fails in FFF. | P | **b** | AGENTS.md. A hinge triggers ThinFeature (below min_wall), so ThinFeature needs a way to mark intentional thin regions (`ignore=` boxes or a `ThinOK(region, label)` declaration). |
 | N8 | Living hinge material: nylon, TPU or PP. Not PLA or ABS. | — | MH, HUBS-HINGE, FACFOX, 3ERP | P | **b** + profile | AGENTS.md. PLA material notes already say "brittle in thin snap fits"; add "no living hinges". |
 | N9 | Hinge orientation: build the hinge width along Z, so strands run across the hinge. | — | HUBS-HINGE, FACFOX, 3ERP | — | **b** | AGENTS.md. |
-| N10 | Anneal hinges in hot water. | — | HUBS-HINGE only | — | **d** | (1 src) |
+| N10 | Anneal hinges in hot water. | — | HUBS-HINGE only | — | **b** (provisional) | (1 src). AGENTS.md, labeled provisional. |
 
 ## 8. Threads, screws, inserts, nuts, bosses
 
@@ -154,7 +159,7 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | # | Rule | Value / range | Evidence | P | Class | Proposed behavior |
 |---|---|---|---|---|---|---|
 | R1 | Fillet internal corners on loaded features. Sharp internal corners concentrate stress, worse across layers. | ≥0.5 mm (only Hubs gives a number) | SSD-2025, SSD-2017, HUBS-THIN (≥0.5), HUBS-ENCL, BIGREP (internal fillets matter more), PRINTEDSOLID, MF, UM | P | **b** | AGENTS.md: fillet internal corners of loaded features (snap roots N2, pin bases W5, brackets) ≥0.5 mm, and larger where there is room. No automatic check: every pocket corner would hit. |
-| R2 | Outer bend radius = inner radius + wall, to keep the wall even. | — | SSD-2017 only | — | **d** | (1 src). A plain geometry habit. |
+| R2 | Outer bend radius = inner radius + wall, to keep the wall even. | — | SSD-2017 only | — | **b** (provisional) | (1 src). AGENTS.md, labeled provisional. |
 | R3 | Outside vertical corners come out rounded at about nozzle scale. Never design knife edges. | ≈ line width / 2 | HUBS-FDM, XOM-WEB | P | **b** | AGENTS.md. ThinFeature flags knife edges as thin features. |
 | R4 | Ribs and gussets: in FDM, do not thin them below the wall (no sink marks). ≥1.5 mm / ≥3 lines. | ≥1.5 mm | SSD-2025: not necessary to thin. XOM-MINI, XOM-WEB: 1.5 mm. *Disagree:* HUBS-ENCL 75–80%, HUBS-THIN 50–75% of wall (an injection-molding habit; Protolabs molding guide 60%). | P | **b** | AGENTS.md: ribs as thick as the wall. ThinFeature covers the minimum. No source gives rib height or spacing for FDM. |
 | R5 | Use ribs to stiffen large flat walls and to fight warp. | — | FR, SSD, HUBS-KEY | — | **b** | With B4. |
@@ -179,118 +184,106 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 
 ---
 
-## 13. Proposed checks (specification sketch)
+## 13. Checks
 
-All new automatic checks run for every printable part, like `fit`. They take their limits from
-the printer/material profile or settings, and the part script can turn one off or narrow it
-(`checks()` returns `ThinFeature(part, ignore=[...])` etc.).
+The automatic checks run for every printable part, like `fit`. They take their limits from the
+settings (printer profile, calibration), and a part script changes or narrows one by listing it
+in `checks(d)` (for example `ThinFeature(part, ignore=[box])`). See
+[The checks](using/checks.md) and the [Checks API](scripts/checks-api.md).
 
 | Check | Rules | How it is measured | Result |
 |---|---|---|---|
-| **ThinFeature** (auto) | W1, W2, W3, X2, R3, N7 | XY sections every ~1 mm, plus at each planar face's Z ± 0.1. XZ/YZ sections for floors and roofs. Reuses `wall_thickness()` on the whole section (no `near`). Reports the thinnest spot and its width in lines. `ignore=` boxes for intentional thin regions (hinges). | **fail** < 1 line width; **warn** < `min_wall`; info in lines |
-| **Holes** (auto) | H3, H5 | Concave cylindrical faces (inward normal). Axis vs Z. Diameter and length. Lists every hole in the result data, which helps the agent report too. | **warn** horizontal plain-arc hole d ≥ 2 mm; **warn** d < 1 mm |
-| **Pins** (auto) | W5, W6 | Convex cylindrical faces with vertical axis: d and free height (Z extent of the face). | **warn** d < 2 mm or H/D > 5; info d < 5 mm (fillet the base) |
-| **Overhang**: bridge span + anchoring | O3, O4 | For flat downward faces: span = 2 × the largest inscribed circle radius (distance transform on the face polygon). Anchoring = edges whose adjacent face rises from the edge. | **warn** span > `max_bridge`; cantilever ceiling counts as an overhang (fails with `fail=True`) |
-| **BedEdge** (auto) | O2 | Faces touching Z=0 that are not planar and whose lowest band faces down steeper than `max_overhang`. | **warn** |
-| **Gap** (auto for multi-solid parts; declared for assemblies) | F1, F3 | `BRepExtrema_DistShapeShape` between solids or between assembly parts (optionally within a box). | auto: **fail** < `pip_clearance`. Declared `Gap(a, b, min=, max=)`: fail outside the range |
-| **LoadDir** (declared) | S4, S5, N1 | The script states the stress direction of a feature: `LoadDir("clip", (1, 0, 0), label="snap arm bends in X")`. Angle vs the XY plane in print orientation. | **warn** within 45° of Z |
-| **Warp** (auto, material-gated) | B3, B4 | Bed contact face(s): bounding size and corner radii. Runs only when the material has `warps`. | **info** |
+| **thin** (`ThinFeature`, automatic) | W1, W2, X2, R3 | Sections on XY, XZ and YZ: one between each pair of neighbouring flat faces parallel to the plane (a 0.6 mm label gets its own cut) and every 2 mm in between. `wall_thickness()` on each whole section, only looking for walls under the limit. A spot counts as a wall when it is thin in at least two of the three planes through it; otherwise it is a knife edge (a taper or the tip of a corner). `ignore=` boxes for regions thin on purpose (hinges, labels). | wall **fail** < 1 line width (0.45 generic, else the printer's), **warn** < `min_wall`; knife edges **warn** |
+| **holes** (`Holes`, automatic) | H3, H5 | Concave cylindrical faces grouped by axis and radius, covering ≥ 260° (a full hole or a teardrop; fillets and arches cover less). A non-vertical hole has a "round top" when part of its wall faces down steeper than `max_overhang`. | **warn** round-topped horizontal hole d ≥ 2 mm; **warn** d < 1 mm |
+| **overhang** with bridges (`Overhang`, automatic) | O1, O3, O4 | Flat downward faces: from a grid of points, 24 rays find the face boundary; a point is bridged when two opposite rays end on anchored edges, its span is their sum. An edge is anchored when there is material just beyond and below it, or the next face continues tangentially and curves down. | bridge span > `max_bridge` **warns** (never fails); a cantilever is an overhang (fails with `fail=True`) |
+| **bed edge** (`BedEdge`, automatic) | O2 | Curved faces starting on the bed whose lower part faces down steeper than `max_overhang`. | **warn** |
+| **gap** (`Gap`, automatic for parts of several solids; declared for assemblies) | F1, F3 | `distance_to` (BRepExtrema) between the solids of one part or between two parts, optionally inside a box. | automatic: **fail** < `pip_clearance`; declared `Gap(a, b, min=, max=)`: fail outside the range |
+| **wall** (`Wall`, declared) | T4 | Existing: thinnest wall around one cut. | **fail** < `min` |
 
-Each new check gets unit tests on shapes with known answers, as in `tests/test_checks.py`:
+Each check is tested on shapes with known answers in `tests/test_checks.py`: a 0.3 mm fin, plate
+and pin fail, a 0.6 mm wall warns, a 15° wedge is a knife edge; a round horizontal hole warns
+and its teardrop passes; a 30 mm tunnel roof is a 30 mm bridge, a closed pocket bridges the short
+way and a ledge off one wall is a cantilever; a filleted bed edge warns and a chamfered one
+passes; two solids 0.1 mm apart fail.
 
-- a 0.3 mm fin fails and a 0.9 mm wall warns;
-- a horizontal 5 mm hole warns and its teardrop version passes;
-- a 30 mm slot roof warns and a ceiling on one wall is a cantilever;
-- a filleted bed edge warns and a chamfered one passes;
-- two solids 0.1 mm apart fail;
-- a 1.5 × 10 mm pin warns.
+**Not yet implemented** (plan P3): W5, W6, S4, S5, N1, B4. The guidance for them is in AGENTS.md.
 
-## 14. Proposed calibration coupons
+## 14. Calibration coupons
 
 | Coupon | Measures | Rules | Result stored |
 |---|---|---|---|
-| **K1 hole_coupon v2** (extend the existing one) | Vertical holes (as now). Horizontal round and teardrop holes on an upright tab. M3 insert holes 3.8–4.4. Self-tap pilots M2/M3/M4. | H1, H4, T2, T6 | `hole_comp` (exists), `hole_comp_h`, pilot sizes in `calibration.toml` |
-| **K2 fit_coupon** (new) | Peg-in-hole pairs at 0.05–0.40 mm per side in 0.05 steps (press / slide / free). Print-in-place pins at 0.1–0.4. Each row labeled. | F1–F3, N6, J3, W7 | `press_fit`, `clearance` (slide), `free_fit`, `pip_clearance` |
-| **K3 overhang_bridge_coupon** (new) | An overhang ladder 40–75° in 5° steps. Bridges 5 / 10 / 15 / 20 / 30 / 40 mm. | O1, O3 | Printer `max_overhang` (exists) and `max_bridge` (new) |
+| **`hole_coupon`** | Vertical holes 2–8 mm; on an upright tab, horizontal holes 3–8 mm, round (lower row) and teardrop (upper row). | H1, H4 | `hole_comp`, `hole_comp_h` |
+| **`fit_coupon`** | A 6 mm peg and holes at 0–0.40 mm per side (press / slide / free); discs printed inside rings at 0.10–0.40 mm. | F1, F2, F3, N6, J3, W7 | `press_fit`, `clearance`, `free_fit`, `pip_clearance` |
+| **`overhang_bridge_coupon`** | Ledges at 40–75° from vertical; bridges of 5–40 mm. | O1, O3 | `max_overhang`, `max_bridge` |
 
-All three must pass `b123d-print check` (they are ordinary example parts). Each one documents how
-to measure it and where to write the number, in the style of `hole_coupon`.
+All three pass `b123d-print check` (with the warnings they exist to show). Each one's docstring
+says how to read it and where the number goes: `b123d-print printer calibrate <key> <value>` for
+the active printer + material, or the user config. Insert holes (T2) need no row of their own:
+the maker's size plus `hole_comp`. Pilot holes for self-tapping screws (T6) stay guidance until
+a helper uses a measured value (P3).
 
-## 15. Profile and settings changes
+## 15. Settings
 
-- **Printer:** `max_bridge` (default 10 mm, 5–10 from design guides; K3 measures it).
-- **Calibration** (per printer + material): `hole_comp_h`, `press_fit`, `free_fit`,
-  `pip_clearance` (default 0.3), next to the existing `hole_comp` and `clearance`.
-- **Material:** `warps` (abs, asa, pc, pa = true). Notes gain `glue` and hinge suitability
-  (PLA: no living hinges; PETG: CA/epoxy only).
-- **Definitions:** `clearance` and every fit value are **per side**. AGENTS.md says so.
+- **Printer profile:** `max_bridge` (default 10 mm).
+- **Settings and calibration** (per printer + material, `calibration.toml`): `hole_comp`,
+  `hole_comp_h` (defaults to `hole_comp`), `press_fit` (0.05), `clearance` (0.2, sliding),
+  `free_fit` (0.3), `pip_clearance` (0.3), `max_overhang`, `max_bridge`.
+- **Definitions:** `clearance` and every fit value are **per side**.
+- Not yet (P3): a material `warps` field and glue/hinge notes.
 
 ## 16. Keeping the knowledge right
 
-To answer "how do we know the built-in rules are right" without trusting an LLM's memory:
+1. **This page is the source of truth.** Every rule has an ID (W1, H3, …) and the sources
+   behind it.
+2. **Code and guidance cite IDs**: `BP-H3` in code, `[H3]` in AGENTS.md. `tests/test_rules.py`
+   fails when:
+   - code or AGENTS.md cites an ID that is not here, or one classed **d**;
+   - a class-**a** rule has no check citing it and is not on the "not yet implemented" list;
+   - a class-**b** rule is missing from AGENTS.md;
+   - a class-**c** rule is cited neither in AGENTS.md nor by a coupon.
+3. **Checks are tested on known geometry** (§13).
+4. **Printer-dependent numbers are measured, not assumed.** The coupons turn them into the
+   user's own calibration; the defaults sit at the conservative end of the sourced range.
+5. **The eval harness** can score agents' parts against these checks, which tests whether the
+   guidance changes what agents draw.
+6. **Re-verify now and then**: re-fetch the URLs, and have a person re-read a claim when its
+   page changes.
 
-1. **This file is the source of truth.** Every rule has an ID (W1, H3, …) and the sources behind it.
-2. **Code and guidance cite IDs.** Each check's docstring and each AGENTS.md rule carries its ID
-   (e.g. `# BP-H3`). A unit test parses this file and fails if code or AGENTS.md cites an ID that
-   does not exist here, or if a class-a rule has no check.
-3. **Check tests use known geometry.** Every check is tested on shapes whose answer is known by
-   construction (§13).
-4. **Printer-dependent numbers are measured, not assumed.** Coupons K1–K3 turn them into the
-   user's own calibration, and the default stays at the conservative end of the sourced range.
-5. **The eval harness** (the other session) can score agents' parts against these checks, which
-   tests whether the guidance actually changes what agents draw.
-6. **Re-verify on a schedule.** A `tools/check_sources.py` that re-fetches each URL and flags dead
-   links. The claims themselves are re-read by a person when a link changes.
+## 17. Implementation plan and status
 
-## 17. Prioritized implementation plan
+**P1 (done).** `ThinFeature` (W1, W2, X2, R3), `Holes` (H3, H5), bridge span and cantilever
+ceilings in `Overhang` (O3, O4) with `max_bridge`, `BedEdge` (O2), AGENTS.md rules with IDs, and
+the rule-ID test.
 
-**P1. Highest value, uses code that already exists**
+**P2 (done).** `Gap` (F1, F3), `fit_coupon`, `overhang_bridge_coupon`, `hole_coupon` v2, and the
+calibration keys (`hole_comp_h`, `press_fit`, `free_fit`, `pip_clearance`, `max_overhang`,
+`max_bridge`) with `b123d-print printer calibrate`.
 
-1. **ThinFeature** (W1, W2, X2): catches the most common unprintable geometry automatically.
-   Includes the `ignore=` mechanism for hinges.
-2. **Holes** (H3, H5) with the `teardrop_hole()` helper.
-3. **Overhang: bridge span and cantilever ceilings** (O3, O4), plus the `max_bridge` printer
-   field. Closes the gap the code comment admits ("look at a section before trusting it").
-4. **BedEdge** (O2).
-5. **AGENTS.md update** (class-b rules in compact form, with IDs), mirrored to the repo-root
-   AGENTS.md. Add the rule-ID consistency test.
+**P3 (not yet).**
+- Helpers: `teardrop_hole()`, `insert_hole()` (CNC Kitchen table + HOLE_COMP + matching Wall
+  check), `nut_trap()`, `pilot_hole()`, `snap_arm()`.
+- Checks: **Pins** (W5, W6), **LoadDir** (S4, S5, N1), **Warp** hint (B4).
+- Material `warps` / glue notes.
 
-**P2. Calibration and fits**
+**Dropped:** the class-d rows: slicer tuning, shrinkage percentages, rib ratios borrowed from
+injection molding.
 
-6. **Gap** check: automatic for print-in-place, declared for assemblies.
-7. **K2 fit_coupon** and the new calibration keys.
-8. **K3 overhang_bridge_coupon**.
-9. **K1 hole_coupon v2** (horizontal holes, insert and pilot rows).
+## 18. Decisions (review of 2026-10-17)
 
-**P3. Helpers and hints**
-
-10. Helpers: `insert_hole()` (CNC Kitchen table + HOLE_COMP + matching Wall check),
-    `nut_trap()`, `pilot_hole()`, `snap_arm()`.
-11. **Pins** check, **LoadDir** check, **Warp** hint, and the material `warps` / glue notes.
-
-**Drop:** every class-d row: slicer tuning, single-source numbers, shrinkage percentages, rib
-ratios borrowed from injection molding.
-
-## 18. Open questions for review
-
-1. **ThinFeature severity:** fail below 1 line width, as proposed? Or warn only, since Arachne
-   slicers widen thin features instead of dropping them?
-2. **Bridge threshold:** warn above 10 mm (Xometry/UltiMaker), or the stricter 5 mm (Hubs)
-   until K3 is printed?
-3. **Clearance as per side:** confirm. Raise the default for moving parts to 0.3 (Prusa) via
-   `free_fit` / `pip_clearance`, keeping 0.2 for sliding?
-4. **Bed-edge rule:** keep "chamfer, not fillet" (Prusa, UltiMaker, Markforged, BigRep) over
-   Hubs' "chamfer or radius". BedEdge as a warning?
-5. **Helpers:** add a `b123d_print.features` module (teardrop, insert hole, nut trap, pilot), or
-   keep everything as guidance? Helpers make the rules hard to get wrong but grow the API.
-6. **Single-source items** (sacrificial bridge, snap strain values, chamfer size): keep them as
-   labeled provisional guidance, or leave them out until a second source or a coupon confirms?
+1. ThinFeature fails below one line width and warns below `min_wall`.
+2. Bridges warn above 10 mm (`max_bridge` default) until the coupon is printed.
+3. Clearances are per side: 0.2 sliding (`clearance`), 0.3 for moving parts (`free_fit`) and
+   parts printed in place (`pip_clearance`).
+4. Bed edges: "chamfer, not fillet"; BedEdge warns.
+5. Helpers: later (P3).
+6. Single-source rules are in AGENTS.md, labeled provisional with their one source; they never
+   become checks or default constants.
 
 ---
 
 ## Sources
 
-The research files with the full claim per source are in the session notes. These are the
+These are the
 URLs, grouped by publisher. *(vendor)* = a seller's blog. *(community)* = forum, course or
 hobby page. *(peer-reviewed)* = journal or conference.
 

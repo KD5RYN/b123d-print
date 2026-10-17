@@ -86,8 +86,10 @@ def list_parts() -> str:
             "parts_dir": s.parts_dir,
             "parts": parts,
             "examples": examples(),
-            "settings": {"hole_comp": s.hole_comp, "clearance": s.clearance, "min_wall": s.min_wall,
-                         "max_overhang": s.max_overhang, "formats": list(s.formats)},
+            "settings": {"hole_comp": s.hole_comp, "hole_comp_h": s.hole_comp_h, "clearance": s.clearance,
+                         "press_fit": s.press_fit, "free_fit": s.free_fit, "pip_clearance": s.pip_clearance,
+                         "min_wall": s.min_wall, "max_overhang": s.max_overhang, "max_bridge": s.max_bridge,
+                         "formats": list(s.formats)},
             "printer": _printer_summary(s),
             "sandbox": sandbox.describe(),
         },
@@ -215,8 +217,10 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
 @mcp.tool()
 async def check(name: str, variant: str | None = None) -> str:
     """Run the print checks: validity, overlap between assembly parts (incl. stand-ins),
-    overhangs > 45 deg from vertical in print orientation (bed face ignored), the script's Wall
-    checks (thinnest material around deep cuts) and Probes. Fix every FAIL; report every WARN."""
+    overhangs > 45 deg from vertical in print orientation (bed face ignored) and bridge spans,
+    thin features (walls under one line width fail), round-topped horizontal holes, fillets on
+    bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
+    around deep cuts) and Probes. Fix every FAIL; report every WARN."""
     res = await _job(name, "check", variant=variant)
     if not res.get("ok"):
         return _error_text(res)
@@ -286,7 +290,8 @@ Work in these steps:
    anything missing or ambiguous. Then STOP and wait for my confirmation. Do not model yet.
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a source comment). Mating features get CLEARANCE (0.2 mm
-   default, from config). Holes get HOLE_COMP (from config). Model in print orientation, bed at Z=0.
+   default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
+   HOLE_COMP_H). Model in print orientation, bed at Z=0.
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.
@@ -333,14 +338,20 @@ def calibrate_hole_comp() -> str:
     """Walk through measuring HOLE_COMP with the calibration coupon."""
     return """Help me calibrate hole compensation for my printer.
 1. If the workspace has no 'hole_coupon' part, create it with
-   new_part('hole_coupon', example='hole_coupon') (holes 2-8 mm cut at NOMINAL size, labeled),
-   then export it and tell me where the STL is.
-2. Ask me to print it with my usual material and settings and to measure every hole.
-3. Compute HOLE_COMP = average(nominal - measured) over the sizes I use; point out if the error
-   grows with size. Tell me to set it in ~/.config/b123d-print/config.toml:
+   new_part('hole_coupon', example='hole_coupon') (vertical holes 2-8 mm in the plate, horizontal
+   round and teardrop holes 3-8 mm in the tab, all cut at NOMINAL size, labeled), then export it
+   and tell me where the file is.
+2. Ask me to print it with my usual material and settings and to measure every vertical hole
+   and every teardrop (the upper row of the tab).
+3. Compute HOLE_COMP = average(nominal - measured) over the vertical holes I use, and
+   HOLE_COMP_H the same over the teardrops; point out if the error grows with size. Tell me to
+   store them with `b123d-print printer calibrate hole_comp <value>` (and hole_comp_h) when a
+   printer profile is set, else in ~/.config/b123d-print/config.toml:
        [print]
        hole_comp = <value>
-   (or B123D_PRINT_HOLE_COMP). Do not hard-code it in part scripts."""
+       hole_comp_h = <value>
+   Do not hard-code them in part scripts. The fit_coupon and overhang_bridge_coupon examples
+   measure the fits and the overhang and bridge limits the same way."""
 
 
 def build_parser() -> argparse.ArgumentParser:

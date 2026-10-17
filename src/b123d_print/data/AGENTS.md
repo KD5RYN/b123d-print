@@ -31,22 +31,113 @@ Use the **b123d-print MCP server** tools if your client has them (`new_part`, `w
    simple **stand-ins** for the things they mate with (board, sensor, screw). The overlap check
    uses it: nothing printed may intersect a stand-in.
 6. `views(d)` lists cross-sections saved with each export; `checks(d)` declares wall checks and
-   any overhang rules (see below).
+   changes the automatic checks (see below).
 
 ## Print rules
 
-- **Mating clearance: 0.2 mm** by default, as a named `CLEARANCE` (or more specific) field —
-  unless the user gives another value. In your report say which features got clearance and
-  whether it is per side or total.
+The IDs in brackets ([H3]) point to the sourced rules in
+[BEST_PRACTICES](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/), where each one has its
+sources and range of values. **Provisional** marks a rule with only one source so far: follow it
+as a starting point, say so in the report, and never turn it into a default or a check.
+
+**Fits and clearances** (all per side; say per side or total in every report) [F4]
+
+- Fit values come from the user's settings, measured with the `fit_coupon` example; read them
+  with `s = load_settings(__file__)`: `s.press_fit` (pressed together, ~0.05), `s.clearance`
+  (sliding, the default fit, 0.2), `s.free_fit` (turns or moves freely, 0.3), `s.pip_clearance`
+  (parts printed in place, 0.3). Use a named field (`CLEARANCE`, `FREE_FIT`, ...) and the user's
+  own value if they give one. [F1, F2, F3, N6, J3, W7]
+- Don't design a fit that needs better than ±0.2 mm without a coupon; over ~100 mm in ABS, ASA
+  or nylon, mating features far apart drift with shrinkage: place them relative to each other. [F5]
+
+**Holes**
+
 - **Hole compensation** is per printer and comes from the user's config:
-  `HOLE_COMP: float = hole_comp(__file__)`. Keep hole fields at the target *printed* size and add
-  `HOLE_COMP` when cutting. It defaults to 0; the `hole_coupon` example measures it. Never
-  hard-code a value from somewhere else.
-- **Fillets and chamfers:** break sharp edges (~0.5–1 mm). Edges on the bed get a **chamfer, not
-  a fillet** (a fillet there is an overhang and flares), unless the user says otherwise.
-- **Overhangs:** keep downward faces within 45° of vertical where you can. Flat ceilings must
-  span between two walls (a bridge) or get supports. Say in the report what needs supports.
-- **Walls:** keep at least ~1.2 mm (three perimeters) where strength matters.
+  `HOLE_COMP: float = hole_comp(__file__)`, and for holes lying on their side (axis in XY)
+  `HOLE_COMP_H: float = hole_comp(__file__, horizontal=True)`. Keep hole fields at the target
+  *printed* size and add the compensation when cutting. Both default to 0; the `hole_coupon`
+  example measures them. Never hard-code a value from somewhere else, and don't also turn on the
+  slicer's hole compensation. [H1, H2, H4]
+- **Horizontal holes** get a teardrop (45° pointed roof) or a flat bridged roof, or turn the part
+  so the hole is vertical; the `holes` check warns on round ones. [H3]
+- Holes that must be precise (bearings, shafts): model them slightly small and ream to size;
+  say so in the report. [H6]
+
+**Overhangs, bridges and supports**
+
+- Keep downward faces within the overhang limit (45° from vertical unless the user's
+  `max_overhang` says more). [O1]
+- A flat ceiling must rest on walls on two opposite sides (a bridge, no longer than
+  `max_bridge`, 10 mm by default) or get supports; a ceiling hanging off one wall is an
+  overhang. The overhang check reports both. [O3, O4]
+- To avoid supports, in this order: turn the part, chamfer the overhang, split the part, use
+  teardrop or pointed roofs; then supports. Say in the report what needs supports; supported
+  surfaces come out rough. Gaps that support must be cleared out of: at least 5 mm. [S1, S2]
+- Provisional (one source, Hackaday): a hole in a ceiling (a counterbore or nut trap opening
+  downward) can print over a one-layer "sacrificial bridge" that is drilled out afterwards. [O5]
+
+**Strength and orientation**
+
+- Layers are the weak direction: across them a part has roughly half its strength (much less
+  in ABS/ASA). Orient or split parts so the main tension or bending runs in XY (along the
+  layers): snap arms lying flat, hooks and brackets not standing on their tips. State the load
+  direction and the orientation in the report. [S4, S5, N1]
+- Strength comes from walls (perimeters), not infill: size walls and ribs for the load, keep at
+  least ~1.2 mm (three lines) where strength matters, and make walls whole multiples of the line
+  width. Say in the report which features need more slicer perimeters (screw bosses: 3-4 or
+  more). [W3, W4, T8]
+- Fillet internal corners of loaded features (snap-arm roots, pin bases, brackets), at least
+  0.5 mm and more where there is room. Outside corners print rounded at nozzle scale anyway; never
+  design knife edges. [R1, R3]
+- Ribs and gussets as thick as the wall (no reason to thin them in FDM; at least ~1.5 mm); use
+  them to stiffen large flat walls and against warping. [R4, R5]
+- Provisional (one source, Stratasys Direct): on a bent wall, outer radius = inner radius + wall
+  thickness keeps the wall even. [R2]
+
+**Bed, first layer and warping**
+
+- Edges on the bed get a **chamfer, not a fillet** (a fillet there is an overhang and flares),
+  unless the user says otherwise; the `bed edge` check warns. Break other sharp edges (~0.5–1 mm).
+  Keep the CAD at nominal size: elephant's foot is the slicer's job. [O2, B1]
+- Provisional (one source, a Bambu forum post): ~0.4–0.6 mm is a typical bed-edge chamfer. [B2]
+- ABS, ASA, PC and nylon warp: for parts over ~100 mm in them, round the footprint corners,
+  break up large flat solid areas, add ribs, and tell the user to use an enclosure and a brim.
+  PLA, PETG and TPU rarely warp. [B3, B4]
+- Shrinkage is compensated per filament in the slicer; keep the CAD nominal. [M1]
+
+**Snap fits and living hinges**
+
+- Snap arms: lie flat (bend in XY), root fillet ≥ 0.5 × arm thickness, taper the arm toward
+  the tip. [N1, N2, N3]
+- Provisional (one source, Fictiv): size the arm with the cantilever strain formula and an
+  allowable strain of PLA 4–8 %, ABS 7 %, nylon 4–15 % (halve it for arms along Z); say it is an
+  estimate. [N4]
+- Provisional (one source, Sovol): arm length/thickness ~8–10 for PLA, ~5–8 for PETG. [N5]
+- Living hinges: 0.4–0.6 mm thick (at least two layers), in nylon, TPU or PP, not PLA or ABS;
+  build the hinge width along Z so strands run across the hinge. A hinge is thinner than
+  `min_wall`: list it in `ThinFeature(..., ignore=[box])`. [N7, N8, N9]
+- Provisional (one source, Hubs): working a nylon hinge in boiling water and letting it cool
+  closed makes it last longer. [N10]
+
+**Threads, screws and inserts**
+
+- Model threads only at M5–M6 and up; smaller: heat-set inserts, captive nuts or screws into a
+  pilot hole. Use inserts or nuts for parts opened more than a few times. [T1, T5]
+- Heat-set inserts: the insert maker's hole size (CNC Kitchen M3: 4.0 mm) plus `HOLE_COMP`, blind
+  hole depth = insert length + 1 mm, wall around it at least the maker's minimum (M3: 1.6 mm;
+  add a `Wall` check); install at print temperature + 10–20 °C. [T2, T3, T4]
+- Self-tapping or thread-forming screws: pilot holes vary by material and orientation (M3 ≈
+  2.6–2.9 mm); print a test pair for anything that matters. [T6]
+- Captive hex nut pockets: across-flats + 0.2 mm total. [T7]
+
+**Text, splitting and gluing**
+
+- Text: on top (XY) faces, ≥ 0.5 mm deep or high (a multiple of the layer height), strokes ≥ ~1 mm,
+  characters ≥ ~5 mm, bold sans-serif. [X1, X3]
+- Split a part when it exceeds the build volume, would need a lot of support, or when pieces can
+  each print in their strongest orientation. Join with a dovetail and dowels or alignment pins
+  (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds
+  every common filament; acetone welds ABS/ASA; PETG takes only CA or epoxy. [J1, J2, J4, J5]
 
 ## Output formats
 
@@ -83,7 +174,8 @@ Do all of this every time you change geometry, before telling the user the part 
 2. **Look at the preview render.** Compare it against the user's description and photos.
 3. **Look at cross-sections** through every pocket, rib, boss, hole and mating feature. Sections
    show what the 3D render hides.
-4. **Run the checks** and fix every failure; mention every warning you leave.
+4. **Run the checks** and fix every failure; mention every warning you leave. Every part gets
+   the overhang (with bridges), thin-feature, holes, bed-edge and gap checks automatically.
 5. **Wall check around deep cuts:** wherever a cut goes deeper than the wall it starts in
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.
@@ -94,7 +186,7 @@ Do all of this every time you change geometry, before telling the user the part 
 ## Checks reference
 
 ```python
-from b123d_print import Overhang, Probe, Wall
+from b123d_print import Gap, Overhang, Probe, ThinFeature, Wall
 
 def checks(d):
     return [
@@ -102,9 +194,13 @@ def checks(d):
         # XY -> (x, y), XZ -> (x, z), YZ -> (y, z)); fails below `min` (default: config min_wall)
         Wall("base", "XY", d.FLOOR_T + 1.0, near=(x, y), radius=5, label="standoff pilot"),
         # downward faces > 45 deg are always reported; fail=True for parts that must print
-        # without supports (flat bridges are allowed unless bridges_ok=False)
+        # without supports (bridges between two walls are allowed unless bridges_ok=False)
         Overhang("cover", fail=True),
         # material must exist (or not) in a small box: "roof is closed", "channel is clear"
         Probe("cover", (0, 10, 70), (1, 1, 0.5), expect="solid", label="roof closed"),
+        # automatic, listed only to change it: a living hinge is thin on purpose
+        ThinFeature("lid", ignore=[((0, 20, 0.25), (40, 2, 0.6))]),
+        # gap between two assembly parts (or part names) inside a box: the lid's sliding fit
+        Gap("lid", "base", min=d.CLEARANCE, max=d.CLEARANCE + 0.1, within=((0, 0, 30), (60, 60, 4))),
     ]
 ```
