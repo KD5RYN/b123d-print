@@ -17,8 +17,8 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - name: Regenerate the printer table from OrcaSlicer main
         run: python3 tools/sync_orca_printers.py
       - name: Profile tests
@@ -28,7 +28,7 @@ jobs:
           if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
           python3 -c "import json; d=json.load(open('src/b123d_print/data/printers_orca.json')); print('commit=' + d['commit'][:12]); print('count=%d' % len(d['printers']))" >> "$GITHUB_OUTPUT"
       - if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: automation/orca-printers
           delete-branch: true
