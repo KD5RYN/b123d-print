@@ -78,8 +78,8 @@ workspace's `b123d-print.toml`, so one client never changes another's printer. (
 writes your user config, as before.)
 
 **Builds take turns.** `--max-builds N` (default: half the CPU cores) caps how many build,
-render, section, check and export processes run at once across all clients; further calls wait.
-Each build keeps its own `--timeout` (default 120 s) once it starts. A long queue can outlast a
+render, section, check, export and compare processes run at once across all clients; further
+calls wait. Each one keeps its own `--timeout` (default 120 s) once it starts. A long queue can outlast a
 client's read timeout (300 s by default in the MCP Python SDK), so size N and the number of
 clients together. `list_parts` reports the limit.
 

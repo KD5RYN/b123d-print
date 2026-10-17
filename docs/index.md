@@ -24,7 +24,10 @@ wall-thickness and overlap checks. It is not a general CAD framework.
 - **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from
   Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part
   scripts are model-written code: they run in a [sandbox](using/sandbox.md) with a timeout and
-  no network.
+  no network. Runs per client over stdio, or as one shared
+  [HTTP service](getting-started/http.md) with a token and a workspace per client.
+- **[`compare`](using/compare.md)** — measure a part against a reference STL, 3MF or STEP: size,
+  volume and surface differences, a 0–100 score, pass/fail, and a deviation view.
 - **The workflow, model-neutral** — [MCP prompts](using/tools.md#prompts) plus an
   [`AGENTS.md`](scripts/rules.md) any agent can read. The rules come from real prints; one exists
   because a part broke through a 0.05 mm skin that no render showed.
