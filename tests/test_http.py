@@ -5,7 +5,8 @@ import os
 import subprocess
 import sys
 
-from b123d_print.mcp_server import RequireToken
+from b123d_print import tokens
+from b123d_print.mcp_server import TokenAuth
 
 
 def run_server(*args, **env):
@@ -24,7 +25,16 @@ def test_http_refuses_a_short_token():
     assert r.returncode != 0 and "too short" in r.stderr
 
 
-def call(app, path, headers=()):
+SEEN = {}
+
+
+async def inner(scope, receive, send):
+    SEEN.clear()
+    SEEN.update(scope.get("state", {}))
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+
+
+def call(app, path, headers=(), query=b""):
     sent = []
 
     async def go():
@@ -34,23 +44,42 @@ def call(app, path, headers=()):
         async def send(msg):
             sent.append(msg)
 
-        await app({"type": "http", "path": path, "headers": list(headers)}, receive, send)
+        await app({"type": "http", "method": "POST", "path": path, "query_string": query, "headers": list(headers),
+                   "client": ("127.0.0.1", 1)}, receive, send)
 
     asyncio.run(go())
     return sent[0].get("status") if sent else None
 
 
-def test_token_wrapper():
-    async def inner(scope, receive, send):
-        await send({"type": "http.response.start", "status": 200, "headers": []})
+def bearer(t):
+    return [(b"authorization", b"Bearer " + t.encode())]
 
-    app = RequireToken(inner, "s3cret-token-0123456789")
+
+def test_token_wrapper():
+    app = TokenAuth(inner, tokens.Store(None, "s3cret-token-0123456789"))
     assert call(app, "/mcp") == 401
     assert call(app, "/mcp", [(b"authorization", b"Bearer wrong")]) == 401
     assert call(app, "/mcp", [(b"authorization", b"Basic s3cret-token-0123456789")]) == 401
-    assert call(app, "/mcp", [(b"authorization", b"Bearer s3cret-token-0123456789")]) == 200
+    assert call(app, "/mcp", bearer("s3cret-token-0123456789")) == 200 and SEEN["b123d_token"] == "default"
     assert call(app, "/mcp", [(b"authorization", b"bearer s3cret-token-0123456789")]) == 200
     assert call(app, "/health") == 200
+
+
+def test_named_tokens_and_workspaces(tmp_path, capsys):
+    p = tmp_path / "tokens.toml"
+    grok, mac = tokens.generate(), tokens.generate()
+    tokens.write(p, {"grok": tokens.Token("grok", tokens.digest(grok), ["grok-*"]),
+                     "mac": tokens.Token("mac", tokens.digest(mac), ["mac-jon"])}, "s")
+    app = TokenAuth(inner, tokens.Store(p))
+    assert call(app, "/mcp", bearer(grok), b"workspace=grok-1") == 200 and SEEN["b123d_token"] == "grok"
+    assert call(app, "/mcp", bearer(grok), b"workspace=penguin-jon") == 403
+    assert call(app, "/mcp", bearer(grok) + [(b"x-b123d-workspace", b"penguin-jon")]) == 403
+    assert call(app, "/mcp", bearer(grok)) == 403  # a pattern: no default, and no root workspace
+    assert call(app, "/mcp", bearer(mac)) == 200 and SEEN["b123d_workspace"] == "mac-jon"  # its one workspace
+    assert call(app, "/mcp", bearer(mac), b"workspace=grok-1") == 403
+    err = capsys.readouterr().err
+    assert "grok POST /mcp ws=grok-1 -> 200" in err and "grok POST /mcp ws=penguin-jon -> 403" in err
+    assert grok not in err and mac not in err
 
 
 class FakeRequest:

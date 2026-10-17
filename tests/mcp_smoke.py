@@ -1,7 +1,8 @@
 """End-to-end smoke test of b123d-print-mcp, as an MCP client would use it.
 
     uv run python tests/mcp_smoke.py [--keep]          # stdio: starts the server itself
-    uv run python tests/mcp_smoke.py --http [--keep]   # starts it with --transport http and a token
+    uv run python tests/mcp_smoke.py --http [--keep]   # starts it with --transport http, a token and named tokens
+    uv run python tests/mcp_smoke.py --split [--keep]  # the same with builds in a separate `worker` process
     B123D_PRINT_SMOKE_URL=https://host/mcp B123D_PRINT_SMOKE_TOKEN=... uv run python tests/mcp_smoke.py
                                                        # a running server (e.g. the Docker image)
 
@@ -199,7 +200,11 @@ def assembly(d):
 
 def summary(res) -> dict:
     """The JSON at the start of a render_preview result (a download line may follow over HTTP)."""
-    return json.JSONDecoder().raw_decode(text(res))[0]
+    try:
+        return json.JSONDecoder().raw_decode(text(res))[0]
+    except ValueError:
+        print(f"     not a render_preview summary: {text(res)[:600]}")
+        return {}
 
 
 def png_width(img) -> int:
@@ -314,8 +319,14 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
         for what, u in bad.items():
             r = await h.get(u)
             expect(r.status_code == 404, f"refused: {what} ({r.status_code})")
-        if not os.environ.get("B123D_PRINT_LINK_SECRET"):  # links are keyed from the token: forge an expired one
-            secret = links.derive_secret(token)
+        # forge an expired link with the server's key: B123D_PRINT_LINK_SECRET, else the tokens file's
+        # link_secret (when that file is visible from here), else derived from the token
+        from b123d_print import tokens as tk
+
+        tf = Path(os.environ.get("B123D_PRINT_TOKENS_FILE", "/nonexistent"))
+        file_secret = tk.read(tf)[1] if tf.is_file() else None
+        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or not os.environ.get("B123D_PRINT_TOKENS_FILE"):
+            secret = links.derive_secret(token, os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret)
             old, _ = links.sign(secret, ws_, path, -60)
             r = await h.get(head + old)
             expect(r.status_code == 410 and "expired" in r.text, f"an expired link is refused with 410 ({r.status_code})")
@@ -430,12 +441,67 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
     expect(not beating(beat), "no build process left behind")
 
 
-async def main(keep: bool, http: bool) -> None:
+def mcp_cli(cmd, env, *args) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd + list(args), env=env, capture_output=True, text=True, timeout=120)
+
+
+async def post_status(url: str, token: str, workspace: str | None = None) -> int:
+    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "smoke", "version": "0"}}}
+    u = with_workspace(url, workspace) if workspace else url
+    async with create_mcp_http_client() as h:
+        r = await h.post(u, json=init, headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+                                                "Authorization": f"Bearer {token}"})
+        return r.status_code
+
+
+async def named_token_checks(url: str, cmd, env, scoped: str, single: str, log: Path, expect) -> None:
+    """Tokens from the tokens file: workspace patterns (403 outside them), a single-workspace token's
+    default, revocation without a restart, and the token's name in the server log."""
+    async with http_client(with_workspace(url, "scoped-a"), scoped) as c:
+        res = await c.call_tool("list_parts", {})
+        expect(json.loads(text(res)).get("token") == "scoped", "a named token works in its workspace and list_parts names it")
+        await c.call_tool("new_part", {"name": "tok"})
+        res = await c.call_tool("export", {"name": "tok", "formats": "3mf"})
+        u = links_in(res)[0]
+        async with create_mcp_http_client() as h:
+            expect((await h.get(u)).status_code == 200, "download links work for a named token's workspace")
+    expect(await post_status(url, scoped, "penguin-jon") == 403, "a named token outside its workspaces gets 403")
+    expect(await post_status(url, scoped) == 403, "a token with only a pattern cannot use the shared root workspace")
+    async with http_client(url, single) as c:  # no ?workspace=
+        ws = json.loads(text(await c.call_tool("list_parts", {})))["workspace"]
+        expect(ws.endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
+    r = mcp_cli(cmd, env, "token", "revoke", "scoped")
+    expect(r.returncode == 0, "token revoke")
+    expect(await post_status(url, scoped, "scoped-a") == 401, "a revoked token is refused at once, no restart")
+    r = mcp_cli(cmd, env, "token", "add", "late", "--workspace", "late-*")
+    expect(await post_status(url, r.stdout.strip(), "late-1") == 200, "a token added while the server runs works at once")
+    logged = log.read_text(encoding="utf-8", errors="replace")
+    expect("scoped POST /mcp ws=scoped-a -> 200" in logged and "scoped POST /mcp ws=penguin-jon -> 403" in logged
+           and "(bad token)" in logged, "the server log names the token of every request")
+    expect(scoped not in logged and single not in logged and "/files/" in logged and ".3mf" in logged
+           and not re.search(r"/files/[^/ ]+/\d+\.", logged), "the log holds no token and no working link")
+
+
+async def worker_down_check(url: str, token: str, worker, expect) -> None:
+    worker.terminate()
+    worker.wait(20)
+    async with create_mcp_http_client() as h:
+        r = await h.get(url.rsplit("/", 1)[0] + "/health")
+        expect(r.status_code == 503 and r.json().get("worker") == "down", f"/health says 503 'degraded' without the worker ({r.status_code})")
+    async with http_client(with_workspace(url, "down"), token) as c:
+        await c.call_tool("new_part", {"name": "x"})
+        res = await c.call_tool("build_part", {"name": "x"})
+        expect("worker is not running" in text(res), "a build without a worker fails at once, saying why")
+
+
+async def main(keep: bool, http: bool, split: bool = False) -> None:
     ws = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-"))
     # B123D_PRINT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/b123d_print-0.1.0-py3-none-any.whl b123d-print-mcp"
     cmd = os.environ.get("B123D_PRINT_SMOKE_CMD", f"{sys.executable} -m b123d_print.mcp_server").split()
-    # a private user config, so use_printer never touches the real one
-    env = {**os.environ, "XDG_CONFIG_HOME": str(ws / ".config")}
+    # a private user config, so use_printer never touches the real one; tokens outside the workspace
+    tokfile = ws.parent / f"{ws.name}-tokens.toml"
+    env = {**os.environ, "XDG_CONFIG_HOME": str(ws / ".config"), "B123D_PRINT_TOKENS_FILE": str(tokfile)}
     url = os.environ.get("B123D_PRINT_SMOKE_URL")
     token = os.environ.get("B123D_PRINT_SMOKE_TOKEN") or os.environ.get("B123D_PRINT_TOKEN")
     ok = True
@@ -445,13 +511,23 @@ async def main(keep: bool, http: bool) -> None:
         print(("PASS " if cond else "FAIL ") + what)
         ok &= bool(cond)
 
-    server = None
+    server = worker = None
     if url or http:
         name = f"smoke-{secrets.token_hex(3)}"
-        if not url:  # start our own HTTP server on a free port
+        if not url:  # start our own HTTP server on a free port (and, with --split, a separate worker)
             port, token = free_port(), secrets.token_urlsafe(24)
-            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port), "--shutdown-grace", "3"],
-                                      env={**env, "B123D_PRINT_TOKEN": token})
+            scoped = mcp_cli(cmd, env, "token", "add", "scoped", "--workspace", "scoped-*").stdout.strip()
+            single = mcp_cli(cmd, env, "token", "add", "single", "--workspace", "only-one").stdout.strip()
+            os.environ["B123D_PRINT_TOKENS_FILE"] = str(tokfile)  # link_checks signs with its link_secret
+            extra = []
+            if split:
+                queue = ws / ".b123d-print/jobs"
+                worker = subprocess.Popen(cmd + ["--max-builds", "2", "worker", "--queue", str(queue)], env=env)
+                extra = ["--job-queue", str(queue)]
+            log = ws.parent / f"{ws.name}-server.log"
+            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port),
+                                             "--shutdown-grace", "3", *extra],
+                                      env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"))
             url = f"http://127.0.0.1:{port}/mcp"
             for _ in range(300):  # first start can be slow (imports, bytecode)
                 try:
@@ -459,26 +535,38 @@ async def main(keep: bool, http: bool) -> None:
                     break
                 except OSError:
                     if server.poll() is not None:
-                        sys.exit(f"server exited with {server.returncode}")
+                        sys.exit(f"server exited with {server.returncode}:\n{log.read_text()}")
                     time.sleep(0.2)
             pw = ws / "workspaces" / name
         else:  # a running server; B123D_PRINT_SMOKE_WORKSPACE_DIR: its workspace folder, if visible from here
             wd = os.environ.get("B123D_PRINT_SMOKE_WORKSPACE_DIR")
             pw = Path(wd) / "workspaces" / name if wd else None
-        print(f"     http: {url}  workspace {name}")
+        print(f"     http: {url}  workspace {name}{'  (separate build worker)' if split else ''}")
         try:
             if not token:
                 sys.exit("B123D_PRINT_SMOKE_URL needs B123D_PRINT_SMOKE_TOKEN")
             await http_checks(url, token, expect, pw.parent.parent if pw else None)
             async with http_client(with_workspace(url, name), token) as c:
                 await flow(c, pw, expect)
+                if split or os.environ.get("B123D_PRINT_SMOKE_SPLIT"):
+                    bw = json.loads(text(await c.call_tool("list_parts", {}))).get("build_worker", "")
+                    expect(bw.startswith("separate"), f"builds run in the separate worker ({bw})")
             if server:
+                await named_token_checks(url, cmd, env, scoped, single, log, expect)
+                if worker:
+                    await worker_down_check(url, token, worker, expect)
+                    worker = subprocess.Popen(cmd + ["--max-builds", "2", "worker", "--queue", str(queue)], env=env)
+                    for _ in range(100):
+                        if (queue / "worker.alive").exists():
+                            break
+                        time.sleep(0.1)
                 await shutdown_check(server, url, token, ws, expect)
                 server = None
         finally:
-            if server:
-                server.terminate()
-                server.wait(10)
+            for p in (server, worker):
+                if p:
+                    p.terminate()
+                    p.wait(20)
     else:
         params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"], env=env)
         async with Client(params) as c:
@@ -487,9 +575,10 @@ async def main(keep: bool, http: bool) -> None:
     print(f"\nworkspace: {ws}\nimages: {SAVE}")
     if not keep and ok:
         shutil.rmtree(ws, ignore_errors=True)
+        tokfile.unlink(missing_ok=True)
     print("ALL PASSED" if ok else "SOME CHECKS FAILED")
     sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main("--keep" in sys.argv, "--http" in sys.argv))
+    asyncio.run(main("--keep" in sys.argv, "--http" in sys.argv or "--split" in sys.argv, "--split" in sys.argv))

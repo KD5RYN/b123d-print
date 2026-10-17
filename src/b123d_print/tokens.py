@@ -1,0 +1,214 @@
+"""Named bearer tokens for the HTTP server: one per agent or tool, each limited to workspaces.
+
+The tokens file (B123D_PRINT_TOKENS_FILE) is TOML. It stores only the SHA-256 of each token, so
+reading it does not give the tokens away:
+
+    link_secret = "…"                   # signs download links (made on the first `token add`)
+
+    [tokens.grok-chromebook]
+    sha256 = "9f2c…"
+    workspaces = ["grok-*"]             # fnmatch patterns; "_" is the shared root workspace
+    created = "2026-10-17"
+
+    b123d-print-mcp token add grok-chromebook --workspace 'grok-*'   # prints the token once
+    b123d-print-mcp token list
+    b123d-print-mcp token revoke grok-chromebook
+
+The server re-reads the file when it changes (and on SIGHUP), so adding or revoking a token needs
+no restart. B123D_PRINT_TOKEN still works: it is the token "default", allowed every workspace.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import hashlib
+import hmac
+import os
+import re
+import secrets
+import sys
+import threading
+import time
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+PATTERN_RE = re.compile(r"^[A-Za-z0-9_*?-]{1,64}$")
+ROOT_WS = "_"  # the shared root workspace (as in links.ROOT_WS)
+
+
+def digest(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+@dataclass
+class Token:
+    name: str
+    sha256: str
+    workspaces: list[str] = field(default_factory=lambda: ["*"])
+    created: str = ""
+
+    def allows(self, workspace: str | None) -> bool:
+        """workspace: the client's workspace name, or None/"" for the shared root workspace."""
+        ws = workspace or ROOT_WS
+        return any(fnmatch.fnmatchcase(ws, p) for p in self.workspaces)
+
+    def default_workspace(self) -> str | None:
+        """The workspace a request without ?workspace= uses: the token's only workspace, if it has
+        exactly one and it is not a pattern; else None (the root workspace, if allowed)."""
+        if len(self.workspaces) == 1 and not any(c in self.workspaces[0] for c in "*?[") and self.workspaces[0] != ROOT_WS:
+            return self.workspaces[0]
+        return None
+
+
+def read(path: Path) -> tuple[dict[str, Token], str | None]:
+    """{name: Token}, link_secret. Raises ValueError for a malformed file."""
+    with open(path, "rb") as f:
+        raw = tomllib.load(f)
+    out = {}
+    for name, t in (raw.get("tokens") or {}).items():
+        if not NAME_RE.match(name) or not isinstance(t, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(t.get("sha256", ""))):
+            raise ValueError(f"{path}: token {name!r} needs a name and a 64-hex-digit sha256")
+        ws = t.get("workspaces", ["*"])
+        if not isinstance(ws, list) or not ws or not all(isinstance(p, str) and PATTERN_RE.match(p) for p in ws):
+            raise ValueError(f"{path}: token {name!r}: workspaces must be a non-empty list of names or patterns")
+        out[name] = Token(name, t["sha256"], list(ws), str(t.get("created", "")))
+    secret = raw.get("link_secret")
+    return out, (str(secret) if secret else None)
+
+
+def _q(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def write(path: Path, toks: dict[str, Token], link_secret: str | None) -> None:
+    """Write the file atomically (readers never see half a file), mode 600."""
+    lines = ["# b123d-print HTTP tokens: only their SHA-256 is stored. Edit with `b123d-print-mcp token ...`.", ""]
+    if link_secret:
+        lines += [f"link_secret = {_q(link_secret)}", ""]
+    for t in toks.values():
+        lines += [f"[tokens.{t.name}]", f"sha256 = {_q(t.sha256)}",
+                  "workspaces = [" + ", ".join(_q(p) for p in t.workspaces) + "]", f"created = {_q(t.created)}", ""]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    os.replace(tmp, path)
+
+
+class Store:
+    """The tokens the server accepts: the file (re-read when it changes) plus B123D_PRINT_TOKEN."""
+
+    def __init__(self, path: Path | None, legacy: str | None = None):
+        self.path, self.legacy = path, legacy
+        self._lock = threading.Lock()
+        self._stamp = None
+        self._by_hash: dict[str, Token] = {}
+        self.link_secret: str | None = None
+        self.reload(force=True)
+
+    def _stat(self):
+        try:
+            st = os.stat(self.path)
+            return st.st_mtime_ns, st.st_ino, st.st_size
+        except OSError:
+            return None
+
+    def reload(self, force: bool = False) -> None:
+        if self.path is None:
+            if force:
+                self._set({}, None)
+            return
+        stamp = self._stat()
+        if not force and stamp == self._stamp:
+            return
+        with self._lock:
+            if not force and stamp == self._stamp:
+                return
+            try:
+                toks, secret = read(self.path) if stamp else ({}, None)
+            except (OSError, ValueError, tomllib.TOMLDecodeError) as e:
+                if force and stamp:
+                    raise
+                print(f"b123d-print-mcp: keeping the previous tokens; cannot read {self.path}: {e}", file=sys.stderr)
+                self._stamp = stamp
+                return
+            self._set(toks, secret)
+            self._stamp = stamp
+            if not force:
+                print(f"b123d-print-mcp: tokens reloaded from {self.path}: {', '.join(sorted(toks)) or 'none'}", file=sys.stderr)
+
+    def request_reload(self) -> None:
+        """SIGHUP: re-read the file on the next request even if it looks unchanged."""
+        self._stamp = ("reload",)
+
+    def _set(self, toks: dict[str, Token], secret: str | None) -> None:
+        by_hash = {t.sha256: t for t in toks.values()}
+        if self.legacy:
+            by_hash[digest(self.legacy)] = Token("default", digest(self.legacy), ["*"])
+        self._by_hash, self.link_secret = by_hash, secret
+
+    def check(self, token: str) -> Token | None:
+        self.reload()
+        h = digest(token)
+        for known, t in self._by_hash.items():  # constant time per comparison; the set is small
+            if hmac.compare_digest(known, h):
+                return t
+        return None
+
+    def names(self) -> list[str]:
+        return sorted(t.name for t in self._by_hash.values())
+
+
+def generate() -> str:
+    return "b1p_" + secrets.token_urlsafe(32)
+
+
+# --- CLI: b123d-print-mcp token ... ------------------------------------------------------------
+
+
+def cli(args) -> int:
+    path = Path(args.tokens_file).expanduser() if args.tokens_file else None
+    if path is None:
+        print("b123d-print-mcp token: set B123D_PRINT_TOKENS_FILE or pass --tokens-file <path>", file=sys.stderr)
+        return 2
+    try:
+        toks, secret = read(path) if path.exists() else ({}, None)
+    except (ValueError, tomllib.TOMLDecodeError) as e:
+        print(f"b123d-print-mcp token: {e}", file=sys.stderr)
+        return 1
+    if args.token_command == "list":
+        if not toks:
+            print(f"no tokens in {path}")
+        for t in toks.values():
+            print(f"{t.name:24} workspaces {', '.join(t.workspaces):30} created {t.created or '?':10} sha256 {t.sha256[:12]}…")
+        return 0
+    name = args.name
+    if not NAME_RE.match(name):
+        print(f"b123d-print-mcp token: bad name {name!r}: letters, digits, '.', '_', '-', up to 64", file=sys.stderr)
+        return 2
+    if args.token_command == "revoke":
+        if name not in toks:
+            print(f"b123d-print-mcp token: no token {name!r} in {path}", file=sys.stderr)
+            return 1
+        del toks[name]
+        write(path, toks, secret)
+        print(f"revoked {name}; the server stops accepting it on its next request", file=sys.stderr)
+        return 0
+    # add
+    if name in toks:
+        print(f"b123d-print-mcp token: {name!r} exists; revoke it first to replace it", file=sys.stderr)
+        return 1
+    patterns = args.workspace or ["*"]
+    bad = [p for p in patterns if not PATTERN_RE.match(p)]
+    if bad:
+        print(f"b123d-print-mcp token: bad workspace pattern(s) {bad}: letters, digits, '_', '-', '*', '?'", file=sys.stderr)
+        return 2
+    tok = generate()
+    toks[name] = Token(name, digest(tok), patterns, time.strftime("%Y-%m-%d"))
+    write(path, toks, secret or secrets.token_urlsafe(32))
+    print(tok)
+    print(f"added {name} (workspaces {', '.join(patterns)}). This is the only time the token is shown.", file=sys.stderr)
+    return 0
