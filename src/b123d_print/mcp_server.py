@@ -766,6 +766,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     env = os.environ.get
     args = build_parser().parse_args(argv)
+    # also the limit across server processes (one per SSH session); set before any early exit
+    sandbox.MAX_BUILDS = max(1, args.max_builds)
     if args.healthcheck:
         sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
@@ -781,7 +783,6 @@ def main(argv: list[str] | None = None) -> None:
         # home folder that disappears with the container
         os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
     STATE.update(root=root, timeout=args.timeout, transport=args.transport, max_builds=max(1, args.max_builds))
-    sandbox.MAX_BUILDS = STATE["max_builds"]  # also the limit across server processes (one per SSH session)
     if args.transport == "stdio":
         mcp.run("stdio")
         return
