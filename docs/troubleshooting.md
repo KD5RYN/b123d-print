@@ -2,7 +2,7 @@
 
 | Symptom | Fix |
 | --- | --- |
-| First start is very slow, or the client gives up | it is downloading the dependencies; run `uvx --from git+https://github.com/KD5RYN/b123d-print b123d-print-mcp --help` once in a terminal, then restart the client |
+| First start is very slow, or the client gives up | it is downloading the dependencies; run `uvx --from b123d-print b123d-print-mcp --help` once in a terminal, then restart the client |
 | Client says `uvx` not found | use the full path from `which uvx` as the command |
 | Model never looks at the renders | your client doesn't pass tool images to the model; open `out/*.png` yourself |
 | `timed out after 120 s` | a slow or endless script; raise `--timeout` if the part is genuinely heavy |

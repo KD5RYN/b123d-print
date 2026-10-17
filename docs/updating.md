@@ -1,14 +1,17 @@
 # Updating
 
 `b123d-print --version` (or the `version` field of the MCP `list_parts` tool) shows what you run.
-Releases and what changed: [GitHub releases](https://github.com/KD5RYN/b123d-print/releases).
+Releases: [PyPI](https://pypi.org/project/b123d-print/#history) and
+[GitHub releases](https://github.com/KD5RYN/b123d-print/releases) (what changed).
 
 | Installed with | Update |
 | --- | --- |
-| `uvx --from git+https://github.com/KD5RYN/b123d-print ...` (MCP clients) | uvx caches the build: run `uvx --refresh --from git+https://github.com/KD5RYN/b123d-print b123d-print-mcp --help` once, then restart the client |
-| a pinned version `...b123d-print@v0.1.0` | change the tag in your client config, restart the client |
-| `uv tool install git+https://github.com/KD5RYN/b123d-print` (CLI) | `uv tool install --force git+https://github.com/KD5RYN/b123d-print` |
-| Docker | `git pull && docker build -t b123d-print-mcp .` in your clone, restart the client |
+| `uvx --from b123d-print ...` (MCP clients) | uvx caches the package: run `uvx --refresh --from b123d-print b123d-print-mcp --help` once, then restart the client |
+| a pinned version `--from b123d-print==0.1.0` | change the version in your client config, restart the client |
+| `uvx --from git+https://github.com/KD5RYN/b123d-print ...` (unreleased) | `uvx --refresh --from git+https://github.com/KD5RYN/b123d-print b123d-print-mcp --help`, then restart the client |
+| `uv tool install b123d-print` (CLI) | `uv tool upgrade b123d-print` |
+| Docker image `ghcr.io/kd5ryn/b123d-print-mcp` | `docker pull ghcr.io/kd5ryn/b123d-print-mcp`, restart the client |
+| Docker image built from a clone | `git pull && docker build -t b123d-print-mcp .` in your clone, restart the client |
 | Claude Code plugin | `/plugin marketplace update b123d-print`, then restart Claude Code |
 
 After updating:

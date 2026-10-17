@@ -1,8 +1,8 @@
 # Releasing
 
-Nothing is published to PyPI or GHCR yet: there are no release tags. Until then everything
-installs straight from the repository (`uvx --from git+https://github.com/KD5RYN/b123d-print ...`).
-This page is how the pieces ship and what is still open.
+Released: **0.1.0** on [PyPI](https://pypi.org/project/b123d-print/) and as
+`ghcr.io/kd5ryn/b123d-print-mcp:0.1.0` (+ `latest`, public). This page is how the pieces ship
+and how to cut the next release.
 
 ## What gets distributed
 
@@ -26,12 +26,13 @@ This page is how the pieces ship and what is still open.
 - **CI** uses GitHub-hosted runners only. Self-hosted runners on a public repo would run code
   from anyone's pull request on your machines.
 
-## Path
+## How it ships
 
-1. **PyPI via Trusted Publishing** — `.github/workflows/release.yml` builds on a version tag and
-   uploads with OIDC (no API token stored anywhere). Then every client config becomes
-   `uvx --from b123d-print b123d-print-mcp`.
-2. **Docker image** on GHCR from the same workflow. It redistributes OpenCascade (LGPL-2.1)
+1. **PyPI via Trusted Publishing** (done) — `.github/workflows/release.yml` builds on a version
+   tag and uploads with OIDC (no API token stored anywhere). The trusted publisher is
+   `KD5RYN/b123d-print`, workflow `release.yml`, environment `pypi`; that environment requires
+   approval and only accepts `v*` tags.
+2. **Docker image** on GHCR from the same workflow (done; the package is public). It redistributes OpenCascade (LGPL-2.1)
    binaries: keep the license files in the image and link the OCCT source (see
    [Credits and licenses](../credits.md)). The wheel does not redistribute anything, so it has no
    such duty.
@@ -42,12 +43,12 @@ Versioning: semver; bump `version` in `pyproject.toml` and `.claude-plugin/plugi
 tag `vX.Y.Z`, the workflow does the rest (it checks that the tag matches `pyproject.toml`).
 While 0.x, the part-script convention may still change; say so in the release notes when it does.
 
-## First release, step by step
+## Cutting a release
 
 1. Wait for CI to be green on `main`.
-2. On pypi.org: Account → Publishing → add a *pending trusted publisher*: project
-   `b123d-print`, owner/repo `KD5RYN/b123d-print`, workflow `release.yml`, environment `pypi`.
-3. In the GitHub repo: Settings → Environments → create `pypi` (optionally require approval).
-4. `git tag v0.1.0 && git push --tags` → `release.yml` uploads to PyPI and pushes
-   `ghcr.io/kd5ryn/b123d-print-mcp:0.1.0` + `latest`. Make the GHCR package public once.
-5. Update the docs that say "once releases exist" (client setup, Docker, Updating).
+2. Bump `version` in `pyproject.toml` and `.claude-plugin/plugin.json`, run `uv lock`, merge.
+3. `git tag vX.Y.Z && git push origin vX.Y.Z` → `release.yml` waits for approval of the `pypi`
+   environment, then uploads to PyPI and pushes `ghcr.io/kd5ryn/b123d-print-mcp:X.Y.Z` + `latest`.
+4. Write the release notes as a GitHub release on the tag (say when the part-script
+   convention changed).
+5. Update the pinned-version examples in the docs (`b123d-print==0.1.0`) if they should follow.

@@ -3,8 +3,11 @@
 For agents that run shell commands, and for you:
 
 ```bash
-uv tool install git+https://github.com/KD5RYN/b123d-print
+uv tool install b123d-print
 ```
+
+(`pip install b123d-print` works too, in a Python 3.12 environment. For unreleased code:
+`uv tool install git+https://github.com/KD5RYN/b123d-print`.)
 
 ```bash
 b123d-print init ~/parts && cd ~/parts

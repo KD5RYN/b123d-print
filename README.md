@@ -1,5 +1,6 @@
 # b123d-print
 
+[![PyPI](https://img.shields.io/pypi/v/b123d-print.svg)](https://pypi.org/project/b123d-print/)
 [![CI](https://github.com/KD5RYN/b123d-print/actions/workflows/ci.yml/badge.svg)](https://github.com/KD5RYN/b123d-print/actions/workflows/ci.yml)
 [![Docs](https://github.com/KD5RYN/b123d-print/actions/workflows/docs.yml/badge.svg)](https://kd5ryn.github.io/b123d-print/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -47,7 +48,7 @@ wall-thickness and overlap checks. It is not a general CAD framework.
      "mcpServers": {
        "b123d-print": {
          "command": "uvx",
-         "args": ["--from", "git+https://github.com/KD5RYN/b123d-print", "b123d-print-mcp",
+         "args": ["--from", "b123d-print", "b123d-print-mcp",
                   "--workspace", "/Users/you/parts"]
        }
      }

@@ -10,7 +10,7 @@
       "mcpServers": {
         "b123d-print": {
           "command": "uvx",
-          "args": ["--from", "git+https://github.com/KD5RYN/b123d-print", "b123d-print-mcp",
+          "args": ["--from", "b123d-print", "b123d-print-mcp",
                    "--workspace", "/Users/you/parts"]
         }
       }
