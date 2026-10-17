@@ -3,7 +3,8 @@
 FDM printers print small holes undersize, by an amount that depends on printer, nozzle,
 material and slicer, and holes lying on their side (axis in XY) differently again, because
 their top sags. b123d-print never assumes a value: `hole_comp` defaults to **0**, and
-`hole_comp_h` (for horizontal holes) to `hole_comp`.
+`hole_comp_h` (for horizontal holes) to `hole_comp`. Until you set it, `b123d-print check`
+warns once per run on parts with holes.
 
 ![Hole calibration coupon](../images/hole_coupon.png)
 

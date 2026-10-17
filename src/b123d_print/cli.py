@@ -79,6 +79,7 @@ def cmd_check(args) -> int:
 
     worst = 0
     report = []
+    nudged = False  # setup reminders (hole_comp unset) once per run
     for script in _targets(args):
         settings = load_settings(script)
         try:
@@ -93,7 +94,8 @@ def cmd_check(args) -> int:
         for key in keys:
             if args.variant and variant_key(args.variant) != key:
                 continue
-            findings = run_checks(mod, key, settings)
+            findings = run_checks(mod, key, settings, nudge=not nudged)
+            nudged |= any(f.check == "hole_comp" for f in findings)
             report.append({"part": script.stem, "variant": key or "standard", "findings": [f.__dict__ for f in findings]})
             if not args.json:
                 n = {lvl: sum(f.level == lvl for f in findings) for lvl in (ck.OK, ck.WARN, ck.FAIL)}

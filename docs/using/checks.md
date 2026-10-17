@@ -17,6 +17,8 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
 - **wall** — thinnest material in a cross-section, optionally only around one cut: across the
   wall along the surface normal, and between separate outlines (hole to edge). Tips of ordinary
   corners don't count as thin; knife edges sharper than about 25° do. Below `min_wall` fails.
+  The result says what it measured (section area, how far `near` is from material, the region),
+  and fails when nothing lies within `radius` of `near`.
 - **thin** — the wall measurement on sections all over the part (XY, XZ and YZ, at every
   flat-face level and every 2 mm). A wall thinner than one line width (0.45 mm, or your
   printer's) **fails**: it does not print as modeled. Thinner than `min_wall` warns. A spot that
@@ -32,7 +34,15 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
 - **fit** — only with a [printer profile](printer-profiles.md): the part fits the build volume
   in print orientation.
 - **probe** — material must be present (or absent) in a small box: "the roof is closed",
-  "the cable channel is clear".
+  "the cable channel is clear". The result shows the box against the part's bounding box; a box
+  entirely outside the part fails (expected solid) or warns (expected empty).
+- **hole_comp** — once per run, a warning when the part has holes but `hole_comp` has never been
+  set: they are cut at nominal size and print small. See [Hole compensation](hole-compensation.md).
+
+!!! tip "Pin Wall and Probe to the assembly"
+    Wall and Probe coordinates are in print orientation by default. Turn the part over and
+    they point at another feature, and may still say OK. Parts with an `assembly(d)` should
+    declare them with `frame="assembly"` — see [which frame](../scripts/checks-api.md#which-frame).
 
 **valid**, **overlap**, **overhang** (with **bridge**), **thin**, **holes**, **bed edge**,
 **gap** and **fit** run on every part on their own; **wall** and **probe** run where the script

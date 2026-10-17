@@ -164,6 +164,27 @@ def load_settings(start: str | Path | None = None) -> Settings:
     return s
 
 
+def hole_comp_source(start: str | Path | None = None) -> str | None:
+    """Where hole_comp comes from for a part script or folder: "environment", "workspace config",
+    "calibration" (for the active printer + material), "user config", or None when it was never
+    set and holes are cut at their nominal size."""
+    if os.environ.get(_ENV["hole_comp"]):
+        return "environment"
+    ws = find_workspace(start)
+    if ws is not None and "hole_comp" in _read(ws / WORKSPACE_FILE):
+        return "workspace config"
+    s = load_settings(start)
+    if s.printer:
+        from .profiles import calibrated
+
+        if "hole_comp" in calibrated(s.printer, s.material):
+            return "calibration"
+    user = user_config_path()
+    if user.is_file() and "hole_comp" in _read(user):
+        return "user config"
+    return None
+
+
 def hole_comp(script_file: str | Path | None = None, horizontal: bool = False) -> float:
     """HOLE_COMP for a part script: `HOLE_COMP: float = hole_comp(__file__)`; with
     horizontal=True the value for holes whose axis lies in XY (hole_comp_h)."""

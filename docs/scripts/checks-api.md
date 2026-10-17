@@ -43,6 +43,12 @@ deeper than the wall it starts in, slicing just past the wall.
 | `radius` | `None` | how far from `near` to look, mm |
 | `min` | `None` | fail below this, mm (default: the `min_wall` setting) |
 | `label` | `""` | shown in the report |
+| `frame` | `"print"` | `"print"`: `part` is a name from `build()`, coordinates as printed; `"assembly"`: `part` is a label from `assembly(d)`, coordinates as assembled |
+
+The result says what was measured: the section's area, how far `near` is from material (0 when
+it is inside material) and the region within `radius`. It **fails** when the section misses the
+part, when nothing lies within `radius` of `near` (the check would measure nothing), or when
+`near` is deep inside solid material with no wall within `radius`.
 
 ## `Overhang`
 
@@ -120,6 +126,21 @@ design intent the other checks cannot see.
 | `expect` | `"solid"` | `"solid"` or `"empty"` |
 | `fill` | `0.98` | fraction of the box that counts as solid; empty means at most `1 - fill` |
 | `label` | `""` | shown in the report |
+| `frame` | `"print"` | `"print"`: `part` is a name from `build()`; `"assembly"`: a label from `assembly(d)`, box in assembled coordinates |
+
+The result shows the box against the part's bounding box. A box entirely outside it **fails**
+when `expect="solid"` and **warns** when `expect="empty"`: an empty box away from the part
+proves nothing about the part, unless the point is that nothing reaches there.
+
+## Which frame
+
+Print orientation and assembled position are often different (a lid printed upside down), and
+the print orientation may change while you work. A Wall or Probe declared in print coordinates
+then points at a different feature, and may still pass. If the part has an `assembly(d)`,
+declare Wall and Probe with `frame="assembly"`: the coordinates are where the feature is in use
+and do not move when the part is turned over. Keep `frame="print"` for parts without an
+assembly. The automatic checks (overhang, thin, holes, bed edge, fit) are about printing and
+always use the print orientation; `Gap` already prefers the assembled position.
 
 ## `Overlap`
 

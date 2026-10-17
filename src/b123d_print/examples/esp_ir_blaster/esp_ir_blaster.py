@@ -345,13 +345,14 @@ def views(d: Dims):
 
 def checks(d: Dims):
     (hx, hy), (px, py) = d.HOLES[0], d.POSTS[0]
-    # LED holder, in the lid's print orientation (flipped about X: y -> -y, z -> LID_OUTER_Z - z)
-    led_z = d.LID_OUTER_Z - (d.LED_HOLD_Z0 + d.LED_HOLD / 2)
+    # LED holder, measured on the lid where it sits in assembly(d): the lid prints upside down,
+    # and assembled coordinates do not change when the print orientation does
+    led_z = d.LED_HOLD_Z0 + d.LED_HOLD / 2
     return [
         Wall("base", "XY", d.FLOOR_T + 1.0, near=(hx, hy), radius=d.STANDOFF_D / 2 + 1, label="board standoff pilot"),
         Wall("base", "XY", d.LID_INNER_Z - 2.0, near=(px, py), radius=d.POST_D / 2 + 1, label="lid screw post pilot"),
-        Wall("lid", "XZ", -d.LED_Y, near=(d.LED_X, led_z), radius=d.LED_HOLD_D / 2 + d.CONE_WALL + 0.5,
-             label="LED holder"),
+        Wall("lid", "XZ", d.LED_Y, near=(d.LED_X, led_z), radius=d.LED_HOLD_D / 2 + d.CONE_WALL + 0.5,
+             label="LED holder", frame="assembly"),
     ]
 
 

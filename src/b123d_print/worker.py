@@ -201,8 +201,8 @@ def do(job: dict) -> dict:
         return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at}
     if op == "check":
         res = {}
-        for kk in keys if key is None else [key]:
-            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings)]
+        for i, kk in enumerate(keys if key is None else [key]):
+            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0)]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
     if op == "export":
