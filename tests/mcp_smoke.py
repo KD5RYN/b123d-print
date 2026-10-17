@@ -334,7 +334,10 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
 
         tf = Path(os.environ.get("B123D_PRINT_TOKENS_FILE", "/nonexistent"))
         file_secret = tk.read(tf)[1] if tf.is_file() else None
-        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or not os.environ.get("B123D_PRINT_TOKENS_FILE"):
+        legacy_only = not os.environ.get("B123D_PRINT_TOKENS_FILE") and not os.environ.get("B123D_PRINT_SMOKE_URL")
+        if not (os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or legacy_only):
+            print("     (expired-link check skipped: the server's link key is not known here)")
+        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or legacy_only:
             secret = links.derive_secret(token, os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret)
             old, _ = links.sign(secret, ws_, path, -60)
             r = await h.get(head + old)
@@ -367,7 +370,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         expect(r.status_code == 401, f"no token -> 401 (got {r.status_code})")
         r = await h.post(base, json=init, headers={**hdr, "Authorization": "Bearer wrong-token-0123456789"})
         expect(r.status_code == 401, f"wrong token -> 401 (got {r.status_code})")
-        r = await h.post(base, json=init, headers={**hdr, "Authorization": f"Bearer {token}"})
+        r = await h.post(with_workspace(base, "smoke-check"), json=init, headers={**hdr, "Authorization": f"Bearer {token}"})
         expect(r.status_code == 200, f"right token -> 200 (got {r.status_code})")
         r = await h.get(base.rsplit("/", 1)[0] + "/health")
         expect(r.status_code == 200 and r.json().get("status") == "ok", "/health answers without a token")
@@ -400,9 +403,12 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")
         await link_checks(ca, cb, a, b, token, wsroot, expect)
-    async with http_client(with_workspace(url, "..%2Fetc"), token) as c:
-        res = await c.call_tool("list_parts", {})
-        expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
+    if await post_status(url, token, "..%2Fetc") == 403:  # a named token's workspace patterns refuse it first
+        expect(True, "bad workspace name is refused (403: outside the token's workspaces)")
+    else:
+        async with http_client(with_workspace(url, "..%2Fetc"), token) as c:
+            res = await c.call_tool("list_parts", {})
+            expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
 
 
 # a build that never ends and keeps writing a heartbeat (a PID would be meaningless from here:
