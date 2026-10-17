@@ -442,7 +442,7 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
 
 
 def mcp_cli(cmd, env, *args) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd + list(args), env=env, capture_output=True, text=True, timeout=120)
+    return subprocess.run(cmd + list(args), env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
 
 
 async def post_status(url: str, token: str, workspace: str | None = None) -> int:

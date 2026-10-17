@@ -689,7 +689,7 @@ def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
     path = scope["path"]
     if path.startswith("/files/"):  # never log the signature: a log line must not be a working link
         parts = path.split("/", 4)
-        path = f"/files/{parts[2] if len(parts) > 2 else '?'}/…/{parts[4] if len(parts) > 4 else ''}"
+        path = f"/files/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
     client = (scope.get("client") or ("-",))[0]
     ws = f" ws={workspace}" if workspace is not None else ""
     print(f"b123d-print-mcp: {client} {who} {scope['method']} {path}{ws} -> {status}", file=sys.stderr, flush=True)

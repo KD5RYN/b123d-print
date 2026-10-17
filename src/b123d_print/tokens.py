@@ -183,7 +183,7 @@ def cli(args) -> int:
         if not toks:
             print(f"no tokens in {path}")
         for t in toks.values():
-            print(f"{t.name:24} workspaces {', '.join(t.workspaces):30} created {t.created or '?':10} sha256 {t.sha256[:12]}…")
+            print(f"{t.name:24} workspaces {', '.join(t.workspaces):30} created {t.created or '?':10} sha256 {t.sha256[:12]}...")
         return 0
     name = args.name
     if not NAME_RE.match(name):

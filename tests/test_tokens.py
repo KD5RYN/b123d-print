@@ -69,14 +69,14 @@ def test_store_refuses_a_bad_file_at_start(tmp_path):
 def cli(tmp_path, *args):
     env = {**os.environ, "B123D_PRINT_TOKENS_FILE": str(tmp_path / "tokens.toml")}
     return subprocess.run([sys.executable, "-m", "b123d_print.mcp_server", "token", *args], env=env,
-                          capture_output=True, text=True, timeout=60)
+                          capture_output=True, text=True, encoding="utf-8", timeout=60)
 
 
 def test_cli(tmp_path):
     r = cli(tmp_path, "add", "grok-chromebook", "--workspace", "grok-*")
     assert r.returncode == 0 and r.stdout.startswith("b1p_") and "only time" in r.stderr
     secret = r.stdout.strip()
-    text = (tmp_path / "tokens.toml").read_text()
+    text = (tmp_path / "tokens.toml").read_text(encoding="utf-8")
     assert secret not in text and tokens.digest(secret) in text  # only the hash is stored
     assert cli(tmp_path, "add", "grok-chromebook").returncode == 1  # no silent replace
     assert cli(tmp_path, "add", "x", "--workspace", "../etc").returncode == 2

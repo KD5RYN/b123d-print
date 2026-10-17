@@ -12,7 +12,7 @@ from b123d_print.mcp_server import TokenAuth
 def run_server(*args, **env):
     e = {k: v for k, v in os.environ.items() if not k.startswith("B123D_PRINT_TOKEN")}
     return subprocess.run([sys.executable, "-m", "b123d_print.mcp_server", "--transport", "http", "--port", "1", *args],
-                          env={**e, **env}, capture_output=True, text=True, timeout=60)
+                          env={**e, **env}, capture_output=True, text=True, encoding="utf-8", timeout=60)
 
 
 def test_http_needs_a_token():
