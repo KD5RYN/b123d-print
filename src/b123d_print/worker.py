@@ -39,7 +39,7 @@ from b123d_print.project import (  # noqa: E402
     run_checks,
     variants,
 )
-from b123d_print.render import render, report, section_view  # noqa: E402
+from b123d_print.render import render, report, section_view, side_by_side  # noqa: E402
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 
 BLOCKED_EVENTS = (
@@ -149,13 +149,56 @@ def _parts_for(mod, d, which: str | None):
     return [(named[n], None, n) for n in names]
 
 
+def _preview_parts(mod, d, which: str | None):
+    """What render_preview draws: the assembly when the script has one (printable parts all sit at
+    the origin in print orientation, so drawn together they overlap), else the printable parts
+    side by side on the bed. Returns (items, layout)."""
+    if which in (None, "", "all"):
+        asm = assembly(mod, d)
+        if asm:
+            return asm, "assembly"
+        sel = _parts_for(mod, d, None)
+    elif which == "assembly":
+        return _parts_for(mod, d, which), "assembly"
+    else:
+        sel = _parts_for(mod, d, which)
+    if len(sel) > 1:
+        return side_by_side([(p, lbl) for p, _, lbl in sel]), "side by side"
+    return sel, "single"
+
+
+class _OnlyParts:
+    """The part script, but build() returns only the named printable parts (export parts=)."""
+
+    def __init__(self, mod, names: list[str]):
+        self._mod, self._names = mod, names
+
+    def __getattr__(self, attr):
+        if attr in ("assembly", "part"):  # the assembly shows every part: not part of a filtered export
+            raise AttributeError(attr)
+        if attr == "views":
+            views = getattr(self._mod, "views", None)
+            if views is None:
+                raise AttributeError(attr)
+            return lambda d: [v for v in views(d) if v.parts and set(v.parts) <= set(self._names)]
+        return getattr(self._mod, attr)
+
+    def build(self, d=None):
+        named = {(k or "part"): (k, v) for k, v in printables(self._mod, d).items()}
+        missing = [n for n in self._names if n not in named]
+        if missing:
+            raise KeyError(f"no part(s) {missing}; parts: {sorted(named)}")
+        return dict(named[n] for n in self._names)
+
+
 def do_compare(job: dict) -> dict:
     """Compare two mesh files (agent-exported files are untrusted input to the parsers)."""
     crit = cmp.Criteria(**job.get("criteria", {}))
     r = cmp.compare(job["reference"], job["candidate"], criteria=crit)
     res = {"text": r.text(), **{k: v for k, v in r.as_dict().items() if k in ("metrics", "checks", "alignment", "score", "passed")}}
     if job.get("image"):
-        res["image"] = str(cmp.render_comparison(job["reference"], job["candidate"], r, Path(job["out_dir"]) / job["image"]))
+        res["image"] = str(cmp.render_comparison(job["reference"], job["candidate"], r, Path(job["out_dir"]) / job["image"],
+                                                 size=job.get("size", "normal")))
     return res
 
 
@@ -188,16 +231,22 @@ def do(job: dict) -> dict:
     k = key if key is not None else keys[0]
     d = dims(mod, k)
     tag = "_".join(x for x in (script.stem, k) if x)
+    size = job.get("size", "normal")
+    small = "_small" if size == "small" else ""
     if op == "render":
-        sel = _parts_for(mod, d, job.get("parts"))
-        name = f"{tag}_{(job.get('parts') or 'all').replace(',', '+')}_preview.png"
-        title = tag + (f" ({job['parts']})" if job.get("parts") else "")
-        f = render(sel if len(sel) > 1 else sel[0][0], out / name, title)
-        return {"image": str(f), "variant": k or "standard", "parts": {lbl: report(p) for p, _, lbl in sel}}
+        which = job.get("parts")
+        sel, layout = _preview_parts(mod, d, which)
+        name = f"{tag}_{(which or 'all').replace(',', '+')}_preview{small}.png"
+        title = tag + (f" ({which})" if which else "") + (f", {layout}" if layout != "single" else "")
+        f = render(sel if len(sel) > 1 else sel[0][0], out / name, title, size=size)
+        # report the printable parts as built (print orientation), not moved copies or stand-ins
+        reports = {lbl: report(p) for p, _, lbl in _parts_for(mod, d, None if layout == "assembly" else which)}
+        return {"image": str(f), "variant": k or "standard", "parts": reports, "layout": layout,
+                "drawn": [lbl for _, _, lbl in sel]}
     if op == "section":
         sel = _parts_for(mod, d, job.get("parts") or ("assembly" if hasattr(mod, "assembly") else None))
         plane, at = job["plane"].upper(), float(job["at"])
-        f = section_view(sel, plane, at, out / f"{tag}_{plane.lower()}{round(at, 3):g}.png", tag)
+        f = section_view(sel, plane, at, out / f"{tag}_{plane.lower()}{round(at, 3):g}{small}.png", tag, size=size)
         return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at}
     if op == "check":
         res = {}
@@ -207,7 +256,8 @@ def do(job: dict) -> dict:
         return {"passed": not failed, "variants": res}
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
-        return {"variants": [export_variant(mod, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
+        src = _OnlyParts(mod, [n.strip() for n in job["parts"].split(",") if n.strip()]) if job.get("parts") else mod
+        return {"variants": [export_variant(src, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
     raise ValueError(f"unknown op {op!r}")
 
 
