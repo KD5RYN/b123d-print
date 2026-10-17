@@ -21,9 +21,9 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part` and `compare`
-runs the script in the [sandbox](sandbox.md); `compare` only reads mesh files, and only inside the
-workspace.
+Every tool except `list_parts`, `use_printer`, `new_part`, `read_part` and `write_part` runs in the
+[sandbox](sandbox.md): the part script, or for `compare` the mesh parsing (the files may come
+from model-written scripts). `compare` only takes files inside the workspace.
 
 ## Prompts
 

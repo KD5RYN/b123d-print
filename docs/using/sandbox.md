@@ -1,7 +1,8 @@
 # Sandbox
 
 Part scripts are model-written code. The MCP server runs every build, render, section, check
-and export in a separate process, isolated as far as the platform allows:
+and export in a separate process, isolated as far as the platform allows. `compare` runs there
+too: the mesh files it parses may have been written by a part script.
 
 | Platform | Isolation |
 | --- | --- |
@@ -10,7 +11,7 @@ and export in a separate process, isolated as far as the platform allows:
 | Linux without bubblewrap, Windows | separate process + audit hook only — **install bubblewrap, or use Docker** |
 | [Docker](../getting-started/docker.md) | the container (`--network none`, only the mounted folder) |
 
-Every build also gets a timeout (default 120 s, `--timeout` or `B123D_PRINT_TIMEOUT`) and a CPU
+Every job also gets a timeout (default 120 s, `--timeout` or `B123D_PRINT_TIMEOUT`) and a CPU
 limit. The audit hook (blocks sockets, subprocesses, native libraries, writes elsewhere) is
 defense in depth, not a boundary on its own.
 
