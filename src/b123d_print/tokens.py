@@ -10,7 +10,9 @@ reading it does not give the tokens away:
     workspaces = ["grok-*"]             # fnmatch patterns; "_" is the shared root workspace
     created = "2026-10-17"
 
-    b123d-print-mcp token add grok-chromebook --workspace 'grok-*'   # prints the token once
+    b123d-print-mcp token add grok-chromebook                      # workspace "grok-chromebook"; prints
+                                                                   # the token once, with client config
+    b123d-print-mcp token add eval-runner --workspace 'eval-*'     # or names/patterns of its own
     b123d-print-mcp token list
     b123d-print-mcp token revoke grok-chromebook
 
@@ -33,7 +35,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")  # also a valid workspace name (the default one)
 PATTERN_RE = re.compile(r"^[A-Za-z0-9_*?-]{1,64}$")
 ROOT_WS = "_"  # the shared root workspace (as in links.ROOT_WS)
 
@@ -187,7 +189,7 @@ def cli(args) -> int:
         return 0
     name = args.name
     if not NAME_RE.match(name):
-        print(f"b123d-print-mcp token: bad name {name!r}: letters, digits, '.', '_', '-', up to 64", file=sys.stderr)
+        print(f"b123d-print-mcp token: bad name {name!r}: letters, digits, '_', '-', up to 64", file=sys.stderr)
         return 2
     if args.token_command == "revoke":
         if name not in toks:
@@ -201,7 +203,7 @@ def cli(args) -> int:
     if name in toks:
         print(f"b123d-print-mcp token: {name!r} exists; revoke it first to replace it", file=sys.stderr)
         return 1
-    patterns = args.workspace or ["*"]
+    patterns = args.workspace or [name]  # by default a token gets one workspace of its own
     bad = [p for p in patterns if not PATTERN_RE.match(p)]
     if bad:
         print(f"b123d-print-mcp token: bad workspace pattern(s) {bad}: letters, digits, '_', '-', '*', '?'", file=sys.stderr)
@@ -210,5 +212,44 @@ def cli(args) -> int:
     toks[name] = Token(name, digest(tok), patterns, time.strftime("%Y-%m-%d"))
     write(path, toks, secret or secrets.token_urlsafe(32))
     print(tok)
-    print(f"added {name} (workspaces {', '.join(patterns)}). This is the only time the token is shown.", file=sys.stderr)
+    print(client_config(name, tok, patterns, args.url or os.environ.get("B123D_PRINT_PUBLIC_URL")), file=sys.stderr)
     return 0
+
+
+def _example_workspace(patterns: list[str], name: str) -> str | None:
+    """The workspace to put in a client's URL: None when the token's one workspace is the default."""
+    if len(patterns) == 1 and not any(c in patterns[0] for c in "*?") and patterns[0] != ROOT_WS:
+        return None
+    p = next((p for p in patterns if p not in ("*", ROOT_WS)), None)
+    return (p.replace("*", "1").replace("?", "x") if p else f"{name}-1")
+
+
+def client_config(name: str, tok: str, patterns: list[str], url: str | None) -> str:
+    """What to paste into an MCP client for this token (printed by `token add`, to stderr)."""
+    base = (url or "https://<your-server>").rstrip("/")
+    ws = _example_workspace(patterns, name)
+    mcp = f"{base}/mcp" + (f"?workspace={ws}" if ws else "")
+    lines = [
+        f"added {name}: workspaces {', '.join(patterns)}. The token (above) is shown only this once.",
+        "",
+        "Connect an MCP client:",
+        f"  URL     {mcp}",
+        f"  Header  Authorization: Bearer {tok}",
+    ]
+    if ws:
+        lines.append(f"  (this token may use workspaces {', '.join(patterns)}; ?workspace= picks one)")
+    if not url:
+        lines.append("  (replace https://<your-server>: pass --url or set B123D_PRINT_PUBLIC_URL)")
+    lines += [
+        "",
+        "Claude Code, in the project folder (--scope project keeps the token out of ~/.claude.json,",
+        "which other agent tools import):",
+        f'  claude mcp add --scope project --transport http b123d-print "{mcp}" --header "Authorization: Bearer {tok}"',
+        "",
+        "Other clients (Cursor, VS Code, ...; key names vary):",
+        '  {"mcpServers": {"b123d-print": {"type": "http", "url": "' + mcp + '",',
+        '    "headers": {"Authorization": "Bearer ' + tok + '"}}}}',
+        "",
+        f"Revoke it with: b123d-print-mcp token revoke {name}",
+    ]
+    return "\n".join(lines)

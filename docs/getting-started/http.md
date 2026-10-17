@@ -24,8 +24,10 @@ export B123D_PRINT_TOKENS_FILE=~/.config/b123d-print/tokens.toml
 ```
 
 ```bash
-b123d-print-mcp token add claude-laptop --workspace 'claude-*'
+b123d-print-mcp token add claude-laptop --url https://cad.example.com
 ```
+
+It prints the token once, with the client config to paste (see [Tokens](#tokens)).
 
 ```bash
 b123d-print-mcp --transport http --workspace ~/parts
@@ -62,7 +64,7 @@ the log says who did what, and one token can be revoked without touching the oth
 
 | Command | Does |
 | --- | --- |
-| `b123d-print-mcp token add <name> [--workspace PATTERN ...]` | make a token and print it once; `--workspace` names or patterns (`grok-*`), repeatable; default: every workspace |
+| `b123d-print-mcp token add <name> [--workspace PATTERN ...] [--url URL]` | make a token and print it once, with ready-to-paste client config (URL, header, a `claude mcp add --scope project` line, JSON); `--workspace` names or patterns (`grok-*`, `*` for all), repeatable; default: one workspace named like the token, so its clients need no `?workspace=`; `--url` (or `B123D_PRINT_PUBLIC_URL`) is the address in that config |
 | `b123d-print-mcp token list` | names, workspaces and dates (never the tokens) |
 | `b123d-print-mcp token revoke <name>` | delete it |
 
@@ -170,7 +172,7 @@ Claude Code:
 claude mcp add --scope project --transport http b123d-print "http://HOST:8000/mcp?workspace=claude-1" --header "Authorization: Bearer $TOKEN"
 ```
 
-Use the token made for this tool (`token add claude-laptop --workspace 'claude-*'`), and see the
+Use the token made for this tool (`token add claude-laptop` prints this line ready to paste), and see the
 warning under [Tokens](#tokens) about where clients store it.
 
 Clients that take a JSON config with remote servers (Cursor, VS Code, and others; the exact key
@@ -221,7 +223,7 @@ mkdir -p parts config && sudo chown 1000:1000 parts config
 ```
 
 ```bash
-docker compose run --rm b123d-print token add claude-laptop --workspace 'claude-*'
+docker compose run --rm -T b123d-print token add claude-laptop
 ```
 
 ```bash

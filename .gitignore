@@ -6,3 +6,8 @@ out/
 .pytest_cache/
 site/
 .b123d-eval/
+# your own deploy/compose.yaml settings and data
+deploy/.env
+deploy/parts/
+deploy/config/
+deploy/compose.override.yaml

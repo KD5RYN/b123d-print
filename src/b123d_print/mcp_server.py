@@ -848,7 +848,10 @@ def build_parser() -> argparse.ArgumentParser:
     add = tsub.add_parser("add", help="create a token, print it once, store only its SHA-256")
     add.add_argument("name", help="who uses it, e.g. grok-chromebook")
     add.add_argument("--workspace", action="append",
-                     help="workspace name or pattern it may use, e.g. 'grok-*' (repeatable; default: every workspace)")
+                     help="workspace name or pattern it may use, e.g. 'grok-*' or '*' for all (repeatable; "
+                          "default: one workspace named like the token)")
+    add.add_argument("--url", help="the server's address for the printed client config, e.g. https://cad.example.com "
+                                   "(default: $B123D_PRINT_PUBLIC_URL)")
     tsub.add_parser("list", help="the tokens, their workspaces and when they were made (never the tokens)")
     rv = tsub.add_parser("revoke", help="delete a token; the server stops accepting it at once")
     rv.add_argument("name")
