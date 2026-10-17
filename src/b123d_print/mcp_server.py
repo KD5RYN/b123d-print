@@ -1,14 +1,24 @@
-"""b123d-print MCP server (stdio): design, check and export 3D-printable build123d parts from any MCP
+"""b123d-print MCP server: design, check and export 3D-printable build123d parts from any MCP
 client. Part scripts are model-written code: every build runs in a sandboxed subprocess.
 
-    b123d-print-mcp --workspace ~/parts            # or B123D_PRINT_WORKSPACE=~/parts; default: the cwd
+    b123d-print-mcp --workspace ~/parts            # stdio; or B123D_PRINT_WORKSPACE=~/parts; default: the cwd
+    B123D_PRINT_TOKEN=... b123d-print-mcp --transport http --port 8000   # Streamable HTTP at /mcp
+
+Over HTTP every request needs `Authorization: Bearer <token>`, and each client picks its own
+workspace with `/mcp?workspace=<name>` (or the header `X-B123D-Workspace`), which is the folder
+<workspace>/workspaces/<name>; without one, clients share <workspace> itself.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextvars
+import hmac
 import json
 import os
+import re
+import signal
+import sys
 from pathlib import Path
 
 import anyio
@@ -17,7 +27,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import sandbox
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import load_settings, parse_formats
+from .config import WORKSPACE_FILE, load_settings, parse_formats
 from .project import find_parts
 
 MAX_SCRIPT_BYTES = 256_000
@@ -31,12 +41,44 @@ print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from t
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
 before reporting. render_preview and section return PNG images."""
 
-mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS)
-STATE: dict = {"root": Path.cwd(), "timeout": 120.0}
+WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_WORKSPACE: contextvars.ContextVar[str | None] = contextvars.ContextVar("b123d_print_workspace", default=None)
+
+
+async def _request_workspace(ctx, call_next):
+    """HTTP: the workspace this request asked for (?workspace=<name> or X-B123D-Workspace)."""
+    req = getattr(ctx, "request", None)
+    name = None
+    if req is not None and hasattr(req, "query_params"):
+        name = req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
+    token = _WORKSPACE.set(name)
+    try:
+        return await call_next(ctx)
+    finally:
+        _WORKSPACE.reset(token)
+
+
+mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
+STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None}
 
 
 def _root() -> Path:
-    return STATE["root"]
+    name = _WORKSPACE.get()
+    if not name:
+        return STATE["root"]
+    if not WORKSPACE_RE.match(name):
+        raise ToolError(f"bad workspace name {name!r}: letters, digits, '_' and '-', up to 64")
+    ws = STATE["root"] / "workspaces" / name
+    if not (ws / WORKSPACE_FILE).exists():
+        init_workspace(ws)
+    return ws
+
+
+def _limiter() -> anyio.CapacityLimiter:
+    # at most max_builds worker processes at once, across all clients; the rest wait their turn
+    if STATE["limiter"] is None:
+        STATE["limiter"] = anyio.CapacityLimiter(STATE["max_builds"])
+    return STATE["limiter"]
 
 
 def _parts_dir() -> Path:
@@ -53,12 +95,18 @@ def _script(name: str) -> Path:
     return p
 
 
+async def _run(job: dict, out_dir: Path) -> dict:
+    """Every job that runs untrusted code or parses untrusted files goes through here: sandboxed,
+    and under the shared build limit."""
+    root = _root()  # resolve the client's workspace here, not in the worker thread
+    return await anyio.to_thread.run_sync(
+        lambda: sandbox.run_job(job, root, out_dir, STATE["timeout"]), limiter=_limiter()
+    )
+
+
 async def _job(name: str, op: str, **kw) -> dict:
     script = _script(name)
-    job = {"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}
-    return await anyio.to_thread.run_sync(
-        lambda: sandbox.run_job(job, _root(), script.parent / "out", STATE["timeout"])
-    )
+    return await _run({"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}, script.parent / "out")
 
 
 def _error_text(res: dict) -> str:
@@ -92,6 +140,7 @@ def list_parts() -> str:
                          "formats": list(s.formats)},
             "printer": _printer_summary(s),
             "sandbox": sandbox.describe(),
+            "max_concurrent_builds": STATE["max_builds"],
         },
         indent=1,
     )
@@ -117,11 +166,19 @@ def _printer_summary(s) -> dict:
 @mcp.tool()
 def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     """Optional printer profile (default is generic mode). search: find printer names
-    ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config; "generic"
-    clears it). material: pla, petg, asa, abs, tpu or the user's own. Only change the printer
-    when the user asks for it."""
-    from .config import set_user_setting
+    ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config, or over HTTP in
+    this workspace's b123d-print.toml; "generic" clears it). material: pla, petg, asa, abs, tpu or
+    the user's own. Only change the printer when the user asks for it."""
+    from .config import set_user_setting as _set
     from .profiles import load_material, load_printer, search as find
+
+    path = None
+    if STATE["transport"] == "http":  # shared server: never change other clients' printer
+        init_workspace(_root())
+        path = _root() / WORKSPACE_FILE
+
+    def set_user_setting(key, value):
+        _set(key, value, path)
 
     if search and not name:
         hits = find("printers", search)
@@ -255,6 +312,49 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     return "\n".join(out)
 
 
+def _workspace_file(rel: str) -> Path:
+    """A mesh file inside the workspace (relative to it); anything outside is refused."""
+    from .compare import MESH_SUFFIXES
+
+    p = (_root() / rel).resolve()
+    if not p.is_relative_to(_root().resolve()):
+        raise ToolError(f"{rel!r} is outside the workspace; use a path relative to {_root()}")
+    if p.suffix.lower() not in MESH_SUFFIXES:
+        raise ToolError(f"{rel!r}: use one of {', '.join(MESH_SUFFIXES)}")
+    if not p.is_file():
+        raise ToolError(f"no file {rel!r} in the workspace")
+    return p
+
+
+@mcp.tool(structured_output=False)
+async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False) -> list:
+    """Compare a part with a reference model: bounding box, volume and surface area differences,
+    surface distances (mean, Hausdorff) after aligning orientation, an F-score, a 0-100 score and
+    pass/fail. reference, candidate: STL, 3MF or STEP files inside the workspace, as paths relative
+    to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/bracket.3mf'). thresholds: optional
+    overrides, comma-separated name=value (e.g. 'hausdorff_mm=2,volume_rel=0.05'). image: also
+    return a view of the reference colored by deviation (green = matches, red = off)."""
+    from dataclasses import asdict
+
+    from .compare import Criteria
+
+    ref, cand = _workspace_file(reference), _workspace_file(candidate)
+    try:
+        crit = Criteria.from_pairs([t for t in thresholds.split(",") if t.strip()])
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    # the files may come from model-written scripts: parse them in the sandbox, like a build
+    job = {"op": "compare", "reference": str(ref), "candidate": str(cand), "criteria": asdict(crit),
+           "image": f"{cand.stem}_vs_{ref.stem}.png" if image else None}
+    res = await _run(job, cand.parent)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    out = [res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)]
+    if res.get("image"):
+        out.append(Image(path=res["image"]))
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # Resources and prompts (the workflow, model-neutral)
 
@@ -354,26 +454,144 @@ def calibrate_hole_comp() -> str:
    measure the fits and the overhang and bridge limits the same way."""
 
 
+# ---------------------------------------------------------------------------------------------
+# HTTP transport
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request):
+    """Liveness for Docker / monitors; needs no token and reveals nothing but the version."""
+    from starlette.responses import JSONResponse
+
+    return JSONResponse({"status": "ok", "version": _pkg_version()})
+
+
+class RequireToken:
+    """ASGI wrapper: every HTTP request except GET /health needs `Authorization: Bearer <token>`.
+
+    One shared static token. (The SDK's own bearer auth is the OAuth resource-server path: it
+    wants an issuer URL and a token verifier fixed when MCPServer is built, and advertises OAuth
+    metadata that would send clients looking for an authorization server that does not exist.)"""
+
+    def __init__(self, app, token: str):
+        self.app, self.token = app, token.encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] != "/health":
+            scheme, _, cred = dict(scope["headers"]).get(b"authorization", b"").partition(b" ")
+            if scheme.lower() != b"bearer" or not hmac.compare_digest(cred.strip(), self.token):
+                body = b'{"error": "invalid_token", "error_description": "missing or wrong bearer token"}'
+                await send({"type": "http.response.start", "status": 401, "headers": [
+                    (b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
+                    (b"www-authenticate", b'Bearer error="invalid_token"')]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
+def _token() -> str | None:
+    tok = os.environ.get("B123D_PRINT_TOKEN")
+    if not tok and os.environ.get("B123D_PRINT_TOKEN_FILE"):
+        tok = Path(os.environ["B123D_PRINT_TOKEN_FILE"]).expanduser().read_text(encoding="utf-8")
+    return tok.strip() if tok else None
+
+
+def http_app(host: str, token: str | None, allowed_hosts: str | None = None):
+    """The Streamable HTTP app (stateless: survives server restarts, any replica can answer)."""
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    sec = None  # SDK default: Host/Origin checks on when bound to localhost, off otherwise
+    if allowed_hosts:  # e.g. behind a reverse proxy: "cad.example.com,cad.example.com:*"
+        hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
+        sec = TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=hosts)
+    app = mcp.streamable_http_app(stateless_http=True, host=host, transport_security=sec)
+    return RequireToken(app, token) if token else app
+
+
+def _healthcheck(args) -> int:
+    if args.transport != "http":
+        return 0  # stdio: nothing listens; the container is healthy while the process runs
+    import urllib.request
+
+    host = "127.0.0.1" if args.host in ("0.0.0.0", "::", "") else args.host
+    try:
+        with urllib.request.urlopen(f"http://{host}:{args.port}/health", timeout=5) as r:
+            return 0 if r.status == 200 else 1
+    except OSError as e:
+        print(f"unhealthy: {e}", file=sys.stderr)
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The server's command line; the docs' reference is generated from it."""
+    env = os.environ.get
     ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=" ".join(__doc__.split("\n\n")[0].split()))
-    ap.add_argument("--workspace", default=os.environ.get("B123D_PRINT_WORKSPACE"),
+    ap.add_argument("--workspace", default=env("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
-    ap.add_argument("--timeout", type=float, default=float(os.environ.get("B123D_PRINT_TIMEOUT", 120)),
+    ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
                     help="seconds per build (default 120)")
+    ap.add_argument("--max-builds", type=int, default=int(env("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2),
+                    help="build processes at once, across all clients; more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
+    ap.add_argument("--transport", choices=("stdio", "http"), default=env("B123D_PRINT_TRANSPORT", "stdio"),
+                    help="stdio (default) or http: Streamable HTTP at /mcp ($B123D_PRINT_TRANSPORT)")
+    ap.add_argument("--host", default=env("B123D_PRINT_HOST", "127.0.0.1"),
+                    help="http: address to bind (default 127.0.0.1; $B123D_PRINT_HOST)")
+    ap.add_argument("--port", type=int, default=int(env("B123D_PRINT_PORT", 8000)), help="http: port (default 8000; $B123D_PRINT_PORT)")
+    ap.add_argument("--allowed-hosts", default=env("B123D_PRINT_ALLOWED_HOSTS"),
+                    help="http: comma-separated Host header values to accept (DNS-rebinding check; $B123D_PRINT_ALLOWED_HOSTS)")
+    ap.add_argument("--shutdown-grace", type=float, default=float(env("B123D_PRINT_SHUTDOWN_GRACE", 30)),
+                    help="http: on SIGTERM/Ctrl-C, seconds to let running calls finish before their builds are killed (default 30)")
+    ap.add_argument("--insecure-no-auth", action="store_true",
+                    help="http: run without a token (otherwise $B123D_PRINT_TOKEN or $B123D_PRINT_TOKEN_FILE is required)")
+    ap.add_argument("--healthcheck", action="store_true", help="check the running HTTP server's /health and exit (for Docker)")
     return ap
 
 
 def main() -> None:
+    env = os.environ.get
     args = build_parser().parse_args()
+    if args.healthcheck:
+        sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
-    root.mkdir(parents=True, exist_ok=True)
-    if os.environ.get("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1":
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / ".b123d-print-write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+    except OSError as e:
+        sys.exit(f"b123d-print-mcp: workspace {root} is not writable: {e}")
+    if env("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1":
         # containers: keep user settings (printer, calibration) with the mounted parts, not in a
         # home folder that disappears with the container
         os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
-    STATE.update(root=root, timeout=args.timeout)
-    mcp.run("stdio")
+    STATE.update(root=root, timeout=args.timeout, transport=args.transport, max_builds=max(1, args.max_builds))
+    if args.transport == "stdio":
+        mcp.run("stdio")
+        return
+    try:
+        token = _token()
+    except OSError as e:
+        sys.exit(f"b123d-print-mcp: cannot read B123D_PRINT_TOKEN_FILE: {e}")
+    if not token and not args.insecure_no_auth:
+        sys.exit("b123d-print-mcp: HTTP needs a token: set B123D_PRINT_TOKEN (or B123D_PRINT_TOKEN_FILE), "
+                 "e.g. from `python -c 'import secrets; print(secrets.token_urlsafe(32))'`, "
+                 "or pass --insecure-no-auth")
+    if token and len(token) < 16:
+        sys.exit("b123d-print-mcp: B123D_PRINT_TOKEN is too short (use at least 16 characters)")
+    import uvicorn
+
+    print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  "
+          f"auth {'bearer token' if token else 'NONE'}  max builds {STATE['max_builds']}", file=sys.stderr)
+    # uvicorn handles SIGTERM/SIGINT: stop accepting, let running calls finish for up to
+    # --shutdown-grace seconds, then cancel them; any build still running is killed here
+    # uvicorn re-raises the signal after its shutdown; make SIGTERM a normal exit so the cleanup runs
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        uvicorn.run(http_app(args.host, token, args.allowed_hosts), host=args.host, port=args.port,
+                    log_level="info", timeout_graceful_shutdown=args.shutdown_grace)
+    finally:
+        n = sandbox.kill_all()
+        print(f"b123d-print-mcp: stopped{f' ({n} running build(s) killed)' if n else ''}", file=sys.stderr)
 
 
 if __name__ == "__main__":

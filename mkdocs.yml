@@ -47,6 +47,7 @@ nav:
   - Getting started:
       - Quick start: getting-started/quick-start.md
       - Connect your MCP client: getting-started/mcp-clients.md
+      - Over the network (HTTP): getting-started/http.md
       - Docker: getting-started/docker.md
       - CLI and Python: getting-started/cli.md
   - Using it:
@@ -58,6 +59,7 @@ nav:
       - Printer profiles: using/printer-profiles.md
       - The checks: using/checks.md
       - Sandbox: using/sandbox.md
+      - Comparing parts: using/compare.md
   - Writing part scripts:
       - The part script: scripts/convention.md
       - Checks API: scripts/checks-api.md
@@ -70,4 +72,5 @@ nav:
   - Contributing:
       - How to contribute: contributing/index.md
       - Releasing: contributing/releasing.md
+      - Agent evals: contributing/evals.md
   - Credits and licenses: credits.md

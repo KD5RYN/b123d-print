@@ -1,4 +1,4 @@
-"""Worker process: runs ONE operation on a part script and writes a JSON result.
+"""Worker process: runs ONE operation on a part script (or compares two mesh files) and writes a JSON result.
 
 Started by b123d_print.sandbox inside an OS sandbox where one is available. Part scripts are
 model-written code, so before the script is imported this process installs an audit hook that
@@ -40,6 +40,7 @@ from b123d_print.project import (  # noqa: E402
     variants,
 )
 from b123d_print.render import render, report, section_view  # noqa: E402
+from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 
 BLOCKED_EVENTS = (
     "socket.",  # connect, bind, getaddrinfo, ...
@@ -148,7 +149,19 @@ def _parts_for(mod, d, which: str | None):
     return [(named[n], None, n) for n in names]
 
 
+def do_compare(job: dict) -> dict:
+    """Compare two mesh files (agent-exported files are untrusted input to the parsers)."""
+    crit = cmp.Criteria(**job.get("criteria", {}))
+    r = cmp.compare(job["reference"], job["candidate"], criteria=crit)
+    res = {"text": r.text(), **{k: v for k, v in r.as_dict().items() if k in ("metrics", "checks", "alignment", "score", "passed")}}
+    if job.get("image"):
+        res["image"] = str(cmp.render_comparison(job["reference"], job["candidate"], r, Path(job["out_dir"]) / job["image"]))
+    return res
+
+
 def do(job: dict) -> dict:
+    if job["op"] == "compare":
+        return do_compare(job)
     script = Path(job["script"])
     mod = load(script)
     keys = list(variants(mod))

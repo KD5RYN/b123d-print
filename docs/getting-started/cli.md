@@ -44,6 +44,7 @@ b123d-print check
 | `printer use <name> [--material m]` | set the active printer (and material); `generic` clears it |
 | `printer hole-comp <value>` | store a measured hole compensation for the active printer + material |
 | `printer calibrate <key> <value>` | store a value measured with a calibration coupon (`hole_comp`, `hole_comp_h`, `clearance`, `press_fit`, `free_fit`, `pip_clearance`, `max_overhang`, `max_bridge`) for the active printer + material |
+| `compare <reference> <candidate> [--json] [--image png] [--threshold name=value] [--samples n] [--no-icp] [--seed n]` | measure a part against a reference (STL, 3MF or STEP): differences, a 0-100 score, pass/fail; exit code 1 on fail ([comparing parts](../using/compare.md)) |
 | `config` | the settings in effect, and which config files were found |
 | `list` | parts in the workspace |
 | `examples` | the bundled example parts |

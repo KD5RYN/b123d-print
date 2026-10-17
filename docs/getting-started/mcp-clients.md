@@ -27,6 +27,14 @@ In place of `b123d-print` in any config on this page:
 | --- | --- | --- |
 | `--workspace <folder>` | `$B123D_PRINT_WORKSPACE`, else the current folder | where parts and the workspace config live |
 | `--timeout <seconds>` | `$B123D_PRINT_TIMEOUT`, else 120 | time limit for each build, render, section, check or export |
+| `--max-builds <n>` | `$B123D_PRINT_MAX_BUILDS`, else half the CPU cores | build processes at once, across all clients; more calls wait |
+| `--transport <mode>` | `$B123D_PRINT_TRANSPORT`, else `stdio` | `stdio` or `http`; `http` serves Streamable HTTP at `/mcp`: see [Over the network](http.md) |
+| `--host <address>` | `$B123D_PRINT_HOST`, else `127.0.0.1` | HTTP: address to bind |
+| `--port <port>` | `$B123D_PRINT_PORT`, else 8000 | HTTP: port |
+| `--allowed-hosts <names>` | `$B123D_PRINT_ALLOWED_HOSTS` | HTTP: comma-separated `Host` header values to accept (DNS-rebinding check, behind a proxy) |
+| `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
+| `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |
+| `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's health check) |
 
 The full `--help` output is in the [Reference](../reference.md#b123d-print-mcp).
 
@@ -98,6 +106,7 @@ args = ["--from", "b123d-print", "b123d-print-mcp", "--workspace", "/Users/you/p
 
 ## Other clients
 
-Any client that can start a stdio MCP server: command `uvx`, arguments as above.
+Any client that can start a stdio MCP server: command `uvx`, arguments as above. To share one
+server between several clients or machines, see [Over the network (HTTP)](http.md).
 
 To run the server in a container instead of through `uvx`, see [Docker](docker.md).
