@@ -76,7 +76,7 @@ async def flow(c, pw, expect) -> None:
         return pw is None or (pw / rel).exists()
 
     tools = {t.name for t in (await c.list_tools()).tools}
-    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export"}, f"tools: {sorted(tools)}")
+    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export", "compare"}, f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp"}, f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
@@ -119,6 +119,17 @@ async def flow(c, pw, expect) -> None:
            "export honors formats='3mf'")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
+
+    # compare parses the files in the sandbox, like a build
+    res = await c.call_tool("compare", {"reference": "parts/box/out/box.3mf", "candidate": "parts/box/out/box.3mf", "image": True})
+    ok_cmp = "PASS" in text(res) and bool(images(res))
+    expect(ok_cmp, "compare: a part matches itself, with a deviation image" + ("" if ok_cmp else f"\n{text(res)[:3000]}"))
+    res = await c.call_tool("compare", {"reference": "../outside.stl", "candidate": "parts/box/out/box.3mf"})
+    expect(res.is_error and "outside the workspace" in text(res), "compare refuses files outside the workspace")
+    if pw is not None:
+        (pw / "junk.stl").write_bytes(b"\x00" * 80 + b"\xff\xff\xff\x7f" + b"garbage")
+        res = await c.call_tool("compare", {"reference": "junk.stl", "candidate": "parts/box/out/box.3mf"})
+        expect("ERROR" in text(res), "compare reports a corrupt file as an error (parsed in the sandbox)")
 
     # sandbox: a script that tries to reach the network / escape gets a clear error
     evil = BOX + "\nimport urllib.request\nurllib.request.urlopen('http://example.com')\n"

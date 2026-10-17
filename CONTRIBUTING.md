@@ -36,6 +36,7 @@ a missing anchor or a page left out of the navigation fails it.
 | an environment variable (`B123D_PRINT_*`) | the table in `docs/using/settings.md` | `test_env_vars_documented` |
 | a check class or its arguments (`checks.py`, `View`) | `docs/scripts/checks-api.md`, and `docs/using/checks.md` for what it does | `test_check_api_documented` |
 | a bundled example | `docs/scripts/examples.md` (images in `docs/images/`) | `test_examples_documented` |
+| the eval tooling (`eval/`) | `docs/contributing/evals.md` | (none: repo-only; `tests/test_packaging.py` keeps it out of the packages) |
 | the workflow rules | `src/b123d_print/data/AGENTS.md`, then copy it to `AGENTS.md` | `test_agents_md_in_sync` |
 | a docs page | `nav` in `mkdocs.yml`; links in `README.md` point at the site | `test_readme_site_links`, `mkdocs build --strict` |
 

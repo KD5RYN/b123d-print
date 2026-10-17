@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, config, list."""
+"""`b123d-print` command line: init, new, build, check, compare, config, list."""
 
 from __future__ import annotations
 
@@ -169,6 +169,26 @@ def cmd_printer(args) -> int:
     return 1
 
 
+def cmd_compare(args) -> int:
+    from .compare import Criteria, compare, render_comparison
+
+    try:
+        crit = Criteria.from_pairs(args.threshold)
+        r = compare(args.reference, args.candidate, criteria=crit, samples=args.samples, icp=not args.no_icp, seed=args.seed)
+    except (OSError, ValueError) as e:
+        sys.exit(f"compare: {e}")
+    if args.image:
+        render_comparison(args.reference, args.candidate, r, args.image)
+    if args.json:
+        json.dump(r.as_dict(), sys.stdout, indent=1)
+        print()
+    else:
+        print(r.text())
+        if args.image:
+            print(f"deviation view: {args.image}")
+    return 0 if r.passed else 1
+
+
 def _version() -> str:
     from importlib.metadata import version
 
@@ -209,6 +229,16 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
     q = psub.add_parser("hole-comp", help="store a measured hole compensation for the active printer + material")
     q.add_argument("value", type=float)
+    p = sub.add_parser("compare", help="compare a part with a reference (STL/3MF/STEP); exit 1 if it fails the thresholds")
+    p.add_argument("reference")
+    p.add_argument("candidate")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--threshold", action="append", metavar="NAME=VALUE",
+                   help="override a pass/fail threshold, e.g. hausdorff_mm=2 (repeatable; see b123d_print.compare.Criteria)")
+    p.add_argument("--samples", type=int, default=20_000, help="surface points per part (default 20000)")
+    p.add_argument("--no-icp", action="store_true", help="skip the ICP refinement after the axis search")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--image", help="also write a deviation view (PNG) here")
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
@@ -249,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         for p in find_parts(root, parts_dir):
             print(p.relative_to(root))
         return 0
-    return {"build": cmd_build, "check": cmd_check}[args.cmd](args)
+    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":

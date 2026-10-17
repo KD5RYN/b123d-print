@@ -95,12 +95,18 @@ def _script(name: str) -> Path:
     return p
 
 
-async def _job(name: str, op: str, **kw) -> dict:
-    script, root = _script(name), _root()
-    job = {"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}
+async def _run(job: dict, out_dir: Path) -> dict:
+    """Every job that runs untrusted code or parses untrusted files goes through here: sandboxed,
+    and under the shared build limit."""
+    root = _root()  # resolve the client's workspace here, not in the worker thread
     return await anyio.to_thread.run_sync(
-        lambda: sandbox.run_job(job, root, script.parent / "out", STATE["timeout"]), limiter=_limiter()
+        lambda: sandbox.run_job(job, root, out_dir, STATE["timeout"]), limiter=_limiter()
     )
+
+
+async def _job(name: str, op: str, **kw) -> dict:
+    script = _script(name)
+    return await _run({"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}, script.parent / "out")
 
 
 def _error_text(res: dict) -> str:
@@ -300,6 +306,49 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
             out.append(f"  {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, valid={r['valid']}")
         out += [f"  {Path(f).relative_to(_root())}" for f in v["files"]]
     return "\n".join(out)
+
+
+def _workspace_file(rel: str) -> Path:
+    """A mesh file inside the workspace (relative to it); anything outside is refused."""
+    from .compare import MESH_SUFFIXES
+
+    p = (_root() / rel).resolve()
+    if not p.is_relative_to(_root().resolve()):
+        raise ToolError(f"{rel!r} is outside the workspace; use a path relative to {_root()}")
+    if p.suffix.lower() not in MESH_SUFFIXES:
+        raise ToolError(f"{rel!r}: use one of {', '.join(MESH_SUFFIXES)}")
+    if not p.is_file():
+        raise ToolError(f"no file {rel!r} in the workspace")
+    return p
+
+
+@mcp.tool(structured_output=False)
+async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False) -> list:
+    """Compare a part with a reference model: bounding box, volume and surface area differences,
+    surface distances (mean, Hausdorff) after aligning orientation, an F-score, a 0-100 score and
+    pass/fail. reference, candidate: STL, 3MF or STEP files inside the workspace, as paths relative
+    to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/bracket.3mf'). thresholds: optional
+    overrides, comma-separated name=value (e.g. 'hausdorff_mm=2,volume_rel=0.05'). image: also
+    return a view of the reference colored by deviation (green = matches, red = off)."""
+    from dataclasses import asdict
+
+    from .compare import Criteria
+
+    ref, cand = _workspace_file(reference), _workspace_file(candidate)
+    try:
+        crit = Criteria.from_pairs([t for t in thresholds.split(",") if t.strip()])
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    # the files may come from model-written scripts: parse them in the sandbox, like a build
+    job = {"op": "compare", "reference": str(ref), "candidate": str(cand), "criteria": asdict(crit),
+           "image": f"{cand.stem}_vs_{ref.stem}.png" if image else None}
+    res = await _run(job, cand.parent)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    out = [res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)]
+    if res.get("image"):
+        out.append(Image(path=res["image"]))
+    return out
 
 
 # ---------------------------------------------------------------------------------------------

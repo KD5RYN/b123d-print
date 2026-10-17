@@ -55,7 +55,7 @@ def _as_list(parts) -> list[tuple[Part, str, str]]:
         for i, item in enumerate(parts):
             if isinstance(item, (list, tuple)):
                 p, color, label = (list(item) + [None, None])[:3]
-                out.append((p, color or PALETTE[i % len(PALETTE)], label or f"part {i}"))
+                out.append((p, PALETTE[i % len(PALETTE)] if color is None else color, label or f"part {i}"))
             else:
                 out.append((item, PALETTE[i % len(PALETTE)], f"part {i}"))
         return out
@@ -63,21 +63,26 @@ def _as_list(parts) -> list[tuple[Part, str, str]]:
 
 
 def render(parts, path: str | Path, title: str, tol: float = 0.02) -> Path:
-    """Six orthographic/iso views of one part, or several as [(part, color, label)]."""
+    """Six orthographic/iso views of one part, or several as [(part, color, label)]. A part may
+    also be a compare.Mesh, and its color one RGB row per triangle."""
     items = _as_list(parts)
     all_faces, all_colors = [], []
     light = np.array([0.4, -0.6, 0.8])
     light /= np.linalg.norm(light)
     for part, color, _ in items:
-        verts, tris = part.tessellate(tol, 0.2)
-        if not tris:
-            continue
-        v = np.array([[p.X, p.Y, p.Z] for p in verts])
-        faces = v[np.array(tris)]
+        if hasattr(part, "triangles"):  # a compare.Mesh (e.g. a reference STL)
+            faces = part.triangles
+        else:
+            verts, tris = part.tessellate(tol, 0.2)
+            if not tris:
+                continue
+            v = np.array([[p.X, p.Y, p.Z] for p in verts])
+            faces = v[np.array(tris)]
         n = np.cross(faces[:, 1] - faces[:, 0], faces[:, 2] - faces[:, 0])
         n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
         shade = 0.35 + 0.65 * np.abs(n @ light)  # two-sided
-        rgb = np.array(matplotlib.colors.to_rgb(color))
+        # color: any matplotlib color, or one RGB row per triangle
+        rgb = np.asarray(color, dtype=float) if isinstance(color, np.ndarray) else np.array(matplotlib.colors.to_rgb(color))
         all_faces.append(faces)
         all_colors.append(np.c_[shade[:, None] * rgb, np.ones_like(shade)])
     if not all_faces:
@@ -108,7 +113,7 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02) -> Path:
         ax.set_title(name)
     if len(items) > 1:
         fig.legend(
-            handles=[matplotlib.patches.Patch(color=c, label=lbl) for _, c, lbl in items],
+            handles=[matplotlib.patches.Patch(color=c if isinstance(c, str) else c.mean(0), label=lbl) for _, c, lbl in items],
             loc="lower center", ncol=len(items),
         )
     fig.tight_layout()
