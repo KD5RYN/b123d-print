@@ -7,7 +7,7 @@ Releases: [PyPI](https://pypi.org/project/b123d-print/#history) and
 | Installed with | Update |
 | --- | --- |
 | `uvx --from b123d-print ...` (MCP clients) | uvx caches the package: run `uvx --refresh --from b123d-print b123d-print-mcp --help` once, then restart the client |
-| a pinned version `--from b123d-print==0.1.0` | change the version in your client config, restart the client |
+| a pinned version `--from b123d-print==0.2.0` | change the version in your client config, restart the client |
 | `uvx --from git+https://github.com/KD5RYN/b123d-print ...` (unreleased) | `uvx --refresh --from git+https://github.com/KD5RYN/b123d-print b123d-print-mcp --help`, then restart the client |
 | `uv tool install b123d-print` (CLI) | `uv tool upgrade b123d-print` |
 | Docker image `ghcr.io/kd5ryn/b123d-print-mcp` | `docker pull ghcr.io/kd5ryn/b123d-print-mcp`, restart the client |

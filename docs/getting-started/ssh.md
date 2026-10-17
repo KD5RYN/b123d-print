@@ -23,8 +23,7 @@ uv tool install b123d-print
 ```
 
 !!! note
-    SSH mode is newer than the 0.1.0 release. Until the next one, install from git:
-    `uv tool install git+https://github.com/KD5RYN/b123d-print`.
+    SSH mode needs b123d-print **0.2.0 or later**.
 
 **2. Copy the laptop's public key** to the server (e.g. `scp ~/.ssh/id_ed25519.pub server:laptop.pub`),
 then on the server:

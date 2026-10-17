@@ -18,7 +18,7 @@ In place of `b123d-print` in any config on this page:
 | `--from` | Runs |
 | --- | --- |
 | `b123d-print` | the latest release (uvx caches it; see [Updating](../updating.md)) |
-| `b123d-print==0.1.0` | exactly that release |
+| `b123d-print==0.2.0` | exactly that release |
 | `git+https://github.com/KD5RYN/b123d-print` | the latest unreleased code on `main` |
 
 ## Server options
