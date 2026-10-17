@@ -76,7 +76,7 @@ replaces the default the same way.
 | `B123D_PRINT_PRINTER` | overrides `printer` |
 | `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
 | `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given |
-| `B123D_PRINT_MAX_BUILDS` | the MCP server's `--max-builds` |
+| `B123D_PRINT_MAX_BUILDS` | the MCP server's `--max-builds`; also holds across all server processes of the user (one per SSH connection) |
 | `B123D_PRINT_TRANSPORT` | the MCP server's `--transport` (`stdio` or `http`) |
 | `B123D_PRINT_HOST` | the MCP server's `--host` (HTTP; the Docker image sets `0.0.0.0`) |
 | `B123D_PRINT_PORT` | the MCP server's `--port` (HTTP) |

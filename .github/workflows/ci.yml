@@ -43,6 +43,26 @@ jobs:
         run: uv run python tests/mcp_smoke.py --split
         env:
           B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
+      - name: MCP end to end through the SSH forced command (sshd simulated)
+        run: uv run python tests/mcp_smoke.py --ssh
+        env:
+          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
+
+  ssh:
+    # a real sshd (as the runner user, on localhost) and a key line written by setup-ssh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap openssh-server
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo mkdir -p /run/sshd
+      - run: uv sync --frozen
+      - name: MCP end to end over real ssh
+        run: sh tests/ssh_e2e.sh
+        env:
+          B123D_PRINT_EXPECT_SANDBOX: bubblewrap
 
   wheel:
     runs-on: ubuntu-latest

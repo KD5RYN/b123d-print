@@ -33,8 +33,9 @@ It is not a general CAD framework.
 - **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from
   Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part
   scripts are model-written code: they run in a sandbox with a timeout and no network. Runs
-  per client over stdio, or as one shared [HTTP service](https://kd5ryn.github.io/b123d-print/getting-started/http/) with
-  a token and a workspace per client.
+  per client over stdio, on a home server [over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/)
+  (one key and workspace per machine), or as one shared
+  [HTTP service](https://kd5ryn.github.io/b123d-print/getting-started/http/) with a token and a workspace per client.
 - **`compare`** — measure a part against a reference STL, 3MF or STEP: size, volume and surface
   differences, a 0–100 score, pass/fail, and a deviation view
   ([comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/)).
@@ -66,6 +67,10 @@ It is not a general CAD framework.
 3. Restart the client and ask: *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."*
    Files land in `/Users/you/parts/parts/<name>/out/`.
 
+Parts on a home server instead? [Remote over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/):
+`b123d-print setup-ssh --key laptop.pub --workspace laptop --add` on the server, then
+`claude mcp add b123d-print -- ssh you@server` (or the same `ssh` command in any client).
+
 The first start downloads a few hundred MB (mostly OpenCascade, the geometry kernel) and can
 take a few minutes; later starts are fast. See [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) if your
 client gives up waiting.
@@ -79,7 +84,7 @@ client gives up waiting.
 
 | | |
 | --- | --- |
-| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
+| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [Remote over SSH (recommended)](https://kd5ryn.github.io/b123d-print/getting-started/ssh/) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) |
 | **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |
 | **More** | [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |

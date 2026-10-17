@@ -20,7 +20,9 @@ defense in depth, not a boundary on its own.
 the Docker image does this because the container is the sandbox.
 
 Over [HTTP](../getting-started/http.md) the same sandbox applies to every client's builds; the
-bearer token decides who may run them at all, and `--max-builds` how many run at once.
+bearer token decides who may run them at all, and `--max-builds` how many run at once. Over
+[SSH](../getting-started/ssh.md) the key's `authorized_keys` line decides, and the same limit
+holds across every connection.
 
 The [CLI](../getting-started/cli.md) does **not** sandbox: it runs your own scripts like any
 Python.

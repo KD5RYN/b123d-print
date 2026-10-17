@@ -1,6 +1,7 @@
 # Over the network (HTTP)
 
-By default the MCP server talks over stdio: each client starts its own copy. With
+By default the MCP server talks over stdio: each client starts its own copy. For a home server
+and a few of your own machines, [SSH](ssh.md) is simpler. With
 `--transport http` one server runs as a service and several clients (or agents, or eval runs)
 connect to it over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http).
 Use it when the parts should live on one machine, such as a home server, while the clients run
@@ -156,7 +157,7 @@ Over HTTP the files the server writes stay on the server. The tools hand them to
   embedded models cost a lot of context.
 
 Only the files in `parts/<part>/out/` are served: not the part scripts and nothing outside the
-workspace. Agents should never need SSH access to the server.
+workspace. Agents never need a shell on the server.
 
 **Behind a reverse proxy**, set `--public-url https://cad.example.com` (or
 `B123D_PRINT_PUBLIC_URL`) so the links point at the proxy. Without it the server uses the
