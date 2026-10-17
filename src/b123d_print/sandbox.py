@@ -20,7 +20,11 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import threading
 from pathlib import Path
+
+_LIVE: set[subprocess.Popen] = set()  # running workers, so a server shutdown can stop them
+_LIVE_LOCK = threading.Lock()
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "b123d-print"
 
@@ -140,12 +144,19 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
 
         proc = subprocess.Popen(cmd, env=env, cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 start_new_session=True, preexec_fn=limits)
+        with _LIVE_LOCK:
+            _LIVE.add(proc)
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
+            _killpg(proc)
             stdout, stderr = proc.communicate()
             return {"ok": False, "error": f"timed out after {timeout:g} s (killed)", "log": _tail(stdout, stderr)}
+        finally:
+            with _LIVE_LOCK:
+                _LIVE.discard(proc)
+        if proc.returncode in (-signal.SIGKILL, -signal.SIGTERM) and not Path(job["result"]).exists():
+            return {"ok": False, "error": "worker was killed (server shutting down, or out of memory)", "log": _tail(stdout, stderr)}
         rp = Path(job["result"])
         if not rp.exists():
             return {"ok": False, "error": f"worker exited with code {proc.returncode} and no result",
@@ -156,6 +167,22 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
             res["log"] = log
         res["sandbox"] = k
         return res
+
+
+def _killpg(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def kill_all() -> int:
+    """Stop every running worker (server shutdown). Returns how many were running."""
+    with _LIVE_LOCK:
+        procs = list(_LIVE)
+    for p in procs:
+        _killpg(p)
+    return len(procs)
 
 
 def _tail(stdout: bytes, stderr: bytes, n: int = 4000) -> str:

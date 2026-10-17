@@ -227,6 +227,51 @@ async def http_checks(url: str, token: str, expect) -> None:
         expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
 
 
+SPIN = """import os, pathlib
+out = pathlib.Path(__file__).parent / "out"
+out.mkdir(exist_ok=True)
+(out / "pid").write_text(str(os.getpid()))
+while True:
+    pass
+"""
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None:
+    """SIGTERM while a build runs: the server waits --shutdown-grace, kills the build, exits 0."""
+    pidfile = ws / "workspaces/shutdown/parts/spin/out/pid"
+    async with http_client(with_workspace(url, "shutdown"), token) as c:
+        await c.call_tool("new_part", {"name": "spin"})
+        await c.call_tool("write_part", {"name": "spin", "code": SPIN})
+        call = asyncio.ensure_future(c.call_tool("build_part", {"name": "spin"}))
+        for _ in range(150):
+            await asyncio.sleep(0.2)
+            if pidfile.exists() and pidfile.read_text():
+                break
+        pid = int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text() else 0
+        expect(pid and alive(pid), "a build is running before shutdown")
+        t0 = time.monotonic()
+        server.terminate()
+        code = await asyncio.to_thread(server.wait, 30)
+        took = time.monotonic() - t0
+        try:
+            await asyncio.wait_for(call, 10)
+        except BaseException:
+            pass
+    expect(code == 0 and took < 15, f"SIGTERM: server exits cleanly after the grace period (code {code}, {took:.1f} s)")
+    time.sleep(0.5)
+    expect(pid and not alive(pid), "no build process left behind")
+
+
 async def main(keep: bool, http: bool) -> None:
     ws = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-"))
     # B123D_PRINT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/b123d_print-0.1.0-py3-none-any.whl b123d-print-mcp"
@@ -247,7 +292,7 @@ async def main(keep: bool, http: bool) -> None:
         name = f"smoke-{secrets.token_hex(3)}"
         if not url:  # start our own HTTP server on a free port
             port, token = free_port(), secrets.token_urlsafe(24)
-            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port)],
+            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port), "--shutdown-grace", "3"],
                                       env={**env, "B123D_PRINT_TOKEN": token})
             url = f"http://127.0.0.1:{port}/mcp"
             for _ in range(300):  # first start can be slow (imports, bytecode)
@@ -269,6 +314,9 @@ async def main(keep: bool, http: bool) -> None:
             await http_checks(url, token, expect)
             async with http_client(with_workspace(url, name), token) as c:
                 await flow(c, pw, expect)
+            if server:
+                await shutdown_check(server, url, token, ws, expect)
+                server = None
         finally:
             if server:
                 server.terminate()
