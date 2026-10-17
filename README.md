@@ -20,14 +20,16 @@ and exports the formats you pick: STEP, STL, 3MF, PNG.
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
 
 **Scope: parts for FDM 3D printing, nothing else.** Everything is built around a printed part:
-print orientation with the bed at Z=0, hole compensation, mating clearance, and overhang,
-wall-thickness and overlap checks. It is not a general CAD framework.
+print orientation with the bed at Z=0, hole compensation, mating clearance, calibration coupons,
+and print checks built on [sourced FDM design rules](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/).
+It is not a general CAD framework.
 
 ## What's in it
 
 - **`b123d-print` package + CLI** — export, 6-view renders, colored multi-part cross-sections,
-  and print checks: **overlap** between mating parts, **overhang** in print orientation, **wall
-  thickness** around cuts, **probes** ("is the roof closed?").
+  and print checks: **overlap** between mating parts, **overhang** and **bridges** in print
+  orientation, **thin features** and **wall thickness** around cuts, **holes** (round tops that
+  sag), **bed-edge** fillets, **gaps** between moving parts, **probes** ("is the roof closed?").
 - **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from
   Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part
   scripts are model-written code: they run in a sandbox with a timeout and no network. Runs
@@ -39,7 +41,8 @@ wall-thickness and overlap checks. It is not a general CAD framework.
 - **The workflow, model-neutral** — MCP prompts plus an [`AGENTS.md`](AGENTS.md) any agent can
   read. The rules come from real prints; one exists because a part broke through a 0.05 mm skin
   that no render showed.
-- **Examples** — four parts designed this way and printed, plus a hole calibration coupon, in
+- **Examples** — four parts designed this way and printed, plus calibration coupons for holes,
+  fits, and overhangs and bridges, in
   [`src/b123d_print/examples/`](src/b123d_print/examples/).
 
 ## Quick start
@@ -78,7 +81,7 @@ client gives up waiting.
 | --- | --- |
 | **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) |
-| **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) |
+| **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |
 | **More** | [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |
 
 ## Status

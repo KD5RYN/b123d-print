@@ -1,0 +1,41 @@
+name: Orca printer sync
+
+# Monthly: regenerate src/b123d_print/data/printers_orca.json from OrcaSlicer's printer profiles
+# (facts only, see THIRD_PARTY.md) and open a PR when the printer data changed.
+# PRs opened with GITHUB_TOKEN do not trigger other workflows, so this job runs the profile
+# tests itself; close and reopen the PR to run the full CI on it.
+on:
+  schedule:
+    - cron: "17 6 1 * *"  # 06:17 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Regenerate the printer table from OrcaSlicer main
+        run: python3 tools/sync_orca_printers.py
+      - name: Profile tests
+        run: uv run pytest -q tests/test_profiles.py
+      - id: diff
+        run: |
+          if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          python3 -c "import json; d=json.load(open('src/b123d_print/data/printers_orca.json')); print('commit=' + d['commit'][:12]); print('count=%d' % len(d['printers']))" >> "$GITHUB_OUTPUT"
+      - if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/orca-printers
+          delete-branch: true
+          commit-message: "Printer table: sync from OrcaSlicer ${{ steps.diff.outputs.commit }}"
+          title: "Printer table: sync from OrcaSlicer ${{ steps.diff.outputs.commit }}"
+          body: |
+            Monthly regeneration of `src/b123d_print/data/printers_orca.json` by `tools/sync_orca_printers.py`
+            from OrcaSlicer ${{ steps.diff.outputs.commit }} (${{ steps.diff.outputs.count }} printer models; facts only).
+
+            The profile tests passed in the sync job. Close and reopen this PR to run the full CI.

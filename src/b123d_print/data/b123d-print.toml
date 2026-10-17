@@ -7,7 +7,12 @@ parts_dir = "parts"
 [print]
 # Printer-specific: usually better in the user config. Measure it with the hole_coupon example.
 # hole_comp = 0.0     # mm added to hole diameters when cutting
-# clearance = 0.2     # mm default gap between mating parts
+# hole_comp_h = 0.0   # the same for horizontal holes (default: hole_comp)
+# clearance = 0.2     # mm per side between mating parts that slide (the default fit)
+# press_fit = 0.05    # mm per side, pressed together
+# free_fit = 0.3      # mm per side, turns or moves freely
+# pip_clearance = 0.3 # mm between parts printed in place
 # min_wall = 0.8      # mm; Wall checks fail below this unless they set their own minimum
 # max_overhang = 45   # deg from vertical
+# max_bridge = 10     # mm; longer bridges warn
 # formats = ["step", "stl", "3mf", "png"]   # what export writes; e.g. ["3mf", "png"]

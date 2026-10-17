@@ -4,8 +4,11 @@ Lookup order, later wins:
   1. built-in defaults (below)
   2. user config:      $XDG_CONFIG_HOME/b123d-print/config.toml (~/.config/b123d-print/config.toml)
   3. workspace config: the nearest b123d-print.toml at or above the part script (or the cwd)
-  4. environment:      B123D_PRINT_HOLE_COMP, B123D_PRINT_CLEARANCE, B123D_PRINT_MIN_WALL,
-                       B123D_PRINT_MAX_OVERHANG, B123D_PRINT_FORMATS (e.g. "step,3mf")
+  4. environment:      B123D_PRINT_HOLE_COMP, B123D_PRINT_CLEARANCE, ... (one per number, see
+                       _ENV), B123D_PRINT_FORMATS (e.g. "step,3mf")
+
+Clearances are per side. With a printer profile set, values measured with the calibration
+coupons (calibration.toml, per printer + material) replace the defaults.
 
 Hole compensation is a property of *your* printer + material, so it normally lives in the user
 config. It defaults to 0: measure it with examples/hole_coupon before trusting any value.
@@ -25,9 +28,14 @@ FORMATS = ("step", "stl", "3mf", "png")  # every export format; `formats` picks 
 @dataclass(frozen=True)
 class Settings:
     hole_comp: float = 0.0  # mm added to hole *diameters* when cutting (printed holes come out small)
-    clearance: float = 0.2  # mm default gap between mating parts
+    hole_comp_h: float | None = None  # the same for horizontal holes (axis in XY); default: hole_comp
+    clearance: float = 0.2  # mm per side between mating parts that slide (the default fit)
+    press_fit: float = 0.05  # mm per side for parts pressed together
+    free_fit: float = 0.3  # mm per side for parts that turn or move freely
+    pip_clearance: float = 0.3  # mm between parts printed in place; the gap check fails below it
     min_wall: float = 0.8  # mm; wall checks fail below this unless a check sets its own minimum
     max_overhang: float = 45.0  # deg from vertical; steeper downward faces are flagged
+    max_bridge: float = 10.0  # mm; longer bridges (flat ceilings between two walls) warn
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
@@ -37,10 +45,19 @@ class Settings:
 
 _ENV = {
     "hole_comp": "B123D_PRINT_HOLE_COMP",
+    "hole_comp_h": "B123D_PRINT_HOLE_COMP_H",
     "clearance": "B123D_PRINT_CLEARANCE",
+    "press_fit": "B123D_PRINT_PRESS_FIT",
+    "free_fit": "B123D_PRINT_FREE_FIT",
+    "pip_clearance": "B123D_PRINT_PIP_CLEARANCE",
     "min_wall": "B123D_PRINT_MIN_WALL",
     "max_overhang": "B123D_PRINT_MAX_OVERHANG",
+    "max_bridge": "B123D_PRINT_MAX_BRIDGE",
 }
+NUMBERS = tuple(_ENV)  # the numeric settings
+# measured per printer + material (calibration.toml): a calibration for the active printer beats
+# the same key in the user config, but not the workspace config or the environment
+CALIBRATED = ("hole_comp", "hole_comp_h", "clearance", "press_fit", "free_fit", "pip_clearance", "max_overhang", "max_bridge")
 
 
 def user_config_path() -> Path:
@@ -71,7 +88,7 @@ def _read(path: Path) -> dict:
         raise ValueError(f"{path}: unknown setting(s) {sorted(unknown)}; known: {sorted(names)}")
     if "formats" in flat:
         flat["formats"] = parse_formats(flat["formats"], str(path))
-    for k in ("hole_comp", "clearance", "min_wall", "max_overhang"):
+    for k in NUMBERS:
         if k in flat:
             try:
                 flat[k] = float(flat[k])
@@ -98,16 +115,16 @@ def parse_formats(value, where: str = "formats") -> tuple:
 def load_settings(start: str | Path | None = None) -> Settings:
     """Settings for a part script (pass its __file__) or a folder.
 
-    With a printer profile set, min_wall and max_overhang come from it unless set explicitly, and
-    hole_comp comes from the calibration for that printer + material unless the workspace or
-    the environment sets it."""
+    With a printer profile set, min_wall, max_overhang and max_bridge come from it unless set
+    explicitly, and the CALIBRATED values from the calibration for that printer + material unless
+    the workspace or the environment sets them. hole_comp_h defaults to hole_comp."""
     s = Settings()
     explicit: set[str] = set()
     user = user_config_path()
     if user.is_file():
         u = _read(user)
         s = replace(s, **u)
-        explicit |= set(u) - {"hole_comp"}  # a calibration for the active printer beats the global value
+        explicit |= set(u) - set(CALIBRATED)  # a calibration for the active printer beats the global value
     ws = find_workspace(start)
     if ws is not None:
         w = _read(ws / WORKSPACE_FILE)
@@ -119,34 +136,39 @@ def load_settings(start: str | Path | None = None) -> Settings:
         if os.environ.get(var):
             explicit.add(name)
     if s.printer:
-        from .profiles import calibrated_hole_comp, load_printer
+        from .profiles import load_printer
 
         p = load_printer(s.printer)
-        if "min_wall" not in explicit:
-            s = replace(s, min_wall=p.min_wall)
-        if "max_overhang" not in explicit:
-            s = replace(s, max_overhang=p.max_overhang)
-        if "hole_comp" not in explicit:
-            hc = calibrated_hole_comp(s.printer, s.material)
-            if hc is not None:
-                s = replace(s, hole_comp=hc)
+        for k in ("min_wall", "max_overhang", "max_bridge"):
+            if k not in explicit:
+                s = replace(s, **{k: getattr(p, k)})
     if s.material and "clearance" not in explicit:
         from .profiles import load_material
 
         m = load_material(s.material)
         if m.clearance is not None:
             s = replace(s, clearance=m.clearance)
+    if s.printer:
+        from .profiles import calibrated
+
+        cal = {k: v for k, v in calibrated(s.printer, s.material).items() if k not in explicit}
+        if cal:
+            s = replace(s, **cal)
     for name, var in _ENV.items():
         if os.environ.get(var):
             s = replace(s, **{name: float(os.environ[var])})
+    if s.hole_comp_h is None:
+        s = replace(s, hole_comp_h=s.hole_comp)
     if os.environ.get("B123D_PRINT_FORMATS"):
         s = replace(s, formats=parse_formats(os.environ["B123D_PRINT_FORMATS"], "B123D_PRINT_FORMATS"))
     return s
 
 
-def hole_comp(script_file: str | Path | None = None) -> float:
-    """HOLE_COMP for a part script: `HOLE_COMP: float = hole_comp(__file__)`."""
-    return load_settings(script_file).hole_comp
+def hole_comp(script_file: str | Path | None = None, horizontal: bool = False) -> float:
+    """HOLE_COMP for a part script: `HOLE_COMP: float = hole_comp(__file__)`; with
+    horizontal=True the value for holes whose axis lies in XY (hole_comp_h)."""
+    s = load_settings(script_file)
+    return s.hole_comp_h if horizontal else s.hole_comp
 
 
 def printer(script_file: str | Path | None = None):

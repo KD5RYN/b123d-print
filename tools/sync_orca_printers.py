@@ -103,11 +103,17 @@ def main() -> int:
             "round_bed": len(pts) > 8,  # deltas: circle given as a polygon
             "nozzle": nozzle,
         }
+    printers = dict(sorted(printers.items()))
+    if OUT.is_file():
+        old = json.loads(OUT.read_text(encoding="utf-8"))
+        if old.get("printers") == printers:
+            print(f"{len(printers)} printer models, unchanged since {old.get('commit', '?')[:12]}; file left as is")
+            return 0
     data = {
         "source": f"OrcaSlicer resources/profiles at {REPO.removesuffix('.git')}/tree/{commit}",
         "license_note": "Facts (build volume, nozzle) extracted from OrcaSlicer's AGPL-3.0 profiles; no files copied.",
         "commit": commit,
-        "printers": dict(sorted(printers.items())),
+        "printers": printers,
     }
     OUT.write_text(json.dumps(data, indent=0, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"{len(printers)} printer models from {commit[:12]} -> {OUT}")

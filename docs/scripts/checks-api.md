@@ -5,7 +5,7 @@
 page lists their arguments.
 
 ```python
-from b123d_print import Overhang, Probe, Wall
+from b123d_print import Gap, Overhang, Probe, ThinFeature, Wall
 
 def checks(d):
     return [
@@ -17,8 +17,15 @@ def checks(d):
         Overhang("cover", fail=True),
         # material must exist (or not) in a small box: "roof is closed", "channel is clear"
         Probe("cover", (0, 10, 70), (1, 1, 0.5), expect="solid", label="roof closed"),
+        # automatic, listed only to change it: a living hinge is thin on purpose
+        ThinFeature("lid", ignore=[((0, 20, 0.25), (40, 2, 0.6))]),
+        # the gap between two assembly parts inside a box: the lid's sliding fit
+        Gap("lid", "base", min=d.CLEARANCE, max=d.CLEARANCE + 0.1, within=((0, 0, 30), (60, 60, 4))),
     ]
 ```
+
+The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `Gap`, `Fit`) run for every
+part; list one for a part to replace its automatic copy with your arguments.
 
 `part` is a name from `build()` (a script that returns a single part uses `""`).
 
@@ -49,7 +56,56 @@ for every part a script does not list.
 | `fail` | `False` | fail instead of warn: for parts meant to print without supports |
 | `min_area` | `1.0` | mm²; smaller flagged areas are listed but not counted |
 | `ignore_below` | `0.0` | mm above the bed to ignore, e.g. `1.0` to accept a small fillet on a bed edge |
-| `bridges_ok` | `True` | flat ceilings never fail; a bridge between two walls prints, one hanging off a single wall does not, so look at a section |
+| `bridges_ok` | `True` | bridges (flat ceilings resting on walls on two opposite sides) never fail; a cantilever (hanging off one side) is an overhang |
+| `max_bridge` | `None` | mm; longer bridges warn (default: the `max_bridge` setting) |
+
+## `ThinFeature`
+
+Walls thinner than one line width fail, thinner than `min_wall` warn; knife edges warn.
+Automatic for every part.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name |
+| `min` | `None` | warn below, mm (default: the `min_wall` setting) |
+| `fail_below` | `None` | fail below, mm (default: one line width, 0.45 in generic mode) |
+| `ignore` | `()` | boxes `((cx, cy, cz), (sx, sy, sz))` where thin is intended: a living hinge, engraved labels |
+| `step` | `2.0` | mm between the extra sections |
+| `planes` | `("XY", "XZ", "YZ")` | section planes; `()` turns the check off |
+
+## `Holes`
+
+Lists round holes; warns on horizontal holes with a round top and on tiny holes. Automatic for
+every part.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name |
+| `min_diameter` | `1.0` | mm; smaller holes warn |
+| `round_top_from` | `2.0` | mm; horizontal holes this size and up need a teardrop or flat roof |
+
+## `BedEdge`
+
+Warns on fillets (curved faces) that start on the bed. Automatic for every part.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name |
+| `min_area` | `0.2` | mm² of steep surface before a face counts |
+
+## `Gap`
+
+The smallest gap between two parts, or between the solids of one part printed in place.
+Automatic (with `other=None`) for every part made of several solids.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name or `assembly(d)` label (assembled position preferred), or a `Part` |
+| `other` | `None` | the second part; `None`: between the separate solids of `part` |
+| `min` | `None` | fail below, mm (default: `pip_clearance` for solids of one part, `clearance` for two parts) |
+| `max` | `None` | fail above, mm |
+| `within` | `None` | box `((cx, cy, cz), (sx, sy, sz))`: only measure inside it, e.g. one mating face |
+| `label` | `""` | shown in the report |
 
 ## `Probe`
 

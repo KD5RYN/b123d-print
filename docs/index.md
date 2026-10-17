@@ -13,14 +13,17 @@ and exports the formats you pick: STEP, STL, 3MF, PNG.
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
 
 **Scope: parts for FDM 3D printing, nothing else.** Everything is built around a printed part:
-print orientation with the bed at Z=0, hole compensation, mating clearance, and overhang,
-wall-thickness and overlap checks. It is not a general CAD framework.
+print orientation with the bed at Z=0, hole compensation, mating clearance, calibration coupons,
+and print checks built on [sourced FDM design rules](BEST_PRACTICES.md). It is not a general CAD
+framework.
 
 ## What's in it
 
 - **`b123d-print` package + CLI** — export, 6-view renders, colored multi-part cross-sections,
-  and print checks: **overlap** between mating parts, **overhang** in print orientation, **wall
-  thickness** around cuts, **probes** ("is the roof closed?"). See [CLI and Python](getting-started/cli.md).
+  and print checks: **overlap** between mating parts, **overhang** and **bridges** in print
+  orientation, **thin features** and **wall thickness** around cuts, **holes** (round tops that
+  sag), **bed-edge** fillets, **gaps** between moving parts, **probes** ("is the roof closed?").
+  See [The checks](using/checks.md) and [CLI and Python](getting-started/cli.md).
 - **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from
   Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part
   scripts are model-written code: they run in a [sandbox](using/sandbox.md) with a timeout and
@@ -31,8 +34,8 @@ wall-thickness and overlap checks. It is not a general CAD framework.
 - **The workflow, model-neutral** — [MCP prompts](using/tools.md#prompts) plus an
   [`AGENTS.md`](scripts/rules.md) any agent can read. The rules come from real prints; one exists
   because a part broke through a 0.05 mm skin that no render showed.
-- **[Examples](scripts/examples.md)** — four parts designed this way and printed, plus a hole
-  calibration coupon.
+- **[Examples](scripts/examples.md)** — four parts designed this way and printed, plus
+  calibration coupons for holes, fits, and overhangs and bridges.
 
 ## Where to start
 

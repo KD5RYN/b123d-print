@@ -32,6 +32,7 @@ class Printer:
     nozzle: float = 0.4
     layer_height: float = 0.2
     max_overhang: float = 45.0  # deg from vertical that prints cleanly without supports
+    max_bridge: float = 10.0  # mm a bridge spans cleanly (design guides: 5-10; measure with the bridge coupon)
     source: str = ""  # where the numbers came from
 
     @property
@@ -46,7 +47,7 @@ class Printer:
         bed = f"Ø{self.bed_x:g}" if self.round_bed else f"{self.bed_x:g} x {self.bed_y:g}"
         return (f"{self.label or self.name}: build {bed} x {self.height:g} mm, nozzle {self.nozzle:g}, "
                 f"layer {self.layer_height:g}, line ~{self.line_width:g}, min wall {self.min_wall:g}, "
-                f"overhang <= {self.max_overhang:g} deg")
+                f"overhang <= {self.max_overhang:g} deg, bridge <= {self.max_bridge:g} mm")
 
     def as_dict(self) -> dict:
         return {**asdict(self), "line_width": self.line_width, "min_wall": self.min_wall}
@@ -155,32 +156,55 @@ def save_user(obj, kind: str) -> Path:
     return p
 
 
-# --- calibration: hole compensation per printer + material ------------------------------------
+# --- calibration: values measured with the coupons, per printer + material ---------------------
 
 
 def calibration_path() -> Path:
     return user_config_path().parent / "calibration.toml"
 
 
-def calibrated_hole_comp(printer: str, material: str) -> float | None:
+def _read_calibration() -> dict:
     p = calibration_path()
-    if not (printer and p.is_file()):
-        return None
-    raw = tomllib.loads(p.read_text(encoding="utf-8"))
-    entry = raw.get(f"{printer}/{material or 'any'}") or raw.get(f"{printer}/any")
-    return float(entry["hole_comp"]) if entry and "hole_comp" in entry else None
+    return tomllib.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+
+
+def calibrated(printer: str, material: str) -> dict[str, float]:
+    """Measured values for printer + material ("<printer>/<material>", falling back to
+    "<printer>/any" key by key)."""
+    from .config import CALIBRATED
+
+    if not printer:
+        return {}
+    raw = _read_calibration()
+    out = {}
+    for entry in (raw.get(f"{printer}/any", {}), raw.get(f"{printer}/{material or 'any'}", {})):
+        out.update({k: float(v) for k, v in entry.items() if k in CALIBRATED})
+    return out
+
+
+def calibrated_hole_comp(printer: str, material: str) -> float | None:
+    return calibrated(printer, material).get("hole_comp")
+
+
+def save_calibration(printer: str, material: str, key: str, value: float) -> Path:
+    """Store one measured value for printer + material, keeping the others."""
+    from .config import CALIBRATED
+
+    if key not in CALIBRATED:
+        raise ValueError(f"{key!r} is not a calibration value; choose from {list(CALIBRATED)}")
+    p = calibration_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    raw = _read_calibration()
+    raw.setdefault(f"{printer}/{material or 'any'}", {})[key] = float(value)
+    out = ["# Measured with the calibration coupons, per printer/material (b123d-print printer calibrate).\n"]
+    for k in sorted(raw):
+        out.append(f'["{k}"]\n' + "".join(f"{kk} = {float(vv):g}\n" for kk, vv in sorted(raw[k].items())))
+    p.write_text("\n".join(out), encoding="utf-8")
+    return p
 
 
 def save_hole_comp(printer: str, material: str, value: float) -> Path:
-    p = calibration_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    raw = tomllib.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
-    raw[f"{printer}/{material or 'any'}"] = {"hole_comp": float(value)}
-    out = ["# Hole compensation per printer/material, measured with the hole_coupon example.\n"]
-    for k in sorted(raw):
-        out.append(f'["{k}"]\nhole_comp = {raw[k]["hole_comp"]:g}\n')
-    p.write_text("\n".join(out), encoding="utf-8")
-    return p
+    return save_calibration(printer, material, "hole_comp", value)
 
 
 # --- fit in the build volume --------------------------------------------------------------------

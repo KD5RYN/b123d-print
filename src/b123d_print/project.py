@@ -12,7 +12,8 @@ and optionally:
     def assembly(d) -> list[(Part, color, label)]   # assembled position, incl. stand-ins for
                                                     # the things it mates with -> overlap check
     def views(d) -> list[View]                      # section views saved on export
-    def checks(d) -> list[Overhang | Wall | Overlap]  # default: Overhang (report) per part
+    def checks(d) -> list[Wall | Overhang | Gap | ...]  # automatic per part: Overhang, ThinFeature,
+                                                    # Holes, BedEdge, Gap, Fit
 
     if __name__ == "__main__":
         from b123d_print import run
@@ -98,12 +99,18 @@ def out_name(stem: str, key: str, part: str) -> str:
 def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     f = getattr(mod, "checks", None)
     specs = list(f(d) if f else [])
-    covered = {s.part for s in specs if isinstance(s, ck.Overhang)}
+    covered = {s.part or "part" for s in specs if isinstance(s, ck.Overhang)}
     specs += [ck.Overhang(p) for p in parts if p not in covered]  # always report overhangs
     if asm and not any(isinstance(s, ck.Overlap) for s in specs):
         specs.append(ck.Overlap())
-    fitted = {s.part for s in specs if isinstance(s, ck.Fit)}
+    fitted = {s.part or "part" for s in specs if isinstance(s, ck.Fit)}
     specs += [ck.Fit(p) for p in parts if p not in fitted]  # no-op without a printer profile
+    # automatic per-part checks; a script lists one itself to change its arguments
+    for cls in (ck.ThinFeature, ck.Holes, ck.BedEdge):
+        listed = {s.part or "part" for s in specs if isinstance(s, cls)}
+        specs += [cls(p) for p in parts if p not in listed]
+    gapped = {s.part or "part" for s in specs if isinstance(s, ck.Gap) and s.other is None}
+    specs += [ck.Gap(p) for p in parts if p not in gapped]  # no-op for a single solid
     return specs
 
 
