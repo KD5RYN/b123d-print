@@ -15,6 +15,7 @@ import asyncio
 import json
 import base64
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -114,7 +115,7 @@ async def flow(c, pw, expect) -> None:
     if pw is not None:
         shutil.rmtree(pw / "parts/box/out")
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf"})
-    files = [x.strip() for x in text(res).splitlines() if x.strip().startswith("parts/")]
+    files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
     expect(files == ["parts/box/out/box.3mf"] and (pw is None or [p.name for p in (pw / "parts/box/out").iterdir()] == ["box.3mf"]),
            "export honors formats='3mf'")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
@@ -190,7 +191,80 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-async def http_checks(url: str, token: str, expect) -> None:
+def links_in(res) -> list[str]:
+    return re.findall(r"https?://\S+/files/\S+", text(res))
+
+
+def blobs(res) -> dict[str, bytes]:
+    return {c.resource.uri: base64.b64decode(c.resource.blob) for c in res.content
+            if getattr(c, "type", "") == "resource" and getattr(c.resource, "blob", None)}
+
+
+async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, expect) -> None:
+    """Export over HTTP, then fetch every file by its link with no token and compare it with the file on
+    the server (on disk when visible from here, and always with the MCP resource); refuse what must fail."""
+    from urllib.parse import quote
+
+    from b123d_print import links
+
+    res = await ca.call_tool("export", {"name": "only_in_a", "variant": "standard"})
+    urls = links_in(res)
+    rlinks = [c for c in res.content if getattr(c, "type", "") == "resource_link"]
+    expect(len(urls) >= 4 and len(rlinks) == len(urls) and "expire" in text(res),
+           f"export returns a download link and a resource link per file ({len(urls)} links)")
+    async with create_mcp_http_client() as h:  # no Authorization header
+        same = True
+        for u, rl in zip(urls, rlinks):
+            r = await h.get(u)
+            rel = rl.uri.split(f"b123d-print://files/{a}/", 1)[1]
+            disk = (wsroot / "workspaces" / a / rel).read_bytes() if wsroot else None
+            via_mcp = (await ca.read_resource(rl.uri)).contents[0]
+            mcp_bytes = base64.b64decode(via_mcp.blob)
+            ok = r.status_code == 200 and r.content == mcp_bytes and (disk is None or r.content == disk)
+            if not ok:
+                print(f"     mismatch for {u}: {r.status_code}")
+            same &= ok
+        expect(same, "every link downloads without a token, byte-identical to the server's file and its MCP resource")
+        u3 = next(u for u in urls if u.endswith(".3mf"))
+        r = await h.get(u3)
+        expect(r.headers.get("content-type", "").startswith("model/3mf") and "attachment" in r.headers.get("content-disposition", "")
+               and "only_in_a.3mf" in r.headers.get("content-disposition", ""), "3MF link: Content-Type model/3mf, attachment with the file name")
+        head, ws_, tok, path = re.match(r"(https?://[^/]+(?:/.*?)?)/files/([^/]+)/([^/]+)/(.+)$", u3).groups()
+        exp, sig = tok.split(".")
+        bad = {
+            "tampered signature": f"{head}/files/{ws_}/{exp}.{sig[:-3]}AAA/{path}",
+            "longer expiry": f"{head}/files/{ws_}/{int(exp) + 86400}.{sig}/{path}",
+            "other file, same signature": f"{head}/files/{ws_}/{tok}/{path.replace('.3mf', '.stl')}",
+            "workspace A's link pointed at workspace B": f"{head}/files/{b}/{tok}/{path.replace('only_in_a', 'only_in_b')}",
+            "traversal": f"{head}/files/{ws_}/{tok}/parts/only_in_a/out/%2e%2e/%2e%2e/%2e%2e/b123d-print.toml",
+            "the part script": f"{head}/files/{ws_}/{tok}/parts/only_in_a/only_in_a.py",
+        }
+        for what, u in bad.items():
+            r = await h.get(u)
+            expect(r.status_code == 404, f"refused: {what} ({r.status_code})")
+        if not os.environ.get("B123D_PRINT_LINK_SECRET"):  # links are keyed from the token: forge an expired one
+            secret = links.derive_secret(token)
+            old, _ = links.sign(secret, ws_, path, -60)
+            r = await h.get(head + old)
+            expect(r.status_code == 410 and "expired" in r.text, f"an expired link is refused with 410 ({r.status_code})")
+        r = await h.get(head + f"/files/{ws_}/{tok}/{quote(path)}", headers={"Authorization": "Bearer nonsense"})
+        expect(r.status_code == 200, "a link works whatever Authorization header comes with it")
+    try:
+        await cb.read_resource(f"b123d-print://files/{a}/{path}")
+        expect(False, "workspace B cannot read workspace A's file as a resource")
+    except Exception:
+        expect(True, "workspace B cannot read workspace A's file as a resource")
+    res = await ca.call_tool("export", {"name": "only_in_a", "variant": "standard", "formats": "3mf,png", "embed": True})
+    emb = blobs(res)
+    want = (wsroot / "workspaces" / a / "parts/only_in_a/out/only_in_a.3mf").read_bytes() if wsroot else None
+    got = next((v for k, v in emb.items() if k.endswith(".3mf")), None)
+    expect(got and (want is None or got == want), f"embed=True puts the files into the result ({len(emb)} embedded)")
+    res = await ca.call_tool("render_preview", {"name": "only_in_a"})
+    expect(images(res) and links_in(res) and any(getattr(c, "type", "") == "resource_link" for c in res.content),
+           "render_preview over HTTP: the image, plus a download link and a resource link")
+
+
+async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) -> None:
     """Auth refusals, workspace isolation and parallel builds."""
     base = url.split("?")[0]
     init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
@@ -233,6 +307,7 @@ async def http_checks(url: str, token: str, expect) -> None:
         res = await ca.call_tool("list_parts", {})
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")
+        await link_checks(ca, cb, a, b, token, wsroot, expect)
     async with http_client(with_workspace(url, "..%2Fetc"), token) as c:
         res = await c.call_tool("list_parts", {})
         expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
@@ -322,7 +397,7 @@ async def main(keep: bool, http: bool) -> None:
         try:
             if not token:
                 sys.exit("B123D_PRINT_SMOKE_URL needs B123D_PRINT_SMOKE_TOKEN")
-            await http_checks(url, token, expect)
+            await http_checks(url, token, expect, pw.parent.parent if pw else None)
             async with http_client(with_workspace(url, name), token) as c:
                 await flow(c, pw, expect)
             if server:

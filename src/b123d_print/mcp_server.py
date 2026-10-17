@@ -6,7 +6,9 @@ client. Part scripts are model-written code: every build runs in a sandboxed sub
 
 Over HTTP every request needs `Authorization: Bearer <token>`, and each client picks its own
 workspace with `/mcp?workspace=<name>` (or the header `X-B123D-Workspace`), which is the folder
-<workspace>/workspaces/<name>; without one, clients share <workspace> itself.
+<workspace>/workspaces/<name>; without one, clients share <workspace> itself. Files the server
+writes come back as signed download links (GET /files/..., no token, they expire) and as
+b123d-print://files/ resources.
 """
 
 from __future__ import annotations
@@ -19,13 +21,14 @@ import os
 import re
 import signal
 import sys
+import time
 from pathlib import Path
 
 import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import sandbox
+from . import links, sandbox
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, load_settings, parse_formats
 from .project import find_parts
@@ -39,10 +42,14 @@ check -> fix and repeat -> export. Read the resource b123d-print://guide (or the
 design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
-before reporting. render_preview and section return PNG images."""
+before reporting. render_preview and section return PNG images. When this server is remote (HTTP),
+the files it writes stay on it: download them from the links that export returns (plain HTTPS GET,
+no token, they expire; e.g. curl -fO <url>) or read the b123d-print://files/ resources. Never try
+to SSH into the server for them."""
 
 WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _WORKSPACE: contextvars.ContextVar[str | None] = contextvars.ContextVar("b123d_print_workspace", default=None)
+_REQUEST: contextvars.ContextVar = contextvars.ContextVar("b123d_print_request", default=None)
 
 
 async def _request_workspace(ctx, call_next):
@@ -51,15 +58,19 @@ async def _request_workspace(ctx, call_next):
     name = None
     if req is not None and hasattr(req, "query_params"):
         name = req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
-    token = _WORKSPACE.set(name)
+    token, rtoken = _WORKSPACE.set(name), _REQUEST.set(req)
     try:
         return await call_next(ctx)
     finally:
         _WORKSPACE.reset(token)
+        _REQUEST.reset(rtoken)
 
 
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
-STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None}
+STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None,
+               "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": []}
+EMBED_MAX = 2_000_000  # bytes: export(embed=True) inlines files up to this size ...
+EMBED_TOTAL = 8_000_000  # ... and this much in all
 
 
 def _root() -> Path:
@@ -116,6 +127,89 @@ def _error_text(res: dict) -> str:
     if res.get("log"):
         s += f"\n\nOutput:\n{res['log']}"
     return s
+
+
+def _http() -> bool:
+    return STATE["transport"] == "http"
+
+
+def _ws_name() -> str:
+    return _WORKSPACE.get() or links.ROOT_WS
+
+
+def _ws_dir(name: str) -> Path | None:
+    """The folder of workspace `name` ("_" = the root workspace), or None if there is no such workspace."""
+    if name == links.ROOT_WS:
+        return STATE["root"]
+    if not WORKSPACE_RE.match(name):
+        return None
+    d = STATE["root"] / "workspaces" / name
+    return d if d.is_dir() else None
+
+
+def _host_allowed(host: str) -> bool:
+    for a in STATE["allowed_hosts"]:
+        if host == a or (a.endswith(":*") and host.startswith(a[:-2] + ":")):
+            return True
+    return False
+
+
+def _base_url() -> str:
+    """Where clients reach this server: --public-url, else the request's own Host header. Proxy
+    headers (X-Forwarded-Host/-Proto) are trusted only for a host listed in --allowed-hosts."""
+    if STATE["public_url"]:
+        return STATE["public_url"]
+    req = _REQUEST.get()
+    if req is None:
+        return ""
+    h = req.headers
+    fwd = (h.get("x-forwarded-host") or "").split(",")[0].strip()
+    if fwd and _host_allowed(fwd):
+        proto = (h.get("x-forwarded-proto") or "").split(",")[0].strip()
+        return f"{proto if proto in ('http', 'https') else req.url.scheme}://{fwd}"
+    return f"{req.url.scheme}://{h.get('host') or req.url.netloc}"
+
+
+def _file_info(path: Path) -> dict | None:
+    """HTTP: how a client gets a file the server wrote (None if it is not one the server serves)."""
+    root = _root()
+    try:
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+        links.servable(root, load_settings(root).parts_dir, rel)
+    except (ValueError, links.LinkError):
+        return None
+    url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"])
+    return {"path": rel, "url": _base_url() + url, "expires": expires, "size": path.stat().st_size,
+            "mime": links.content_type(rel), "uri": f"b123d-print://files/{_ws_name()}/{rel}"}
+
+
+def _expiry_note(expires: int) -> str:
+    return (f"Download links need no token and expire {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))}"
+            f" (e.g. curl -fO <url>); after that, call the tool again.")
+
+
+def _resource_link(info: dict):
+    from mcp_types import ResourceLink
+
+    return ResourceLink(uri=info["uri"], name=Path(info["path"]).name, mime_type=info["mime"], size=info["size"],
+                        description=f"download: {info['url']}")
+
+
+def _embedded(path: Path, info: dict):
+    import base64
+
+    from mcp_types import BlobResourceContents, EmbeddedResource
+
+    blob = base64.b64encode(path.read_bytes()).decode()
+    return EmbeddedResource(resource=BlobResourceContents(uri=info["uri"], mime_type=info["mime"], blob=blob))
+
+
+def _image_links(image: str) -> tuple[str, list]:
+    """HTTP: a download line and a ResourceLink for a PNG the server wrote; nothing over stdio."""
+    info = _file_info(Path(image)) if _http() else None
+    if not info:
+        return "", []
+    return f"\nDownload: {info['url']}\n{_expiry_note(info['expires'])}", [_resource_link(info)]
 
 
 # ---------------------------------------------------------------------------------------------
@@ -255,7 +349,10 @@ async def render_preview(name: str, variant: str | None = None, parts: str | Non
     if not res.get("ok"):
         return [_error_text(res)]
     summary = {"variant": res["variant"], "parts": res["parts"], "file": res["image"]}
-    return [json.dumps(summary, indent=1), Image(path=res["image"])]
+    note, extra = _image_links(res["image"])
+    if extra:
+        summary.update(file=Path(res["image"]).relative_to(_root()).as_posix())
+    return [json.dumps(summary, indent=1) + note, Image(path=res["image"]), *extra]
 
 
 @mcp.tool(structured_output=False)
@@ -268,7 +365,9 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
     res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at)
     if not res.get("ok"):
         return [_error_text(res)]
-    return [f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {res['image']}", Image(path=res["image"])]
+    note, extra = _image_links(res["image"])
+    shown = Path(res["image"]).relative_to(_root()).as_posix() if extra else res["image"]
+    return [f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {shown}{note}", Image(path=res["image"]), *extra]
 
 
 @mcp.tool()
@@ -289,12 +388,15 @@ async def check(name: str, variant: str | None = None) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
-async def export(name: str, variant: str | None = None, formats: str | None = None) -> str:
+@mcp.tool(structured_output=False)
+async def export(name: str, variant: str | None = None, formats: str | None = None, embed: bool = False) -> list:
     """Export every printable part to parts/<name>/out/. Default: all variants.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
     (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
-    user's `formats` setting (default: all four). Ask the user which they want if unclear."""
+    user's `formats` setting (default: all four). Ask the user which they want if unclear.
+    Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
+    and a b123d-print://files/ resource link; embed=True also puts files up to 2 MB into the
+    result itself, for clients that can neither fetch URLs nor read resources."""
     if formats:
         try:
             parse_formats(formats)
@@ -303,13 +405,25 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     res = await _job(name, "export", variant=variant, formats=formats)
     if not res.get("ok"):
         return _error_text(res)
-    out = []
+    out, extra, expires, budget = [], [], None, EMBED_TOTAL
     for v in res["variants"]:
         out.append(f"[{v['variant']}]")
         for pname, r in v["parts"].items():
             out.append(f"  {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, valid={r['valid']}")
-        out += [f"  {Path(f).relative_to(_root())}" for f in v["files"]]
-    return "\n".join(out)
+        for f in v["files"]:
+            info = _file_info(Path(f)) if _http() else None
+            if not info:
+                out.append(f"  {Path(f).relative_to(_root())}")
+                continue
+            out.append(f"  {info['path']}  {info['url']}")
+            extra.append(_resource_link(info))
+            expires = info["expires"]
+            if embed and info["size"] <= min(EMBED_MAX, budget):
+                extra.append(_embedded(Path(f), info))
+                budget -= info["size"]
+    if expires:
+        out.append("\n" + _expiry_note(expires))
+    return ["\n".join(out), *extra]
 
 
 def _workspace_file(rel: str) -> Path:
@@ -351,7 +465,9 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
         return [_error_text(res)]
     out = [res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)]
     if res.get("image"):
-        out.append(Image(path=res["image"]))
+        note, extra = _image_links(res["image"])
+        out[0] += note
+        out += [Image(path=res["image"]), *extra]
     return out
 
 
@@ -369,6 +485,21 @@ def guide() -> str:
 def template() -> str:
     """The part-script template new_part starts from."""
     return data("part_template.py")
+
+
+@mcp.resource("b123d-print://files/{workspace}/{+path}", mime_type="application/octet-stream")
+def workspace_file(workspace: str, path: str) -> bytes:
+    """A file the server wrote (parts/<part>/out/...), in this session's own workspace ('_' = the
+    root workspace). Tool results link to these; over HTTP the same files have download links."""
+    from mcp.server.mcpserver.exceptions import ResourceError
+
+    if workspace != _ws_name():
+        raise ResourceError(f"workspace {workspace!r} is not this session's ({_ws_name()!r})")
+    root = _root()
+    try:
+        return links.servable(root, load_settings(root).parts_dir, path).read_bytes()
+    except links.LinkError:
+        raise ResourceError(f"no file {path!r} (only parts/<part>/out/ files are served)") from None
 
 
 def _rules() -> str:
@@ -466,8 +597,30 @@ async def health(request):
     return JSONResponse({"status": "ok", "version": _pkg_version()})
 
 
+@mcp.custom_route("/files/{workspace}/{token}/{path:path}", methods=["GET", "HEAD"])
+async def download(request):
+    """A signed download link (see links.py): needs no bearer token, serves one file until it expires."""
+    from starlette.responses import FileResponse, PlainTextResponse
+
+    ws, token, path = (request.path_params[k] for k in ("workspace", "token", "path"))
+    try:
+        links.check_path(path)
+        links.verify(STATE["link_secret"], ws, token, path)
+        root = _ws_dir(ws)
+        if root is None:
+            raise links.LinkError(404, "not found")
+        f = links.servable(root, load_settings(root).parts_dir, path)
+    except links.LinkError as e:
+        return PlainTextResponse(str(e) + "\n", status_code=e.status)
+    mime = links.content_type(path)
+    return FileResponse(f, media_type=mime, filename=f.name,
+                        content_disposition_type="inline" if mime == "image/png" else "attachment",
+                        headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+
+
 class RequireToken:
-    """ASGI wrapper: every HTTP request except GET /health needs `Authorization: Bearer <token>`.
+    """ASGI wrapper: every HTTP request except /health and the signed /files/ links (which carry
+    their own HMAC, see download) needs `Authorization: Bearer <token>`.
 
     One shared static token. (The SDK's own bearer auth is the OAuth resource-server path: it
     wants an issuer URL and a token verifier fixed when MCPServer is built, and advertises OAuth
@@ -477,7 +630,7 @@ class RequireToken:
         self.app, self.token = app, token.encode()
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] != "/health":
+        if scope["type"] == "http" and scope["path"] != "/health" and not scope["path"].startswith("/files/"):
             scheme, _, cred = dict(scope["headers"]).get(b"authorization", b"").partition(b" ")
             if scheme.lower() != b"bearer" or not hmac.compare_digest(cred.strip(), self.token):
                 body = b'{"error": "invalid_token", "error_description": "missing or wrong bearer token"}'
@@ -541,6 +694,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="http: comma-separated Host header values to accept (DNS-rebinding check; $B123D_PRINT_ALLOWED_HOSTS)")
     ap.add_argument("--shutdown-grace", type=float, default=float(env("B123D_PRINT_SHUTDOWN_GRACE", 30)),
                     help="http: on SIGTERM/Ctrl-C, seconds to let running calls finish before their builds are killed (default 30)")
+    ap.add_argument("--public-url", default=env("B123D_PRINT_PUBLIC_URL"),
+                    help="http: base URL clients reach the server at, for download links, e.g. https://cad.example.com "
+                         "(default: from the request; $B123D_PRINT_PUBLIC_URL)")
+    ap.add_argument("--link-ttl", type=float, default=float(env("B123D_PRINT_LINK_TTL", 3600)),
+                    help="http: seconds a download link stays valid (default 3600; $B123D_PRINT_LINK_TTL)")
     ap.add_argument("--insecure-no-auth", action="store_true",
                     help="http: run without a token (otherwise $B123D_PRINT_TOKEN or $B123D_PRINT_TOKEN_FILE is required)")
     ap.add_argument("--healthcheck", action="store_true", help="check the running HTTP server's /health and exit (for Docker)")
@@ -578,6 +736,11 @@ def main() -> None:
                  "or pass --insecure-no-auth")
     if token and len(token) < 16:
         sys.exit("b123d-print-mcp: B123D_PRINT_TOKEN is too short (use at least 16 characters)")
+    STATE.update(link_secret=links.derive_secret(token, env("B123D_PRINT_LINK_SECRET")), link_ttl=max(1.0, args.link_ttl),
+                 public_url=(args.public_url or "").rstrip("/") or None,
+                 allowed_hosts=[h.strip() for h in (args.allowed_hosts or "").split(",") if h.strip()])
+    if STATE["public_url"] and not re.match(r"^https?://[^/\s]+(/\S*)?$", STATE["public_url"]):
+        sys.exit(f"b123d-print-mcp: --public-url must look like https://host[:port][/prefix], got {args.public_url!r}")
     import uvicorn
 
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  "

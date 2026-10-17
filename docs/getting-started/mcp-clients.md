@@ -33,6 +33,8 @@ In place of `b123d-print` in any config on this page:
 | `--port <port>` | `$B123D_PRINT_PORT`, else 8000 | HTTP: port |
 | `--allowed-hosts <names>` | `$B123D_PRINT_ALLOWED_HOSTS` | HTTP: comma-separated `Host` header values to accept (DNS-rebinding check, behind a proxy) |
 | `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
+| `--public-url <url>` | `$B123D_PRINT_PUBLIC_URL` | HTTP: the base URL clients reach the server at, used in download links (e.g. `https://cad.example.com`); default: the request's `Host`, and proxy headers for hosts in `--allowed-hosts` |
+| `--link-ttl <seconds>` | `$B123D_PRINT_LINK_TTL`, else 3600 | HTTP: how long a download link stays valid |
 | `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |
 | `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's health check) |
 

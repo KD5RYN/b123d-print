@@ -15,7 +15,7 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `render_preview(name, variant?, parts?)` | 6-view PNG; `parts="assembly"` shows the fit |
 | `section(name, plane, at, variant?, parts?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
 | `check(name, variant?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
-| `export(name, variant?, formats?)` | files to `parts/<name>/out/` ([formats](formats.md)) |
+| `export(name, variant?, formats?, embed?)` | files to `parts/<name>/out/` ([formats](formats.md)); over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, and `embed=true` puts files up to 2 MB into the result |
 | `compare(reference, candidate, thresholds?, image?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP it is saved per workspace |
 
@@ -43,5 +43,6 @@ carries the full [workflow rules](../scripts/rules.md).
 | --- | --- |
 | `b123d-print://guide` | the workflow and print rules (the same text as [`AGENTS.md`](../scripts/rules.md)) |
 | `b123d-print://template` | the part-script template `new_part` starts from |
+| `b123d-print://files/{workspace}/{+path}` | a file the server wrote (`parts/<part>/out/...`), only in the session's own workspace (`_` = the root workspace). Tool results link to these |
 
 The server also sends short instructions on connect, which point the model at the guide.

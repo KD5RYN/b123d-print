@@ -148,6 +148,11 @@ config, or `formats="3mf,png"` on one export. If the user has not said what they
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
 
+**Remote server (MCP over HTTP):** the files stay on the server. Download them from the links
+`export` returns (a plain HTTPS GET with no token, e.g. `curl -fO <url>`; they expire, so export
+again for fresh ones) or read the `b123d-print://files/` resources it links. Never SSH into the
+server to fetch them.
+
 ## Printer profile (optional)
 
 By default b123d-print is in generic mode. If the user has set a printer (`list_parts` shows it, or

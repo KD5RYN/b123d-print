@@ -19,5 +19,7 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
 3. **Tools** (b123d-print MCP server): `list_parts`, `new_part`, `read_part`, `write_part`,
    `build_part`, `render_preview`, `section`, `check`, `export`, `compare` (to measure a part
    against a reference STL/3MF/STEP the user put in the workspace), and `use_printer` (only when
-   the user asks to set a printer). Without the MCP server, use the
+   the user asks to set a printer). If the server is remote (HTTP), download exported files
+   from the links `export` returns (`curl -fO <url>`, no token, they expire) or read the
+   `b123d-print://files/` resources; never SSH into the server. Without the MCP server, use the
    CLI from a workspace: `b123d-print new|build|check|config` (`uvx --from <b123d-print> b123d-print ...`).

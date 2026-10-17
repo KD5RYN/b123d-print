@@ -55,7 +55,7 @@ def server():
     from b123d_print.mcp_server import mcp
 
     async def collect():
-        return await mcp.list_tools(), await mcp.list_prompts(), await mcp.list_resources()
+        return await mcp.list_tools(), await mcp.list_prompts(), (await mcp.list_resources(), await mcp.list_resource_templates())
 
     return anyio.run(collect)
 
@@ -73,15 +73,16 @@ def test_mcp_tools_documented(server):
 
 
 def test_mcp_prompts_and_resources_documented(server):
-    _, prompts, resources = server
+    _, prompts, (resources, templates) = server
     text = page("using/tools.md")
     assert table_keys(text, "Prompts") == {p.name for p in prompts}, "prompts table vs registered prompts"
     for p in prompts:
         cell = table_rows(text)[p.name].split("|")[1]
         for a in p.arguments or []:
             assert re.search(rf"\b{a.name}\b", cell), f"prompt {p.name}: argument {a.name} not documented"
-    documented = set(re.findall(r"`(b123d-print://[\w/-]+)`", text.split("## Resources\n", 1)[1]))
-    assert documented == {str(r.uri) for r in resources}, "resources table vs registered resources"
+    documented = set(re.findall(r"`(b123d-print://[\w/{}+-]+)`", text.split("## Resources\n", 1)[1]))
+    registered = {str(r.uri) for r in resources} | {t.uri_template for t in templates}
+    assert documented == registered, "resources table vs registered resources and resource templates"
 
 
 def test_skill_lists_every_tool_and_prompt(server):
