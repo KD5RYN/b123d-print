@@ -192,7 +192,9 @@ Then point your client at Docker instead of `uvx` (Claude Desktop shown):
 ```
 
 - `-i` is required (MCP talks over stdin/stdout); `--rm` removes the container afterwards.
-- Your parts and exports appear in the mounted folder (`/Users/you/parts` above).
+- Your parts and exports appear in the mounted folder (`/Users/you/parts` above). Settings
+  (printer, hole compensation) are kept there too, in `.config/b123d-print/`, since the
+  container has no lasting home folder.
 - On Linux, add `"--user", "1000:1000"` (your `id -u`:`id -g`) so exported files belong to you.
 - Released images will also be on GitHub's registry as `ghcr.io/kd5ryn/b123d-print-mcp`.
 

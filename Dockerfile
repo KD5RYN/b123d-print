@@ -22,7 +22,8 @@ COPY src ./src
 RUN uv sync --frozen --no-dev
 
 # The container is the sandbox here (bubblewrap cannot nest without extra privileges).
-ENV PATH=/opt/b123d-print/.venv/bin:$PATH B123D_PRINT_SANDBOX=none MPLCONFIGDIR=/tmp/mpl XDG_CACHE_HOME=/tmp/cache
+ENV PATH=/opt/b123d-print/.venv/bin:$PATH B123D_PRINT_SANDBOX=none MPLCONFIGDIR=/tmp/mpl XDG_CACHE_HOME=/tmp/cache \
+    B123D_PRINT_CONFIG_IN_WORKSPACE=1
 RUN useradd --create-home cad && mkdir /work && chown cad /work
 USER cad
 WORKDIR /work

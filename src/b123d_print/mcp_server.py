@@ -352,6 +352,10 @@ def main() -> None:
     args = ap.parse_args()
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
     root.mkdir(parents=True, exist_ok=True)
+    if os.environ.get("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1":
+        # containers: keep user settings (printer, calibration) with the mounted parts, not in a
+        # home folder that disappears with the container
+        os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
     STATE.update(root=root, timeout=args.timeout)
     mcp.run("stdio")
 
