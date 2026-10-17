@@ -83,6 +83,31 @@ Each build keeps its own `--timeout` (default 120 s) once it starts. A long queu
 client's read timeout (300 s by default in the MCP Python SDK), so size N and the number of
 clients together. `list_parts` reports the limit.
 
+## Get the files
+
+Over HTTP the files the server writes stay on the server. The tools hand them to you three ways:
+
+- **Download links.** `export` lists every file with an HTTPS link, and `render_preview`,
+  `section` and `compare` add one for their image. A link needs no token, so `curl -fO <url>`,
+  a browser or another agent can fetch it, but it opens only that one file, and only until it
+  expires (`--link-ttl`, default 1 hour; an expired link answers 410, so call the tool again).
+  Links are signed with a key derived from the token (or `B123D_PRINT_LINK_SECRET`): they survive
+  a restart, and changing the token invalidates them.
+- **Resource links.** The same results carry MCP resource links
+  (`b123d-print://files/<workspace>/parts/<part>/out/<file>`) that a client can read over the MCP
+  connection itself. A session can read only its own workspace's files.
+- **Embedded files.** `export(..., embed=true)` also puts each file up to 2 MB (8 MB in all) into
+  the result, for clients that can neither fetch URLs nor read resources. It is off by default:
+  embedded models cost a lot of context.
+
+Only the files in `parts/<part>/out/` are served: not the part scripts and nothing outside the
+workspace. Agents should never need SSH access to the server.
+
+**Behind a reverse proxy**, set `--public-url https://cad.example.com` (or
+`B123D_PRINT_PUBLIC_URL`) so the links point at the proxy. Without it the server uses the
+request's `Host` header, and it trusts `X-Forwarded-Host` / `X-Forwarded-Proto` only for hosts
+listed in `--allowed-hosts`.
+
 ## Connect a client
 
 Claude Code:

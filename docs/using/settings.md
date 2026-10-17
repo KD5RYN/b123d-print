@@ -82,6 +82,9 @@ replaces the default the same way.
 | `B123D_PRINT_PORT` | the MCP server's `--port` (HTTP) |
 | `B123D_PRINT_ALLOWED_HOSTS` | the MCP server's `--allowed-hosts` (HTTP) |
 | `B123D_PRINT_SHUTDOWN_GRACE` | the MCP server's `--shutdown-grace` (HTTP) |
+| `B123D_PRINT_PUBLIC_URL` | the MCP server's `--public-url` (HTTP download links) |
+| `B123D_PRINT_LINK_TTL` | the MCP server's `--link-ttl` (HTTP download links) |
+| `B123D_PRINT_LINK_SECRET` | key that signs download links; default: derived from `B123D_PRINT_TOKEN`, so changing the token also invalidates old links |
 | `B123D_PRINT_TOKEN` | the bearer token HTTP clients must send ([Over the network](../getting-started/http.md)) |
 | `B123D_PRINT_TOKEN_FILE` | path of a file holding that token, instead of `B123D_PRINT_TOKEN` |
 | `B123D_PRINT_SANDBOX` | `none` turns the OS [sandbox](sandbox.md) off (the Docker image does; the container is the sandbox) |
