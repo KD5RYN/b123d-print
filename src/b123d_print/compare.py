@@ -643,7 +643,7 @@ def deviation_colors(ref: Mesh, cand_aligned: Mesh, scale_mm: float) -> np.ndarr
     return (1 - x) * np.array([0.2, 0.7, 0.3]) + x * np.array([0.85, 0.15, 0.15])
 
 
-def render_comparison(reference, candidate, comparison: Comparison, path: str | Path, title: str = "") -> Path:
+def render_comparison(reference, candidate, comparison: Comparison, path: str | Path, title: str = "", size: str = "normal") -> Path:
     """Six views of the reference colored by distance to the aligned candidate (green = within
     tol_mm .. red = 4 x tol_mm or more), plus the candidate in grey where the reference has no surface."""
     from .render import render
@@ -658,4 +658,4 @@ def render_comparison(reference, candidate, comparison: Comparison, path: str | 
     items = [(ref_f, colors, "reference (green = matches, red = off by >= %g mm)" % (4 * tol))]
     if extra.any():
         items.append((Mesh(moved_f.verts, moved_f.tris[extra]), "#999999", "candidate only"))
-    return render(items, path, title or f"deviation: score {comparison.score:.1f}")
+    return render(items, path, title or f"deviation: score {comparison.score:.1f}", size=size)

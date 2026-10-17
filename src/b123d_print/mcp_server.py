@@ -30,7 +30,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import links, sandbox
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import WORKSPACE_FILE, load_settings, parse_formats
+from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats
 from .project import find_parts
 
 MAX_SCRIPT_BYTES = 256_000
@@ -212,6 +212,27 @@ def _image_links(image: str) -> tuple[str, list]:
     return f"\nDownload: {info['url']}\n{_expiry_note(info['expires'])}", [_resource_link(info)]
 
 
+def _image_options(size: str) -> None:
+    from .render import SIZES
+
+    if size not in SIZES:
+        raise ToolError(f"size must be one of {list(SIZES)}")
+
+
+def _with_image(text: str, image: str, inline: bool) -> list:
+    """A tool result for a PNG the server wrote: the text, the image itself unless inline=False,
+    and over HTTP its download link and resource link."""
+    note, extra = _image_links(image)
+    if not inline and not extra:
+        note = f"\nImage file: {image}"
+    return [text + note, *([Image(path=image)] if inline else []), *extra]
+
+
+def _show(image: str) -> str:
+    """The image's path as the client should see it: workspace-relative over HTTP, absolute over stdio."""
+    return Path(image).relative_to(_root()).as_posix() if _http() else image
+
+
 # ---------------------------------------------------------------------------------------------
 # Tools
 
@@ -341,33 +362,38 @@ async def build_part(name: str, variant: str | None = None) -> str:
 
 
 @mcp.tool(structured_output=False)
-async def render_preview(name: str, variant: str | None = None, parts: str | None = None) -> list:
+async def render_preview(name: str, variant: str | None = None, parts: str | None = None,
+                         size: str = "normal", inline: bool = True) -> list:
     """Render six views (iso, top, front, right, iso from below, bottom) as a PNG image.
-    parts: comma-separated part names from build(), 'assembly' (assembled position with
-    stand-ins), or omit for all printable parts. One variant (default: the first)."""
-    res = await _job(name, "render", variant=variant, parts=parts)
+    parts: comma-separated part names from build() (several are laid out side by side), 'assembly'
+    (assembled position with stand-ins), or omit: the assembly if the script has one, else every
+    printable part side by side. One variant (default: the first). size: 'normal' or 'small'
+    (~800 px wide, cheaper). inline=False returns only the file (over HTTP: its download link),
+    not the image itself."""
+    _image_options(size)
+    res = await _job(name, "render", variant=variant, parts=parts, size=size)
     if not res.get("ok"):
         return [_error_text(res)]
-    summary = {"variant": res["variant"], "parts": res["parts"], "file": res["image"]}
-    note, extra = _image_links(res["image"])
-    if extra:
-        summary.update(file=Path(res["image"]).relative_to(_root()).as_posix())
-    return [json.dumps(summary, indent=1) + note, Image(path=res["image"]), *extra]
+    summary = {"variant": res["variant"], "layout": res["layout"], "drawn": res["drawn"], "parts": res["parts"],
+               "file": _show(res["image"])}
+    return _with_image(json.dumps(summary, indent=1), res["image"], inline)
 
 
 @mcp.tool(structured_output=False)
-async def section(name: str, plane: str, at: float, variant: str | None = None, parts: str | None = None) -> list:
+async def section(name: str, plane: str, at: float, variant: str | None = None, parts: str | None = None,
+                  size: str = "normal", inline: bool = True) -> list:
     """Cross-section as a PNG image, each part in its own color. plane: 'XY' (at = Z height),
     'XZ' (at = Y) or 'YZ' (at = X), in mm. parts: default the assembly if the script has one
-    (shows fit and clearances), else all printable parts; or comma-separated names."""
+    (shows fit and clearances), else all printable parts; or comma-separated names.
+    size: 'normal' or 'small' (~800 px wide). inline=False returns only the file (over HTTP: its
+    download link), not the image itself."""
     if plane.upper() not in ("XY", "XZ", "YZ"):
         return ["plane must be XY, XZ or YZ"]
-    res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at)
+    _image_options(size)
+    res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at, size=size)
     if not res.get("ok"):
         return [_error_text(res)]
-    note, extra = _image_links(res["image"])
-    shown = Path(res["image"]).relative_to(_root()).as_posix() if extra else res["image"]
-    return [f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {shown}{note}", Image(path=res["image"]), *extra]
+    return _with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}", res["image"], inline)
 
 
 @mcp.tool()
@@ -389,8 +415,10 @@ async def check(name: str, variant: str | None = None) -> str:
 
 
 @mcp.tool(structured_output=False)
-async def export(name: str, variant: str | None = None, formats: str | None = None, embed: bool = False) -> list:
-    """Export every printable part to parts/<name>/out/. Default: all variants.
+async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
+                 embed: bool = False) -> list:
+    """Export printable parts to parts/<name>/out/. Default: every part, all variants.
+    parts: comma-separated part names from build() to export only those; variant: one variant.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
     (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
     user's `formats` setting (default: all four). Ask the user which they want if unclear.
@@ -402,10 +430,16 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
             parse_formats(formats)
         except ValueError as e:
             raise ToolError(str(e)) from None
-    res = await _job(name, "export", variant=variant, formats=formats)
+    res = await _job(name, "export", variant=variant, formats=formats, parts=parts)
     if not res.get("ok"):
-        return _error_text(res)
+        return [_error_text(res)]
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
+    files = [Path(f) for v in res["variants"] for f in v["files"]]
+    total = sum(f.stat().st_size for f in files)
+    out.append(f"Exported {len(files)} file(s), {total / 1e6:.1f} MB in all.")
+    if not formats and not formats_configured(_root()):
+        out.append("These are the default formats (STEP, STL, 3MF and PNG). Narrow them: 3MF for Bambu/Orca/Prusa "
+                   "slicers, STEP to edit in other CAD; pass formats= (e.g. formats='3mf') or set `formats` in the config.")
     for v in res["variants"]:
         out.append(f"[{v['variant']}]")
         for pname, r in v["parts"].items():
@@ -441,17 +475,20 @@ def _workspace_file(rel: str) -> Path:
 
 
 @mcp.tool(structured_output=False)
-async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False) -> list:
+async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False,
+                  size: str = "normal", inline: bool = True) -> list:
     """Compare a part with a reference model: bounding box, volume and surface area differences,
     surface distances (mean, Hausdorff) after aligning orientation, an F-score, a 0-100 score and
     pass/fail. reference, candidate: STL, 3MF or STEP files inside the workspace, as paths relative
     to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/bracket.3mf'). thresholds: optional
     overrides, comma-separated name=value (e.g. 'hausdorff_mm=2,volume_rel=0.05'). image: also
-    return a view of the reference colored by deviation (green = matches, red = off)."""
+    return a view of the reference colored by deviation (green = matches, red = off); size:
+    'normal' or 'small' (~800 px wide); inline=False returns only its file (over HTTP: a link)."""
     from dataclasses import asdict
 
     from .compare import Criteria
 
+    _image_options(size)
     ref, cand = _workspace_file(reference), _workspace_file(candidate)
     try:
         crit = Criteria.from_pairs([t for t in thresholds.split(",") if t.strip()])
@@ -459,16 +496,12 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
         raise ToolError(str(e)) from None
     # the files may come from model-written scripts: parse them in the sandbox, like a build
     job = {"op": "compare", "reference": str(ref), "candidate": str(cand), "criteria": asdict(crit),
-           "image": f"{cand.stem}_vs_{ref.stem}.png" if image else None}
+           "image": f"{cand.stem}_vs_{ref.stem}{'_small' if size == 'small' else ''}.png" if image else None, "size": size}
     res = await _run(job, cand.parent)
     if not res.get("ok"):
         return [_error_text(res)]
-    out = [res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)]
-    if res.get("image"):
-        note, extra = _image_links(res["image"])
-        out[0] += note
-        out += [Image(path=res["image"]), *extra]
-    return out
+    text = res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)
+    return _with_image(text, res["image"], inline) if res.get("image") else [text]
 
 
 # ---------------------------------------------------------------------------------------------
