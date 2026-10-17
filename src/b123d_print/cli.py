@@ -175,7 +175,8 @@ def _version() -> str:
     return version("b123d-print")
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The whole command line; the docs' CLI reference is generated from it."""
     ap = argparse.ArgumentParser(prog="b123d-print", description="build123d part workflow: scaffold, build, check")
     ap.add_argument("--root", help="workspace root (default: nearest b123d-print.toml, else the cwd)")
     ap.add_argument("--version", action="version", version=f"b123d-print {_version()}")
@@ -211,7 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     if args.cmd == "init":
         made = init_workspace(Path(args.dir).resolve(), args.update_agents)
