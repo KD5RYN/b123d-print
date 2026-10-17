@@ -17,6 +17,7 @@ import hmac
 import json
 import os
 import re
+import signal
 import sys
 from pathlib import Path
 
@@ -477,6 +478,8 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=int(env("B123D_PRINT_PORT", 8000)), help="http: port (default 8000; $B123D_PRINT_PORT)")
     ap.add_argument("--allowed-hosts", default=env("B123D_PRINT_ALLOWED_HOSTS"),
                     help="http: comma-separated Host header values to accept (DNS-rebinding check; $B123D_PRINT_ALLOWED_HOSTS)")
+    ap.add_argument("--shutdown-grace", type=float, default=float(env("B123D_PRINT_SHUTDOWN_GRACE", 30)),
+                    help="http: on SIGTERM/Ctrl-C, seconds to let running calls finish before their builds are killed (default 30)")
     ap.add_argument("--insecure-no-auth", action="store_true",
                     help="http: run without a token (otherwise $B123D_PRINT_TOKEN or $B123D_PRINT_TOKEN_FILE is required)")
     ap.add_argument("--healthcheck", action="store_true", help="check the running HTTP server's /health and exit (for Docker)")
@@ -484,7 +487,13 @@ def main() -> None:
     if args.healthcheck:
         sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
-    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / ".b123d-print-write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+    except OSError as e:
+        sys.exit(f"b123d-print-mcp: workspace {root} is not writable: {e}")
     if env("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1":
         # containers: keep user settings (printer, calibration) with the mounted parts, not in a
         # home folder that disappears with the container
@@ -493,7 +502,10 @@ def main() -> None:
     if args.transport == "stdio":
         mcp.run("stdio")
         return
-    token = _token()
+    try:
+        token = _token()
+    except OSError as e:
+        sys.exit(f"b123d-print-mcp: cannot read B123D_PRINT_TOKEN_FILE: {e}")
     if not token and not args.insecure_no_auth:
         sys.exit("b123d-print-mcp: HTTP needs a token: set B123D_PRINT_TOKEN (or B123D_PRINT_TOKEN_FILE), "
                  "e.g. from `python -c 'import secrets; print(secrets.token_urlsafe(32))'`, "
@@ -504,7 +516,16 @@ def main() -> None:
 
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  "
           f"auth {'bearer token' if token else 'NONE'}  max builds {STATE['max_builds']}", file=sys.stderr)
-    uvicorn.run(http_app(args.host, token, args.allowed_hosts), host=args.host, port=args.port, log_level="info")
+    # uvicorn handles SIGTERM/SIGINT: stop accepting, let running calls finish for up to
+    # --shutdown-grace seconds, then cancel them; any build still running is killed here
+    # uvicorn re-raises the signal after its shutdown; make SIGTERM a normal exit so the cleanup runs
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        uvicorn.run(http_app(args.host, token, args.allowed_hosts), host=args.host, port=args.port,
+                    log_level="info", timeout_graceful_shutdown=args.shutdown_grace)
+    finally:
+        n = sandbox.kill_all()
+        print(f"b123d-print-mcp: stopped{f' ({n} running build(s) killed)' if n else ''}", file=sys.stderr)
 
 
 if __name__ == "__main__":

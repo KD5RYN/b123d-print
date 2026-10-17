@@ -65,6 +65,8 @@ jobs:
           # same /tmp path inside and outside, so the test can look at the files the server wrote
           B123D_PRINT_SMOKE_CMD="docker run -i --rm --network none --user $(id -u):$(id -g) -v /tmp:/tmp b123d-print-mcp" \
             uv run python tests/mcp_smoke.py
+      - name: The compose example is valid
+        run: cd deploy && echo "B123D_PRINT_TOKEN=x" > b123d-print.env && docker compose config -q && rm b123d-print.env
       - name: HTTP mode refuses to start without a token
         run: |
           if docker run --rm -e B123D_PRINT_TRANSPORT=http b123d-print-mcp; then echo "started without a token"; exit 1; fi
