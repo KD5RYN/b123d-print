@@ -302,6 +302,44 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     return "\n".join(out)
 
 
+def _workspace_file(rel: str) -> Path:
+    """A mesh file inside the workspace (relative to it); anything outside is refused."""
+    from .compare import MESH_SUFFIXES
+
+    p = (_root() / rel).resolve()
+    if not p.is_relative_to(_root().resolve()):
+        raise ToolError(f"{rel!r} is outside the workspace; use a path relative to {_root()}")
+    if p.suffix.lower() not in MESH_SUFFIXES:
+        raise ToolError(f"{rel!r}: use one of {', '.join(MESH_SUFFIXES)}")
+    if not p.is_file():
+        raise ToolError(f"no file {rel!r} in the workspace")
+    return p
+
+
+@mcp.tool(structured_output=False)
+async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False) -> list:
+    """Compare a part with a reference model: bounding box, volume and surface area differences,
+    surface distances (mean, Hausdorff) after aligning orientation, an F-score, a 0-100 score and
+    pass/fail. reference, candidate: STL, 3MF or STEP files inside the workspace, as paths relative
+    to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/bracket.3mf'). thresholds: optional
+    overrides, comma-separated name=value (e.g. 'hausdorff_mm=2,volume_rel=0.05'). image: also
+    return a view of the reference colored by deviation (green = matches, red = off)."""
+    from .compare import Criteria, compare as _compare, render_comparison
+
+    ref, cand = _workspace_file(reference), _workspace_file(candidate)
+    try:
+        crit = Criteria.from_pairs([t for t in thresholds.split(",") if t.strip()])
+        r = await anyio.to_thread.run_sync(lambda: _compare(ref, cand, criteria=crit))
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    out = [r.text() + "\n\n" + json.dumps({k: r.as_dict()[k] for k in ("metrics", "checks", "alignment")}, indent=1)]
+    if image:
+        png = cand.parent / f"{cand.stem}_vs_{ref.stem}.png"
+        await anyio.to_thread.run_sync(lambda: render_comparison(ref, cand, r, png))
+        out.append(Image(path=png))
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # Resources and prompts (the workflow, model-neutral)
 
