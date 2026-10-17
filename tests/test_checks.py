@@ -150,3 +150,106 @@ def test_overlap():
     levels = {x.target: x.level for x in f}
     assert levels == {"a / b": "fail", "a / c": "ok", "b / c": "ok"}
     assert overlap([(Box(10, 10, 10), "a"), (Pos(9, 0, 0) * Box(10, 10, 10), "b")], ignore=[("b", "a")]) == []
+
+
+# --- issue #11: checks that pass while measuring the wrong feature -------------------------------
+
+
+def _lid():
+    """A cap in assembled position: a 2 mm plate on top (z 10..12) of a 2 mm skirt ring, open below,
+    with a counterbored screw hole through the plate at (8, 0)."""
+    from build123d import Rot
+
+    cap = Box(30, 30, 12, align=BED) - Box(26, 26, 10, align=BED)
+    cap -= Pos(8, 0, 0) * Cylinder(1.6, 40)
+    cap -= Pos(8, 0, 12) * Cylinder(3, 1.2, align=(Align.CENTER, Align.CENTER, Align.MAX))
+    printed = Pos(0, 0, 12) * Rot(180, 0, 0) * cap  # turned over for printing: plate on the bed
+    return cap, printed
+
+
+def test_wall_flipped_part_is_flagged_and_assembly_frame_still_measures():
+    from b123d_print.checks import Wall
+
+    cap, printed = _lid()
+    wall = Wall("lid", "XY", 11.0, near=(8, 0), radius=3.5, label="plate around the screw hole")
+    # declared against the cap as designed: fine
+    assert wall.run({"lid": cap}, None, S)[0].level == "ok"
+    # the part was turned over for printing; z = 11 now cuts the hollow skirt, not the plate
+    f = wall.run({"lid": printed}, None, S)[0]
+    assert f.level == "fail" and "nothing within radius" in f.message and "mm from material" in f.message
+    # in the assembly frame the same numbers keep measuring the plate
+    asm = [(cap, "", "lid")]
+    framed = Wall("lid", "XY", 11.0, near=(8, 0), radius=3.5, frame="assembly")
+    g = framed.run({"lid": printed}, asm, S)[0]
+    assert g.level == "ok" and g.data["min"] == pytest.approx(wall.run({"lid": cap}, None, S)[0].data["min"], abs=0.01)
+    assert "assembly frame" in g.message and "measured: section area" in g.message
+    with pytest.raises(KeyError, match="no assembly"):
+        framed.run({"lid": printed}, None, S)
+    with pytest.raises(KeyError, match="labeled"):
+        Wall("cap", "XY", 11.0, frame="assembly").run({"lid": printed}, asm, S)
+
+
+def test_wall_reports_what_it_measured():
+    from b123d_print.checks import Wall
+
+    plate = Box(30, 30, 4, align=BED) - Pos(12, 0, 0) * Cylinder(1.5, 30)
+    f = Wall("", "XY", 2, near=(12, 0), radius=5).run({"part": plate}, None, S)[0]
+    assert f.level == "ok" and "near point" in f.message and "measured region" in f.message
+    assert f.data["measured"]["near_dist"] == pytest.approx(1.5, abs=0.05)  # hole center to its wall
+    inside = Wall("", "XY", 2, near=(-8, 0), radius=2).run({"part": plate}, None, S)[0]  # deep in solid material
+    assert inside.level == "fail" and "inside solid material" in inside.message
+    miss = Wall("", "XY", 50).run({"part": plate}, None, S)[0]
+    assert miss.level == "fail" and "spans Z 0..4" in miss.message
+
+
+def test_probe_outside_the_part():
+    from b123d_print.checks import Probe
+
+    cap, printed = _lid()
+    parts = {"lid": printed}
+    empty_out = Probe("lid", (0, 0, 30), (1, 1, 1), expect="empty").run(parts, None, S)[0]
+    assert empty_out.level == "warn" and "entirely outside" in empty_out.message  # proves nothing
+    solid_out = Probe("lid", (0, 0, 30), (1, 1, 1)).run(parts, None, S)[0]
+    assert solid_out.level == "fail" and "part bbox" in solid_out.message
+    # "the plate is solid over the middle", declared on the assembled cap at z 11
+    roof = Probe("lid", (0, 0, 11), (1, 1, 0.5))
+    assert roof.run({"lid": cap}, None, S)[0].level == "ok"
+    assert roof.run(parts, None, S)[0].level == "fail"  # print frame after the flip: hollow there
+    assert Probe("lid", (0, 0, 11), (1, 1, 0.5), frame="assembly").run(parts, [(cap, "", "lid")], S)[0].level == "ok"
+
+
+def test_hole_comp_reminder_once(tmp_path, monkeypatch):
+    from b123d_print import project
+    from b123d_print.cli import main
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    for v in ("B123D_PRINT_HOLE_COMP", "B123D_PRINT_PRINTER"):
+        monkeypatch.delenv(v, raising=False)
+    part = tmp_path / "parts" / "p" / "p.py"
+    part.parent.mkdir(parents=True)
+    part.write_text(
+        "from build123d import Box, Cylinder\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\nclass Dims:\n    W: float = 20.0\n"
+        "VARIANTS = {'': {}, 'big': dict(W=30.0)}\n"
+        "def build(d):\n    return Box(d.W, d.W, 4) - Cylinder(1.5, 10)\n", encoding="utf-8")
+    (tmp_path / "b123d-print.toml").write_text('[workspace]\nparts_dir = "parts"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    mod = project.load(part)
+    s = project.load_settings(part)
+    first = [f for f in project.run_checks(mod, "", s) if f.check == "hole_comp"]
+    assert len(first) == 1 and "hole_coupon" in first[0].message and first[0].level == "warn"
+    assert not [f for f in project.run_checks(mod, "big", s, nudge=False) if f.check == "hole_comp"]
+    (tmp_path / "b123d-print.toml").write_text('[workspace]\nparts_dir = "parts"\n[print]\nhole_comp = 0.3\n', encoding="utf-8")
+    assert not [f for f in project.run_checks(mod, "", project.load_settings(part)) if f.check == "hole_comp"]
+    (tmp_path / "b123d-print.toml").write_text('[workspace]\nparts_dir = "parts"\n', encoding="utf-8")
+    monkeypatch.setenv("B123D_PRINT_HOLE_COMP", "0.2")
+    assert not [f for f in project.run_checks(mod, "", project.load_settings(part)) if f.check == "hole_comp"]
+    monkeypatch.delenv("B123D_PRINT_HOLE_COMP")
+    import io, contextlib, json
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        main(["check", "--json"])
+    found = [f for r in json.loads(buf.getvalue()) for f in r["findings"] if f["check"] == "hole_comp"]
+    assert len(found) == 1  # once per run, across both variants

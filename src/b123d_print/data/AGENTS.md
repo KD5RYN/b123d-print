@@ -185,7 +185,17 @@ Do all of this every time you change geometry, before telling the user the part 
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.
    `is_valid` and hole-diameter checks do not catch a 0.05 mm skin — a real print broke there.
-6. **Report:** overall size (X × Y × Z), key feature dimensions, validity, the clearances and
+   **Read what each Wall and Probe says it measured** (section area, how far `near` is from
+   material, the measured region; the probe box against the part's bounding box). A check that
+   says OK while measuring the wrong place is worse than none.
+6. **Pin Wall and Probe to the part as it is used:** if the part has an `assembly(d)`, declare
+   them with `frame="assembly"` and the assembly label (`Wall("lid", "XY", z, near=..., frame=
+   "assembly")`), in assembled coordinates. Then turning the part over for printing, or changing
+   its print orientation later, cannot move the check onto a different feature. Use the default
+   `frame="print"` only for parts without an assembly, or for properties of the print itself
+   (a wall measured in the orientation it prints in). After changing a part's print orientation,
+   re-check every `frame="print"` coordinate.
+7. **Report:** overall size (X × Y × Z), key feature dimensions, validity, the clearances and
    hole compensation applied, check results, print orientation and any supports needed.
 
 ## Checks reference
@@ -198,6 +208,8 @@ def checks(d):
         # thinnest material in the section, within `radius` of `near` (the section's 2D coords:
         # XY -> (x, y), XZ -> (x, z), YZ -> (y, z)); fails below `min` (default: config min_wall)
         Wall("base", "XY", d.FLOOR_T + 1.0, near=(x, y), radius=5, label="standoff pilot"),
+        # the same, in the coordinates of assembly(d) (by label): survives turning the part over
+        Wall("lid", "XY", d.LID_Z + 1.0, near=(x, y), radius=4, frame="assembly", label="screw boss"),
         # downward faces > 45 deg are always reported; fail=True for parts that must print
         # without supports (bridges between two walls are allowed unless bridges_ok=False)
         Overhang("cover", fail=True),

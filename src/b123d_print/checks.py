@@ -925,10 +925,67 @@ def _bbox_gap(a, b) -> float:
     return float(np.linalg.norm(d))
 
 
+FRAMES = ("print", "assembly")
+
+
+def _framed(spec, parts, assembly):
+    """The shape a Wall or Probe measures: the printable part (frame="print", the default) or
+    the part as it sits in assembly(d), found by its label (frame="assembly")."""
+    if not isinstance(spec.part, str):
+        return spec.part
+    if spec.frame not in FRAMES:
+        raise ValueError(f"frame must be one of {FRAMES}, not {spec.frame!r}")
+    if spec.frame == "print":
+        return _get(parts, spec.part)
+    if not assembly:
+        raise KeyError(f'frame="assembly" but the script has no assembly(d) (part {spec.part!r})')
+    for p, _, lbl in assembly:
+        if lbl == spec.part:
+            return p
+    raise KeyError(f"no assembly part labeled {spec.part!r}; labels: {[lbl for _, _, lbl in assembly]}")
+
+
+def _fmt(v) -> str:
+    return "(" + ", ".join(f"{x:.4g}" for x in v) + ")"
+
+
+def _section_facts(part: Part, plane: str, at: float, near=None, radius=None, step: float = 0.1) -> dict | None:
+    """What a section holds: its area and 2D bbox, how far `near` is from material (0 = inside
+    it) and the bbox of the boundary within `radius` of `near` (the region a Wall measures).
+    None when the plane misses the part."""
+    from matplotlib.path import Path as MPath
+
+    faces = section_faces(part, plane.upper(), at)
+    if not faces:
+        return None
+    pts, dist = [], np.inf
+    for f in faces:
+        loops = _loops(f, plane.upper(), step)
+        if not loops:
+            continue
+        pts += list(loops)
+        if near is not None:
+            inside = MPath(loops[0]).contains_point(near) and not any(MPath(lp).contains_point(near) for lp in loops[1:])
+            d = 0.0 if inside else min(float(np.hypot(*(lp - near).T).min()) for lp in loops)
+            dist = min(dist, d)
+    allp = np.concatenate(pts) if pts else np.zeros((0, 2))
+    out = {"area": round(sum(f.area for f in faces), 2),
+           "bbox": [[round(float(x), 2) for x in allp.min(0)], [round(float(x), 2) for x in allp.max(0)]] if len(allp) else None}
+    if near is not None:
+        out["near_dist"] = round(dist, 3)
+        if radius is not None and len(allp):
+            sel = allp[np.hypot(*(allp - near).T) <= radius]
+            out["region"] = [[round(float(x), 2) for x in sel.min(0)], [round(float(x), 2) for x in sel.max(0)]] if len(sel) else None
+    return out
+
+
 @dataclass
 class Wall:
     """Thinnest wall in a section (around `near` within `radius`); fail below `min`. BP-T4: the
-    wall around a heat-set insert or screw boss."""
+    wall around a heat-set insert or screw boss. The result says what it measured (section area,
+    how far `near` is from material, the region measured) and fails when nothing lies within
+    `radius` of `near`. frame="assembly" measures the part where it sits in assembly(d), so
+    turning the part over for printing cannot move the check onto another feature."""
 
     part: str
     plane: str
@@ -937,24 +994,51 @@ class Wall:
     radius: float | None = None
     min: float | None = None  # default: settings.min_wall
     label: str = ""
+    frame: str = "print"  # "print": build() coordinates; "assembly": the part as placed in assembly(d)
 
     def run(self, parts, assembly, settings) -> list[Finding]:
         lim = self.min if self.min is not None else settings.min_wall
         where = f"{self.plane} @ {self.at:g}" + (f" near {tuple(round(x, 2) for x in self.near)}" if self.near else "")
-        name = self.part or "part"
+        where += f" ({self.frame} frame)" if self.frame != "print" else ""
+        name = self.part if isinstance(self.part, str) and self.part else "part"
         tgt = f"{name} ({self.label})" if self.label else name
-        r = wall_thickness(_get(parts, self.part), self.plane, self.at, self.near, self.radius)
+        shape = _framed(self, parts, assembly)
+        near = None if self.near is None else np.asarray(self.near, float)
+        facts = _section_facts(shape, self.plane, self.at, near, self.radius)
+        if facts is None:
+            bb = shape.bounding_box()
+            ax = AXES[self.plane.upper()]
+            lo, hi = (bb.min.X, bb.min.Y, bb.min.Z)[ax], (bb.max.X, bb.max.Y, bb.max.Z)[ax]
+            return [Finding(FAIL, "wall", tgt, f"section {where} misses the part, which spans {'XYZ'[ax]} "
+                            f"{lo:.4g}..{hi:.4g} (check the position and the frame)")]
+        seen = f"section area {facts['area']:.4g} mm^2"
+        if near is not None:
+            d = facts["near_dist"]
+            seen += ", near point inside material" if d == 0 else f", near point {d:.2f} mm from material"
+            if self.radius is not None and facts.get("region"):
+                seen += f", measured region {_fmt(facts['region'][0])}..{_fmt(facts['region'][1])}"
+        if near is not None and self.radius is not None and facts["near_dist"] > self.radius:
+            return [Finding(FAIL, "wall", tgt, f"nothing within radius {self.radius:g} of the near point: {seen}, "
+                            f"section bbox {_fmt(facts['bbox'][0])}..{_fmt(facts['bbox'][1])}, {where}. The check "
+                            "measures nothing there: did the part move or turn over? (frame=\"assembly\" pins it)", facts)]
+        r = wall_thickness(shape, self.plane, self.at, self.near, self.radius)
         if r is None:
-            return [Finding(FAIL, "wall", tgt, f"section {where} misses the part (check the position)")]
+            return [Finding(FAIL, "wall", tgt, f"no wall boundary within radius {self.radius:g} of the near point "
+                            f"(it is inside solid material): {seen}, {where}. Move it next to the cut, or widen radius",
+                            facts)]
         level = FAIL if r["min"] < lim else OK
-        return [Finding(level, "wall", tgt, f"min wall {r['min']:.2f} mm (limit {lim:g}) at {r['at']}, {where}", r)]
+        return [Finding(level, "wall", tgt, f"min wall {r['min']:.2f} mm (limit {lim:g}) at {r['at']}, {where}; "
+                        f"measured: {seen}", {**r, "measured": facts})]
 
 
 @dataclass
 class Probe:
     """Material must be present (expect="solid") or absent (expect="empty") in a small box.
     For design intent the other checks cannot see: "the roof is closed over the sensor",
-    "nothing blocks the cable channel". part: a name from build() or a Part (e.g. assembled)."""
+    "nothing blocks the cable channel". part: a name from build() (frame="print"), a label from
+    assembly(d) (frame="assembly"), or a Part. The result shows the box against the part's
+    bounding box; a box entirely outside it fails (solid) or warns (empty: it proves nothing
+    about the part unless the point is that nothing reaches there)."""
 
     part: object
     center: tuple
@@ -962,16 +1046,29 @@ class Probe:
     expect: str = "solid"
     fill: float = 0.98  # fraction of the box that counts as solid / at most this much counts as empty
     label: str = ""
+    frame: str = "print"  # "print": build() coordinates; "assembly": the part as placed in assembly(d)
 
     def run(self, parts, assembly, settings) -> list[Finding]:
         from build123d import Box, Pos
 
+        shape = _framed(self, parts, assembly)
         box = Pos(*self.center) * Box(*self.size)
-        frac = (_get(parts, self.part) & box).volume / box.volume
+        frac = (shape & box).volume / box.volume
         tgt = self.label or (self.part if isinstance(self.part, str) else "part")
         good = frac >= self.fill if self.expect == "solid" else frac <= 1 - self.fill
-        msg = f"{frac:.0%} solid at {tuple(round(c, 2) for c in self.center)} (expected {self.expect})"
-        return [Finding(OK if good else FAIL, "probe", tgt, msg, {"fraction": round(frac, 4)})]
+        bb = shape.bounding_box()
+        pmin, pmax = (bb.min.X, bb.min.Y, bb.min.Z), (bb.max.X, bb.max.Y, bb.max.Z)
+        bmin = [c - s / 2 for c, s in zip(self.center, self.size)]
+        bmax = [c + s / 2 for c, s in zip(self.center, self.size)]
+        outside = any(bmin[i] > pmax[i] or bmax[i] < pmin[i] for i in range(3))
+        frame = f", {self.frame} frame" if self.frame != "print" else ""
+        msg = (f"{frac:.0%} solid at {tuple(round(c, 2) for c in self.center)} (expected {self.expect}{frame}); "
+               f"box {_fmt(bmin)}..{_fmt(bmax)}, part bbox {_fmt(pmin)}..{_fmt(pmax)}")
+        data = {"fraction": round(frac, 4), "box": [bmin, bmax], "part_bbox": [list(pmin), list(pmax)], "outside": outside}
+        if outside:
+            msg += ": the box is entirely outside the part. Check the coordinates and the frame"
+            return [Finding(FAIL if self.expect == "solid" else WARN, "probe", tgt, msg, data)]
+        return [Finding(OK if good else FAIL, "probe", tgt, msg, data)]
 
 
 @dataclass

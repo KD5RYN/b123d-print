@@ -35,7 +35,7 @@ from types import ModuleType
 from build123d import Part
 
 from . import checks as ck
-from .config import Settings, load_settings, parse_formats
+from .config import Settings, hole_comp_source, load_settings, parse_formats
 from .render import export_files, render, report, section_view
 
 
@@ -114,8 +114,10 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     return specs
 
 
-def run_checks(mod: ModuleType, key: str, settings: Settings) -> list[ck.Finding]:
-    """Build one variant and run every check. Never raises: errors become findings."""
+def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True) -> list[ck.Finding]:
+    """Build one variant and run every check. Never raises: errors become findings.
+    nudge: also add the setup reminders (hole_comp never measured); callers pass it for the
+    first variant only, so a check run says it once."""
     tag = key or "standard"
     try:
         d = dims(mod, key)
@@ -134,7 +136,23 @@ def run_checks(mod: ModuleType, key: str, settings: Settings) -> list[ck.Finding
         except Exception as e:
             out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
                                   {"traceback": traceback.format_exc()}))
+    if nudge:
+        out.extend(setup_findings(mod, out))
     return out
+
+
+def setup_findings(mod: ModuleType, findings: list[ck.Finding]) -> list[ck.Finding]:
+    """Reminders about settings the part depends on but nobody has set: hole_comp is 0 until it
+    is measured, so a part with holes gets them at nominal size, which prints small (BP-H1)."""
+    n = sum(len(f.data.get("holes", [])) for f in findings if f.check == "holes")
+    if not n or hole_comp_source(getattr(mod, "__file__", None)) is not None:
+        return []
+    return [ck.Finding(ck.WARN, "hole_comp", "settings",
+                       f"this part has {n} round hole(s) and hole_comp has never been set (user config, workspace, "
+                       "calibration or environment), so they are cut at nominal size and print small. Print the "
+                       "hole_coupon example (`b123d-print new coupon --from hole_coupon`), then store the result with "
+                       "`b123d-print printer hole-comp <value>` or `hole_comp = <value>` in your user config",
+                       {"holes": n})]
 
 
 def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None) -> dict:
@@ -183,6 +201,7 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     settings = load_settings(script)
     worst = 0
+    nudged = False
     for key in variants(mod):
         if args.variant and variant_key(args.variant) != key:
             continue
@@ -192,7 +211,8 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
                   f"{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, volume {r['volume']:.1f} mm^3, valid={r['valid']}")
         print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
         if not args.no_check:
-            for f in run_checks(mod, key, settings):
+            for f in run_checks(mod, key, settings, nudge=not nudged):
+                nudged |= f.check == "hole_comp"
                 if f.level != ck.OK:
                     print("  " + f.line())
                 worst = max(worst, {"ok": 0, "warn": 0, "fail": 1}[f.level])
