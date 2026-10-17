@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # GitHub-hosted runners only: on a public repo, self-hosted runners would run fork PRs' code.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Linux sandbox (bubblewrap)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces by default; bwrap needs them
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+      - run: uv run b123d-print check
+      - name: MCP end to end (incl. sandbox escapes)
+        run: uv run python tests/mcp_smoke.py
+      - name: Which sandbox ran
+        run: uv run python -c "from b123d_print.sandbox import describe; print(describe())"
+
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: MCP end to end from the built wheel via uvx
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          uv sync --frozen
+          B123D_PRINT_SMOKE_CMD="uvx --from $(ls dist/*.whl) b123d-print-mcp" uv run python tests/mcp_smoke.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: docker build -t b123d-print-mcp .
+      - name: MCP end to end against the container
+        run: |
+          uv sync --frozen
+          # same /tmp path inside and outside, so the test can look at the files the server wrote
+          B123D_PRINT_SMOKE_CMD="docker run -i --rm --network none --user $(id -u):$(id -g) -v /tmp:/tmp b123d-print-mcp" \
+            uv run python tests/mcp_smoke.py

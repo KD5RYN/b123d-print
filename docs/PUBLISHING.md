@@ -44,5 +44,16 @@ tag `vX.Y.Z`, the workflow does the rest. While 0.x, the part-script convention 
 ## Still open
 
 - GitHub owner: `KD5RYN/b123d-print` (personal) unless you want an org.
-- Linux sandbox (bubblewrap) and the Dockerfile are untested; the first CI run on GitHub
-  Actions (macOS + Ubuntu) should cover them before the first release.
+- Linux sandbox (bubblewrap) and the Dockerfile are untested; `.github/workflows/ci.yml` covers
+  them (macOS + Ubuntu with bwrap, the wheel via uvx, the Docker image) on the first push.
+- CI uses GitHub-hosted runners only. Self-hosted runners on a public repo would run code from
+  anyone's pull request on your machines; keep them for private repos / trusted branches.
+
+## First release, step by step
+
+1. Create the repo on GitHub and push `main`; wait for CI to go green on both platforms.
+2. On pypi.org: Account → Publishing → add a *pending trusted publisher*: project
+   `b123d-print`, owner/repo, workflow `release.yml`, environment `pypi`.
+3. In the GitHub repo: Settings → Environments → create `pypi` (optionally require approval).
+4. `git tag v0.1.0 && git push --tags` → `release.yml` uploads to PyPI and pushes
+   `ghcr.io/OWNER/b123d-print-mcp:0.1.0` + `latest`. Make the GHCR package public once.
