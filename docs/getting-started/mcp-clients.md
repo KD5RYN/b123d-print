@@ -35,8 +35,14 @@ In place of `b123d-print` in any config on this page:
 | `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
 | `--public-url <url>` | `$B123D_PRINT_PUBLIC_URL` | HTTP: the base URL clients reach the server at, used in download links (e.g. `https://cad.example.com`); default: the request's `Host`, and proxy headers for hosts in `--allowed-hosts` |
 | `--link-ttl <seconds>` | `$B123D_PRINT_LINK_TTL`, else 3600 | HTTP: how long a download link stays valid |
+| `--tokens-file <path>` | `$B123D_PRINT_TOKENS_FILE` | HTTP: [named tokens](http.md#tokens), each limited to workspaces; re-read when it changes |
+| `--job-queue <folder>` | `$B123D_PRINT_JOB_QUEUE` | HTTP: hand builds to a separate `worker` process through this folder (the Compose setup's network-less worker) |
 | `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |
 | `--healthcheck` | | check a running HTTP server's `/health` and exit (the Docker image's health check) |
+
+Subcommands: `b123d-print-mcp token add|list|revoke` manages the [tokens file](http.md#tokens), and
+`b123d-print-mcp worker --queue <folder>` runs the builds a server with `--job-queue` hands over
+(`--check` exits 0 while a worker's heartbeat is fresh; the Compose health check).
 
 The full `--help` output is in the [Reference](../reference.md#b123d-print-mcp).
 

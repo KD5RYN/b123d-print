@@ -6,7 +6,9 @@
 #
 # MCP clients: command "docker", args ["run","-i","--rm","--network","none","-v","/abs/path/to/parts:/work","b123d-print-mcp"]
 #
-# The same image as a network service (Streamable HTTP at /mcp, bearer token required):
+# The same image as a network service (Streamable HTTP at /mcp, named bearer tokens): use
+# deploy/compose.yaml, which runs it twice, an HTTP front (network, no part scripts) and a
+# `worker` (network_mode: none) that runs the builds. Single container, for a quick try:
 #
 #   docker run -d --name b123d-print -p 127.0.0.1:8000:8000 -v "$PWD:/work" \
 #     -e B123D_PRINT_TRANSPORT=http -e B123D_PRINT_TOKEN="$(cat token)" b123d-print-mcp

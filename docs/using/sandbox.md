@@ -10,6 +10,7 @@ too: the mesh files it parses may have been written by a part script.
 | Linux with [bubblewrap](https://github.com/containers/bubblewrap) | no network, read-only system, same writable folders, home hidden |
 | Linux without bubblewrap, Windows | separate process + audit hook only — **install bubblewrap, or use Docker** |
 | [Docker](../getting-started/docker.md) | the container (`--network none`, only the mounted folder) |
+| [Docker over HTTP](../getting-started/http.md#compose) | a separate `worker` container with `network_mode: none` runs the part scripts; the HTTP container, which has a network, runs none |
 
 Every job also gets a timeout (default 120 s, `--timeout` or `B123D_PRINT_TIMEOUT`) and a CPU
 limit. The audit hook (blocks sockets, subprocesses, native libraries, writes elsewhere) is

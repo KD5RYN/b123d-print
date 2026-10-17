@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import contextvars
-import hmac
 import json
 import os
 import re
@@ -28,7 +27,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import links, sandbox
+from . import jobqueue, links, sandbox, tokens
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats
 from .project import find_parts
@@ -58,7 +57,8 @@ async def _request_workspace(ctx, call_next):
     req = getattr(ctx, "request", None)
     name = None
     if req is not None and hasattr(req, "query_params"):
-        name = req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
+        name = (req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
+                or req.scope.get("state", {}).get("b123d_workspace"))  # a token's default workspace (TokenAuth)
     token, rtoken = _WORKSPACE.set(name), _REQUEST.set(req)
     try:
         return await call_next(ctx)
@@ -70,6 +70,7 @@ async def _request_workspace(ctx, call_next):
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
 STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
+               "tokens": None, "queue": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
 EMBED_MAX = 2_000_000  # bytes: export(embed=True) inlines files up to this size ...
 EMBED_TOTAL = 8_000_000  # ... and this much in all
@@ -112,9 +113,17 @@ async def _run(job: dict, out_dir: Path) -> dict:
     """Every job that runs untrusted code or parses untrusted files goes through here: sandboxed,
     and under the shared build limit."""
     root = _root()  # resolve the client's workspace here, not in the worker thread
-    return await anyio.to_thread.run_sync(
-        lambda: sandbox.run_job(job, root, out_dir, STATE["timeout"]), limiter=_limiter()
-    )
+    queue = STATE["queue"]
+
+    def run() -> dict:
+        if queue is None:
+            return sandbox.run_job(job, root, out_dir, STATE["timeout"])
+        try:  # a separate worker (container) runs it: see jobqueue.py
+            return jobqueue.submit(queue, job, root, out_dir, STATE["timeout"])
+        except jobqueue.WorkerDown as e:
+            return {"ok": False, "error": str(e)}
+
+    return await anyio.to_thread.run_sync(run, limiter=_limiter())
 
 
 async def _job(name: str, op: str, **kw) -> dict:
@@ -133,6 +142,12 @@ def _error_text(res: dict) -> str:
 
 def _http() -> bool:
     return STATE["transport"] == "http"
+
+
+def _token_name() -> str | None:
+    """HTTP: the name of the token this request came with (see TokenAuth)."""
+    req = _REQUEST.get()
+    return req.scope.get("state", {}).get("b123d_token") if req is not None else None
 
 
 def _ws_name() -> str:
@@ -262,6 +277,8 @@ def list_parts() -> str:
             "printer": _printer_summary(s),
             "sandbox": sandbox.describe(),
             "max_concurrent_builds": STATE["max_builds"],
+            **({"token": _token_name(), "build_worker": "separate process (job queue)" if STATE["queue"] else "in-process"}
+               if _http() else {}),
         },
         indent=1,
     )
@@ -648,10 +665,18 @@ def calibrate_hole_comp() -> str:
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request):
-    """Liveness for Docker / monitors; needs no token and reveals nothing but the version."""
+    """Liveness for Docker / monitors; needs no token and reveals nothing but the version (and, with
+    a separate build worker, whether it is alive: 503 "degraded" when it is not)."""
     from starlette.responses import JSONResponse
 
-    return JSONResponse({"status": "ok", "version": _pkg_version()})
+    body = {"status": "ok", "version": _pkg_version()}
+    if STATE["queue"] is not None:
+        age = jobqueue.worker_age(STATE["queue"])
+        body["worker"] = "ok" if age is not None and age < jobqueue.HEARTBEAT_STALE else "down"
+        if body["worker"] != "ok":
+            body["status"] = "degraded"
+            return JSONResponse(body, status_code=503)
+    return JSONResponse(body)
 
 
 @mcp.custom_route("/files/{workspace}/{token}/{path:path}", methods=["GET", "HEAD"])
@@ -675,28 +700,78 @@ async def download(request):
                         headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
 
 
-class RequireToken:
+async def _deny(send, status: int, error: str, description: str) -> None:
+    body = json.dumps({"error": error, "error_description": description}).encode()
+    headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
+    if status == 401:
+        headers.append((b"www-authenticate", b'Bearer error="invalid_token"'))
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": body})
+
+
+def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
+    path = scope["path"]
+    if path.startswith("/files/"):  # never log the signature: a log line must not be a working link
+        parts = path.split("/", 4)
+        path = f"/files/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
+    client = (scope.get("client") or ("-",))[0]
+    ws = f" ws={workspace}" if workspace is not None else ""
+    print(f"b123d-print-mcp: {client} {who} {scope['method']} {path}{ws} -> {status}", file=sys.stderr, flush=True)
+
+
+class TokenAuth:
     """ASGI wrapper: every HTTP request except /health and the signed /files/ links (which carry
-    their own HMAC, see download) needs `Authorization: Bearer <token>`.
+    their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
+    may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
+    token's single workspace if it has exactly one, else the shared root workspace. Every request
+    is logged with the token's name.
 
-    One shared static token. (The SDK's own bearer auth is the OAuth resource-server path: it
-    wants an issuer URL and a token verifier fixed when MCPServer is built, and advertises OAuth
-    metadata that would send clients looking for an authorization server that does not exist.)"""
+    (The SDK's own bearer auth is the OAuth resource-server path: it wants an issuer URL and a
+    token verifier fixed when MCPServer is built, and advertises OAuth metadata that would send
+    clients looking for an authorization server that does not exist.)"""
 
-    def __init__(self, app, token: str):
-        self.app, self.token = app, token.encode()
+    def __init__(self, app, store: tokens.Store | None):
+        self.app, self.store = app, store
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] != "/health" and not scope["path"].startswith("/files/"):
-            scheme, _, cred = dict(scope["headers"]).get(b"authorization", b"").partition(b" ")
-            if scheme.lower() != b"bearer" or not hmac.compare_digest(cred.strip(), self.token):
-                body = b'{"error": "invalid_token", "error_description": "missing or wrong bearer token"}'
-                await send({"type": "http.response.start", "status": 401, "headers": [
-                    (b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
-                    (b"www-authenticate", b'Bearer error="invalid_token"')]})
-                await send({"type": "http.response.body", "body": body})
-                return
-        await self.app(scope, receive, send)
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        status = {"code": 0}
+
+        async def send_logged(msg):
+            if msg["type"] == "http.response.start":
+                status["code"] = msg["status"]
+            await send(msg)
+
+        path = scope["path"]
+        if path == "/health":
+            return await self.app(scope, receive, send)
+        if path.startswith("/files/"):
+            await self.app(scope, receive, send_logged)
+            return _log(scope, "link", status["code"])
+        if self.store is None:  # --insecure-no-auth
+            await self.app(scope, receive, send_logged)
+            return _log(scope, "(no auth)", status["code"])
+        headers = dict(scope["headers"])
+        scheme, _, cred = headers.get(b"authorization", b"").partition(b" ")
+        tok = self.store.check(cred.strip().decode(errors="replace")) if scheme.lower() == b"bearer" and cred.strip() else None
+        if tok is None:
+            await _deny(send, 401, "invalid_token", "missing, wrong or revoked bearer token")
+            return _log(scope, "(bad token)", 401)
+        from urllib.parse import parse_qs
+
+        ws = (parse_qs(scope.get("query_string", b"").decode()).get("workspace") or [None])[0] \
+            or headers.get(b"x-b123d-workspace", b"").decode() or None
+        if ws is None and tok.default_workspace():
+            ws = tok.default_workspace()
+            scope.setdefault("state", {})["b123d_workspace"] = ws
+        if not tok.allows(ws):
+            await _deny(send, 403, "forbidden", f"token {tok.name!r} may use workspaces {tok.workspaces}; this request "
+                        f"asked for {('workspace ' + repr(ws)) if ws else 'the shared root workspace (no ?workspace=)'}")
+            return _log(scope, tok.name, 403, ws or tokens.ROOT_WS)
+        scope.setdefault("state", {})["b123d_token"] = tok.name
+        await self.app(scope, receive, send_logged)
+        _log(scope, tok.name, status["code"], ws or tokens.ROOT_WS)
 
 
 def _token() -> str | None:
@@ -706,7 +781,7 @@ def _token() -> str | None:
     return tok.strip() if tok else None
 
 
-def http_app(host: str, token: str | None, allowed_hosts: str | None = None):
+def http_app(host: str, store: tokens.Store | None, allowed_hosts: str | None = None):
     """The Streamable HTTP app (stateless: survives server restarts, any replica can answer)."""
     from mcp.server.transport_security import TransportSecuritySettings
 
@@ -715,7 +790,7 @@ def http_app(host: str, token: str | None, allowed_hosts: str | None = None):
         hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
         sec = TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=hosts)
     app = mcp.streamable_http_app(stateless_http=True, host=host, transport_security=sec)
-    return RequireToken(app, token) if token else app
+    return TokenAuth(app, store)
 
 
 def _healthcheck(args) -> int:
@@ -757,9 +832,29 @@ def build_parser() -> argparse.ArgumentParser:
                          "(default: from the request; $B123D_PRINT_PUBLIC_URL)")
     ap.add_argument("--link-ttl", type=float, default=float(env("B123D_PRINT_LINK_TTL", 3600)),
                     help="http: seconds a download link stays valid (default 3600; $B123D_PRINT_LINK_TTL)")
+    ap.add_argument("--tokens-file", default=env("B123D_PRINT_TOKENS_FILE"),
+                    help="http: named tokens, each limited to workspaces (see `token add`); re-read when it changes "
+                         "($B123D_PRINT_TOKENS_FILE)")
+    ap.add_argument("--job-queue", default=env("B123D_PRINT_JOB_QUEUE"),
+                    help="http: hand builds to a separate `worker` process through this folder instead of running "
+                         "them here (the Docker setup's network-less worker container; $B123D_PRINT_JOB_QUEUE)")
     ap.add_argument("--insecure-no-auth", action="store_true",
-                    help="http: run without a token (otherwise $B123D_PRINT_TOKEN or $B123D_PRINT_TOKEN_FILE is required)")
+                    help="http: run without any token (otherwise $B123D_PRINT_TOKENS_FILE, $B123D_PRINT_TOKEN or "
+                         "$B123D_PRINT_TOKEN_FILE is required)")
     ap.add_argument("--healthcheck", action="store_true", help="check the running HTTP server's /health and exit (for Docker)")
+    sub = ap.add_subparsers(dest="command", metavar="{token,worker}")
+    tk = sub.add_parser("token", help="manage the named tokens in --tokens-file")
+    tsub = tk.add_subparsers(dest="token_command", required=True)
+    add = tsub.add_parser("add", help="create a token, print it once, store only its SHA-256")
+    add.add_argument("name", help="who uses it, e.g. grok-chromebook")
+    add.add_argument("--workspace", action="append",
+                     help="workspace name or pattern it may use, e.g. 'grok-*' (repeatable; default: every workspace)")
+    tsub.add_parser("list", help="the tokens, their workspaces and when they were made (never the tokens)")
+    rv = tsub.add_parser("revoke", help="delete a token; the server stops accepting it at once")
+    rv.add_argument("name")
+    wk = sub.add_parser("worker", help="run builds handed over through --queue (pairs with the server's --job-queue)")
+    wk.add_argument("--queue", required=True, help="the folder shared with the server")
+    wk.add_argument("--check", action="store_true", help="exit 0 if a worker's heartbeat is fresh (Docker health check)")
     return ap
 
 
@@ -768,6 +863,13 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     # also the limit across server processes (one per SSH session); set before any early exit
     sandbox.MAX_BUILDS = max(1, args.max_builds)
+    if args.command == "token":
+        sys.exit(tokens.cli(args))
+    if args.command == "worker" and env("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1" and args.workspace:
+        # the worker container must read the same user settings (calibrations) as the server
+        os.environ["XDG_CONFIG_HOME"] = str(Path(args.workspace).expanduser().resolve() / ".config")
+    if args.command == "worker":
+        sys.exit(jobqueue.main(Path(args.queue).expanduser().resolve(), max(1, args.max_builds), args.check))
     if args.healthcheck:
         sys.exit(_healthcheck(args))
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
@@ -790,30 +892,53 @@ def main(argv: list[str] | None = None) -> None:
         token = _token()
     except OSError as e:
         sys.exit(f"b123d-print-mcp: cannot read B123D_PRINT_TOKEN_FILE: {e}")
-    if not token and not args.insecure_no_auth:
-        sys.exit("b123d-print-mcp: HTTP needs a token: set B123D_PRINT_TOKEN (or B123D_PRINT_TOKEN_FILE), "
-                 "e.g. from `python -c 'import secrets; print(secrets.token_urlsafe(32))'`, "
-                 "or pass --insecure-no-auth")
     if token and len(token) < 16:
         sys.exit("b123d-print-mcp: B123D_PRINT_TOKEN is too short (use at least 16 characters)")
-    STATE.update(link_secret=links.derive_secret(token, env("B123D_PRINT_LINK_SECRET")), link_ttl=max(1.0, args.link_ttl),
+    tokens_file = Path(args.tokens_file).expanduser() if args.tokens_file else None
+    if tokens_file and not tokens_file.is_file():
+        sys.exit(f"b123d-print-mcp: no tokens file {tokens_file}: create it with "
+                 f"`b123d-print-mcp --tokens-file {tokens_file} token add <name> --workspace <pattern>`")
+    store = None
+    if tokens_file or token:
+        try:
+            store = tokens.Store(tokens_file, token)
+        except (OSError, ValueError) as e:
+            sys.exit(f"b123d-print-mcp: cannot read the tokens file: {e}")
+    if (store is None or not store.names()) and not args.insecure_no_auth:
+        sys.exit("b123d-print-mcp: HTTP needs a token: add named tokens with `b123d-print-mcp --tokens-file <path> "
+                 "token add <name>` and set B123D_PRINT_TOKENS_FILE, or set B123D_PRINT_TOKEN (or "
+                 "B123D_PRINT_TOKEN_FILE), or pass --insecure-no-auth")
+    if args.insecure_no_auth:
+        store = None
+    secret = env("B123D_PRINT_LINK_SECRET") or (store.link_secret if store else None)
+    queue = Path(args.job_queue).expanduser().resolve() if args.job_queue else None
+    if queue:
+        queue.mkdir(parents=True, exist_ok=True)
+    STATE.update(tokens=store, queue=queue,
+                 link_secret=links.derive_secret(token, secret), link_ttl=max(1.0, args.link_ttl),
                  public_url=(args.public_url or "").rstrip("/") or None,
                  allowed_hosts=[h.strip() for h in (args.allowed_hosts or "").split(",") if h.strip()])
     if STATE["public_url"] and not re.match(r"^https?://[^/\s]+(/\S*)?$", STATE["public_url"]):
         sys.exit(f"b123d-print-mcp: --public-url must look like https://host[:port][/prefix], got {args.public_url!r}")
     import uvicorn
 
-    print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  "
-          f"auth {'bearer token' if token else 'NONE'}  max builds {STATE['max_builds']}", file=sys.stderr)
+    auth = f"tokens {', '.join(store.names())}" if store else "NONE"
+    print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  auth {auth}  "
+          f"max builds {STATE['max_builds']}  builds {'in worker via ' + str(queue) if queue else 'here'}", file=sys.stderr)
+    if store:  # SIGHUP: re-read the tokens file now (it is also re-read whenever it changes)
+        signal.signal(signal.SIGHUP, lambda *_: store.request_reload())
     # uvicorn handles SIGTERM/SIGINT: stop accepting, let running calls finish for up to
     # --shutdown-grace seconds, then cancel them; any build still running is killed here
     # uvicorn re-raises the signal after its shutdown; make SIGTERM a normal exit so the cleanup runs
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        uvicorn.run(http_app(args.host, token, args.allowed_hosts), host=args.host, port=args.port,
-                    log_level="info", timeout_graceful_shutdown=args.shutdown_grace)
+        # access_log off: TokenAuth logs every request with the token's name instead
+        uvicorn.run(http_app(args.host, store, args.allowed_hosts), host=args.host, port=args.port,
+                    log_level="info", access_log=False, timeout_graceful_shutdown=args.shutdown_grace)
     finally:
         n = sandbox.kill_all()
+        if queue:
+            jobqueue.cancel_all(queue)
         print(f"b123d-print-mcp: stopped{f' ({n} running build(s) killed)' if n else ''}", file=sys.stderr)
 
 

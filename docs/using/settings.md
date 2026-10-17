@@ -85,6 +85,8 @@ replaces the default the same way.
 | `B123D_PRINT_PUBLIC_URL` | the MCP server's `--public-url` (HTTP download links) |
 | `B123D_PRINT_LINK_TTL` | the MCP server's `--link-ttl` (HTTP download links) |
 | `B123D_PRINT_LINK_SECRET` | key that signs download links; default: derived from `B123D_PRINT_TOKEN`, so changing the token also invalidates old links |
+| `B123D_PRINT_TOKENS_FILE` | the MCP server's `--tokens-file`: [named tokens](../getting-started/http.md#tokens) (HTTP) |
+| `B123D_PRINT_JOB_QUEUE` | the MCP server's `--job-queue`: builds go to a separate `worker` (HTTP) |
 | `B123D_PRINT_TOKEN` | the bearer token HTTP clients must send ([Over the network](../getting-started/http.md)) |
 | `B123D_PRINT_TOKEN_FILE` | path of a file holding that token, instead of `B123D_PRINT_TOKEN` |
 | `B123D_PRINT_SANDBOX` | `none` turns the OS [sandbox](sandbox.md) off (the Docker image does; the container is the sandbox) |
