@@ -35,6 +35,10 @@ jobs:
         run: uv run python tests/mcp_smoke.py
         env:
           B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
+      - name: MCP end to end over HTTP (token, workspaces, parallel builds)
+        run: uv run python tests/mcp_smoke.py --http
+        env:
+          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
 
   wheel:
     runs-on: ubuntu-latest
@@ -61,3 +65,19 @@ jobs:
           # same /tmp path inside and outside, so the test can look at the files the server wrote
           B123D_PRINT_SMOKE_CMD="docker run -i --rm --network none --user $(id -u):$(id -g) -v /tmp:/tmp b123d-print-mcp" \
             uv run python tests/mcp_smoke.py
+      - name: HTTP mode refuses to start without a token
+        run: |
+          if docker run --rm -e B123D_PRINT_TRANSPORT=http b123d-print-mcp; then echo "started without a token"; exit 1; fi
+      - name: MCP end to end against the container over HTTP
+        run: |
+          WS=$(mktemp -d)
+          TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+          docker run -d --name mcp-http -p 127.0.0.1:8000:8000 --user $(id -u):$(id -g) -v "$WS:/work" \
+            -e B123D_PRINT_TRANSPORT=http -e B123D_PRINT_TOKEN="$TOKEN" b123d-print-mcp
+          for i in $(seq 60); do
+            s=$(docker inspect -f '{{.State.Health.Status}}' mcp-http); [ "$s" = healthy ] && break; sleep 2
+          done
+          echo "container health: $s"; [ "$s" = healthy ] || { docker logs mcp-http; exit 1; }
+          B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" B123D_PRINT_SMOKE_WORKSPACE_DIR="$WS" \
+            uv run python tests/mcp_smoke.py || { docker logs mcp-http | tail -50; exit 1; }
+          docker rm -f mcp-http
