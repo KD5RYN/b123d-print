@@ -86,7 +86,8 @@ def describe() -> str:
         "sandbox-exec": "macOS sandbox-exec (no network, no subprocesses, writes limited to out/ and scratch, home hidden)",
         "bwrap": "Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden)",
         "none": "process isolation + audit hook only (install bubblewrap on Linux, or use the Docker image)",
-    }[k]
+    }[k] if not (k == "none" and os.environ.get("B123D_PRINT_SANDBOX") == "none") else (
+        "OS sandbox off (B123D_PRINT_SANDBOX=none): process isolation + audit hook; in the Docker image the container is the sandbox")
 
 
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:

@@ -102,6 +102,8 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     specs += [ck.Overhang(p) for p in parts if p not in covered]  # always report overhangs
     if asm and not any(isinstance(s, ck.Overlap) for s in specs):
         specs.append(ck.Overlap())
+    fitted = {s.part for s in specs if isinstance(s, ck.Fit)}
+    specs += [ck.Fit(p) for p in parts if p not in fitted]  # no-op without a printer profile
     return specs
 
 

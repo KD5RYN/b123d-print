@@ -367,3 +367,25 @@ class Probe:
         good = frac >= self.fill if self.expect == "solid" else frac <= 1 - self.fill
         msg = f"{frac:.0%} solid at {tuple(round(c, 2) for c in self.center)} (expected {self.expect})"
         return [Finding(OK if good else FAIL, "probe", tgt, msg, {"fraction": round(frac, 4)})]
+
+
+@dataclass
+class Fit:
+    """The part must fit the active printer's build volume in print orientation (added
+    automatically when a printer profile is set; nothing to check in generic mode)."""
+
+    part: str
+    margin: float = 0.0  # mm kept free at each bed edge
+
+    def run(self, parts, assembly, settings) -> list[Finding]:
+        if not settings.printer:
+            return []
+        from .profiles import fits, load_printer
+
+        pr = load_printer(settings.printer)
+        size = _get(parts, self.part).bounding_box().size
+        ok, why = fits(pr, (size.X, size.Y, size.Z), self.margin)
+        level = OK if ok else FAIL
+        if ok and "turned" in why:
+            level = WARN
+        return [Finding(level, "fit", self.part or "part", f"{pr.label or pr.name}: {why}")]

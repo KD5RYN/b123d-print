@@ -25,13 +25,14 @@ def workspace(root: str | None) -> tuple[Path, str]:
     return r, load_settings(r).parts_dir
 
 
-def init_workspace(root: Path) -> list[Path]:
-    """Create b123d-print.toml, AGENTS.md and parts/ (existing files are left alone)."""
+def init_workspace(root: Path, update_agents: bool = False) -> list[Path]:
+    """Create b123d-print.toml, AGENTS.md and parts/ (existing files are left alone, except
+    AGENTS.md with update_agents: replaced by this version's workflow text)."""
     root.mkdir(parents=True, exist_ok=True)
     made = []
     for fname, content in ((WORKSPACE_FILE, data("b123d-print.toml")), ("AGENTS.md", data("AGENTS.md"))):
         p = root / fname
-        if not p.exists():
+        if not p.exists() or (update_agents and fname == "AGENTS.md" and p.read_text(encoding="utf-8") != content):
             p.write_text(content, encoding="utf-8")
             made.append(p)
     (root / "parts").mkdir(exist_ok=True)
@@ -126,13 +127,63 @@ def cmd_build(args) -> int:
     return 0
 
 
+def cmd_printer(args) -> int:
+    from . import profiles as pf
+    from .config import set_user_setting
+
+    if args.pcmd == "list":
+        hits = pf.search("printers", " ".join(args.query))
+        print("\n".join(hits[:200]) or "no match")
+        if len(hits) > 200:
+            print(f"... {len(hits) - 200} more; add words to narrow it")
+        return 0
+    if args.pcmd == "show":
+        s = load_settings()
+        name = args.name or s.printer
+        if not name:
+            print("generic (no printer profile): min wall 0.8, overhang 45 deg, no fit check")
+            return 0
+        print(pf.load_printer(name).summary())
+        if not args.name and s.material:
+            print(pf.load_material(s.material).summary())
+        return 0
+    if args.pcmd == "use":
+        if args.name in ("generic", "none", ""):
+            set_user_setting("printer", None)
+            path = set_user_setting("material", None)
+            print(f"generic mode ({path})")
+            return 0
+        pr = pf.load_printer(args.name)  # raises with suggestions if unknown
+        path = set_user_setting("printer", args.name)
+        if args.material:
+            print(pf.load_material(args.material).summary())
+            set_user_setting("material", args.material)
+        print(f"{pr.summary()}\nsaved to {path}")
+        return 0
+    if args.pcmd == "hole-comp":
+        s = load_settings()
+        if not s.printer:
+            sys.exit("set a printer first (b123d-print printer use <name>), or put hole_comp in your config")
+        print(f"hole_comp {args.value:g} for {s.printer}/{s.material or 'any'} -> {pf.save_hole_comp(s.printer, s.material, args.value)}")
+        return 0
+    return 1
+
+
+def _version() -> str:
+    from importlib.metadata import version
+
+    return version("b123d-print")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="b123d-print", description="build123d part workflow: scaffold, build, check")
     ap.add_argument("--root", help="workspace root (default: nearest b123d-print.toml, else the cwd)")
+    ap.add_argument("--version", action="version", version=f"b123d-print {_version()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="create a workspace (b123d-print.toml, AGENTS.md, parts/)")
     p.add_argument("dir", nargs="?", default=".")
+    p.add_argument("--update-agents", action="store_true", help="replace AGENTS.md with this version's text")
     p = sub.add_parser("new", help="scaffold parts/<name>/<name>.py from the template")
     p.add_argument("name")
     p.add_argument("-d", "--description", default="")
@@ -146,14 +197,25 @@ def main(argv: list[str] | None = None) -> int:
         if name == "check":
             p.add_argument("--json", action="store_true")
             p.add_argument("-v", "--verbose", action="store_true", help="also list passing checks")
+    p = sub.add_parser("printer", help="optional printer/material profile (default: generic)")
+    psub = p.add_subparsers(dest="pcmd", required=True)
+    q = psub.add_parser("list", help="search the printer profiles (from OrcaSlicer's library + yours)")
+    q.add_argument("query", nargs="*")
+    q = psub.add_parser("show", help="show a printer (default: the active one)")
+    q.add_argument("name", nargs="?")
+    q = psub.add_parser("use", help="set the active printer in your user config; 'generic' clears it")
+    q.add_argument("name")
+    q.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
+    q = psub.add_parser("hole-comp", help="store a measured hole compensation for the active printer + material")
+    q.add_argument("value", type=float)
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
     args = ap.parse_args(argv)
 
     if args.cmd == "init":
-        made = init_workspace(Path(args.dir).resolve())
-        print("\n".join(f"created {m}" for m in made) or "workspace already set up")
+        made = init_workspace(Path(args.dir).resolve(), args.update_agents)
+        print("\n".join(f"wrote {m}" for m in made) or "workspace already set up (AGENTS.md unchanged)")
         return 0
     if args.cmd == "new":
         root, parts_dir = workspace(args.root)
@@ -167,6 +229,11 @@ def main(argv: list[str] | None = None) -> int:
         for k, v in s.__dict__.items():
             print(f"  {k} = {v}")
         return 0
+    if args.cmd == "printer":
+        try:
+            return cmd_printer(args)
+        except (KeyError, ValueError) as e:
+            sys.exit(str(e).strip('"'))
     if args.cmd == "examples":
         print("\n".join(examples()))
         return 0

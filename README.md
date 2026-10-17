@@ -345,6 +345,41 @@ formats = ["step", "stl", "3mf", "png"]
 A workspace `b123d-print.toml` overrides the user config; environment variables
 (`B123D_PRINT_HOLE_COMP`, `B123D_PRINT_FORMATS`, ...) override both.
 
+## Printer profile (optional)
+
+By default b123d-print is in **generic mode**: no printer assumed, 0.8 mm minimum wall, 45°
+overhang limit. If you set your printer, the model also knows its build volume and nozzle:
+
+```bash
+b123d-print printer list bambu a1        # search 405 printer models
+```
+
+```bash
+b123d-print printer use bambu_lab_a1_mini --material petg
+```
+
+- Parts must then fit the build volume in print orientation (`fit` check; it fails otherwise).
+- Minimum wall becomes 2 line widths of your nozzle; material notes (PLA vs PETG vs ASA …) reach
+  the model.
+- `b123d-print printer hole-comp 0.4` stores your coupon result for that printer + material.
+- `b123d-print printer use generic` goes back. Over MCP: the `use_printer` tool.
+
+Printer dimensions come from [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)'s printer
+library (facts only; see [THIRD_PARTY.md](THIRD_PARTY.md)). Not listed, or modified? Add your own
+`~/.config/b123d-print/printers/<name>.toml`:
+
+```toml
+label = "My Ender 3 with 0.6 nozzle"
+bed_x = 220
+bed_y = 220
+height = 250
+nozzle = 0.6
+# round_bed = true      # deltas: bed_x is the diameter
+# max_overhang = 50
+```
+
+Materials work the same way in `materials/` (`label`, `notes`, optional `clearance`).
+
 ## The checks
 
 - **overlap** — intersection volume between every pair of `assembly(d)` parts; > 0.01 mm³ fails.
@@ -354,6 +389,7 @@ A workspace `b123d-print.toml` overrides the user config; environment variables
 - **wall** — thinnest material in a cross-section, optionally only around one cut: across the
   wall along the surface normal, and between separate outlines (hole to edge). Tips of ordinary
   corners don't count as thin; knife edges sharper than about 25° do.
+- **fit** — only with a printer profile: the part fits the build volume in print orientation.
 - **probe** — material must be present (or absent) in a small box.
 - **valid** — every printable part is a valid, non-empty solid.
 
@@ -369,6 +405,29 @@ A workspace `b123d-print.toml` overrides the user config; environment variables
 Every build also gets a timeout (default 120 s, `--timeout`) and a CPU limit. The audit hook
 (blocks sockets, subprocesses, native libraries, writes elsewhere) is defense in depth, not a
 boundary on its own.
+
+## Updating
+
+`b123d-print --version` (or the `version` field of the MCP `list_parts` tool) shows what you run.
+Releases and what changed: [GitHub releases](https://github.com/KD5RYN/b123d-print/releases).
+
+| Installed with | Update |
+| --- | --- |
+| `uvx --from git+https://github.com/KD5RYN/b123d-print ...` (MCP clients) | uvx caches the build: run `uvx --refresh --from git+https://github.com/KD5RYN/b123d-print b123d-print-mcp --help` once, then restart the client |
+| a pinned version `...b123d-print@v0.1.0` | change the tag in your client config, restart the client |
+| `uv tool install git+https://github.com/KD5RYN/b123d-print` (CLI) | `uv tool install --force git+https://github.com/KD5RYN/b123d-print` |
+| Docker | `git pull && docker build -t b123d-print-mcp .` in your clone, restart the client |
+| Claude Code plugin | `/plugin marketplace update b123d-print`, then restart Claude Code |
+
+After updating:
+
+- **Workspaces** keep your parts and settings. The workflow text in a workspace's `AGENTS.md`
+  is a copy; refresh it with `b123d-print init --update-agents` (MCP clients always get the
+  current text from the server).
+- **Printer profiles** ship with the package and update with it; your own files in
+  `~/.config/b123d-print/` are never touched.
+- **Part scripts**: while b123d-print is 0.x the script conventions may change; the release
+  notes say when, and `b123d-print check` tells you what breaks.
 
 ## Troubleshooting
 
@@ -400,6 +459,9 @@ git clone https://github.com/KD5RYN/b123d-print && cd b123d-print && uv sync
 uv run pytest && uv run b123d-print check && uv run python tests/mcp_smoke.py
 ```
 
+The printer table is generated: `python tools/sync_orca_printers.py` refreshes
+`src/b123d_print/data/printers_orca.json` from OrcaSlicer (records the commit it used).
+
 New checks and example parts should come from something that was actually printed.
 
 ## Credits
@@ -409,6 +471,7 @@ b123d-print is a thin layer over:
 - [build123d](https://github.com/gumyr/build123d) — the Python CAD API every part is written in (Apache-2.0)
 - [Open CASCADE Technology](https://dev.opencascade.org), via [OCP](https://github.com/CadQuery/OCP) — the geometry kernel (LGPL-2.1 with exception; bindings Apache-2.0)
 - [lib3mf](https://github.com/3MFConsortium/lib3mf) — 3MF export (BSD)
+- [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) — printer dimensions for the optional printer profiles (AGPL-3.0; facts only, no files copied)
 - [matplotlib](https://matplotlib.org) and [NumPy](https://numpy.org) — renders, sections, check math
 - [Model Context Protocol](https://modelcontextprotocol.io) and its [Python SDK](https://github.com/modelcontextprotocol/python-sdk) (MIT)
 - [uv](https://github.com/astral-sh/uv) — packaging and `uvx`

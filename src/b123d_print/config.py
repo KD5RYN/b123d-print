@@ -28,6 +28,8 @@ class Settings:
     clearance: float = 0.2  # mm default gap between mating parts
     min_wall: float = 0.8  # mm; wall checks fail below this unless a check sets its own minimum
     max_overhang: float = 45.0  # deg from vertical; steeper downward faces are flagged
+    printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
+    material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
@@ -69,6 +71,15 @@ def _read(path: Path) -> dict:
         raise ValueError(f"{path}: unknown setting(s) {sorted(unknown)}; known: {sorted(names)}")
     if "formats" in flat:
         flat["formats"] = parse_formats(flat["formats"], str(path))
+    for k in ("hole_comp", "clearance", "min_wall", "max_overhang"):
+        if k in flat:
+            try:
+                flat[k] = float(flat[k])
+            except (TypeError, ValueError):
+                raise ValueError(f"{path}: {k} must be a number, got {flat[k]!r}") from None
+    for k in ("printer", "material", "parts_dir"):
+        if k in flat:
+            flat[k] = str(flat[k])
     return flat
 
 
@@ -85,14 +96,46 @@ def parse_formats(value, where: str = "formats") -> tuple:
 
 
 def load_settings(start: str | Path | None = None) -> Settings:
-    """Settings for a part script (pass its __file__) or a folder."""
+    """Settings for a part script (pass its __file__) or a folder.
+
+    With a printer profile set, min_wall and max_overhang come from it unless set explicitly, and
+    hole_comp comes from the calibration for that printer + material unless the workspace or
+    the environment sets it."""
     s = Settings()
+    explicit: set[str] = set()
     user = user_config_path()
     if user.is_file():
-        s = replace(s, **_read(user))
+        u = _read(user)
+        s = replace(s, **u)
+        explicit |= set(u) - {"hole_comp"}  # a calibration for the active printer beats the global value
     ws = find_workspace(start)
     if ws is not None:
-        s = replace(s, root=ws, **_read(ws / WORKSPACE_FILE))
+        w = _read(ws / WORKSPACE_FILE)
+        s = replace(s, root=ws, **w)
+        explicit |= set(w)
+    if os.environ.get("B123D_PRINT_PRINTER") is not None:
+        s = replace(s, printer=os.environ["B123D_PRINT_PRINTER"])
+    for name, var in _ENV.items():
+        if os.environ.get(var):
+            explicit.add(name)
+    if s.printer:
+        from .profiles import calibrated_hole_comp, load_printer
+
+        p = load_printer(s.printer)
+        if "min_wall" not in explicit:
+            s = replace(s, min_wall=p.min_wall)
+        if "max_overhang" not in explicit:
+            s = replace(s, max_overhang=p.max_overhang)
+        if "hole_comp" not in explicit:
+            hc = calibrated_hole_comp(s.printer, s.material)
+            if hc is not None:
+                s = replace(s, hole_comp=hc)
+    if s.material and "clearance" not in explicit:
+        from .profiles import load_material
+
+        m = load_material(s.material)
+        if m.clearance is not None:
+            s = replace(s, clearance=m.clearance)
     for name, var in _ENV.items():
         if os.environ.get(var):
             s = replace(s, **{name: float(os.environ[var])})
@@ -104,6 +147,43 @@ def load_settings(start: str | Path | None = None) -> Settings:
 def hole_comp(script_file: str | Path | None = None) -> float:
     """HOLE_COMP for a part script: `HOLE_COMP: float = hole_comp(__file__)`."""
     return load_settings(script_file).hole_comp
+
+
+def printer(script_file: str | Path | None = None):
+    """The active printer profile, or None in generic mode: `p = printer(__file__)`."""
+    from .profiles import load_printer
+
+    name = load_settings(script_file).printer
+    return load_printer(name) if name else None
+
+
+def set_user_setting(key: str, value: str | None) -> Path:
+    """Set (or with None remove) `key` under [print] in the user config, keeping the rest."""
+    path = user_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    out, section, done = [], None, False
+    for line in lines:
+        st = line.strip()
+        if st.startswith("[") and st.endswith("]"):
+            if section == "print" and not done and value is not None:
+                out.append(f'{key} = "{value}"')
+                done = True
+            section = st[1:-1].strip()
+        elif section == "print" and st.split("=")[0].strip() == key:
+            if value is not None and not done:
+                out.append(f'{key} = "{value}"')
+                done = True
+            continue
+        out.append(line)
+    if not done and value is not None:
+        if section != "print" and "[print]" not in (x.strip() for x in out):
+            out += ["", "[print]"] if out else ["[print]"]
+            out.append(f'{key} = "{value}"')
+        else:
+            out.append(f'{key} = "{value}"')
+    path.write_text("\n".join(out).strip() + "\n", encoding="utf-8")
+    return path
 
 
 def clearance(script_file: str | Path | None = None) -> float:

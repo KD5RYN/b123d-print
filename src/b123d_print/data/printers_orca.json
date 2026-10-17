@@ -1,0 +1,3652 @@
+{
+"source": "OrcaSlicer resources/profiles at https://github.com/SoftFever/OrcaSlicer/tree/fd28f6c1894a7fb09af2af0d8a8c935d98467e2d",
+"license_note": "Facts (build volume, nozzle) extracted from OrcaSlicer's AGPL-3.0 profiles; no files copied.",
+"commit": "fd28f6c1894a7fb09af2af0d8a8c935d98467e2d",
+"printers": {
+"afinia_h_1_hs": {
+"label": "Afinia H+1(HS)",
+"vendor": "Afinia",
+"bed_x": 207.0,
+"bed_y": 255.0,
+"height": 230.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anker_m5": {
+"label": "Anker M5",
+"vendor": "Anker",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anker_m5_all_metal_hot_end": {
+"label": "Anker M5 All-Metal Hot End",
+"vendor": "Anker",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anker_m5c": {
+"label": "Anker M5C",
+"vendor": "Anker",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_4max_pro": {
+"label": "Anycubic 4Max Pro",
+"vendor": "Anycubic",
+"bed_x": 270.0,
+"bed_y": 205.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_4max_pro_2": {
+"label": "Anycubic 4Max Pro 2",
+"vendor": "Anycubic",
+"bed_x": 270.0,
+"bed_y": 210.0,
+"height": 190.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_chiron": {
+"label": "Anycubic Chiron",
+"vendor": "Anycubic",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 450.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_i3_mega_s": {
+"label": "Anycubic i3 Mega S",
+"vendor": "Anycubic",
+"bed_x": 210.0,
+"bed_y": 210.0,
+"height": 205.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra": {
+"label": "Anycubic Kobra",
+"vendor": "Anycubic",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_2": {
+"label": "Anycubic Kobra 2",
+"vendor": "Anycubic",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_2_max": {
+"label": "Anycubic Kobra 2 Max",
+"vendor": "Anycubic",
+"bed_x": 420.0,
+"bed_y": 420.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_2_neo": {
+"label": "Anycubic Kobra 2 Neo",
+"vendor": "Anycubic",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_2_plus": {
+"label": "Anycubic Kobra 2 Plus",
+"vendor": "Anycubic",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_2_pro": {
+"label": "Anycubic Kobra 2 Pro",
+"vendor": "Anycubic",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_3": {
+"label": "Anycubic Kobra 3",
+"vendor": "Anycubic",
+"bed_x": 255.0,
+"bed_y": 255.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_3_max": {
+"label": "Anycubic Kobra 3 Max",
+"vendor": "Anycubic",
+"bed_x": 426.0,
+"bed_y": 420.0,
+"height": 501.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_3_v2": {
+"label": "Anycubic Kobra 3 V2",
+"vendor": "Anycubic",
+"bed_x": 255.0,
+"bed_y": 255.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_max": {
+"label": "Anycubic Kobra Max",
+"vendor": "Anycubic",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 450.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_neo": {
+"label": "Anycubic Kobra Neo",
+"vendor": "Anycubic",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_plus": {
+"label": "Anycubic Kobra Plus",
+"vendor": "Anycubic",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_s1": {
+"label": "Anycubic Kobra S1",
+"vendor": "Anycubic",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_s1_max": {
+"label": "Anycubic Kobra S1 Max",
+"vendor": "Anycubic",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_kobra_x": {
+"label": "Anycubic Kobra X",
+"vendor": "Anycubic",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"anycubic_predator": {
+"label": "Anycubic Predator",
+"vendor": "Anycubic",
+"bed_x": 370.0,
+"bed_y": 370.0,
+"height": 455.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"anycubic_vyper": {
+"label": "Anycubic Vyper",
+"vendor": "Anycubic",
+"bed_x": 250.0,
+"bed_y": 255.0,
+"height": 265.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_genius": {
+"label": "Artillery Genius",
+"vendor": "Artillery",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_genius_pro": {
+"label": "Artillery Genius Pro",
+"vendor": "Artillery",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_hornet": {
+"label": "Artillery Hornet",
+"vendor": "Artillery",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_m1_pro": {
+"label": "Artillery M1 Pro",
+"vendor": "Artillery",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x1": {
+"label": "Artillery Sidewinder X1",
+"vendor": "Artillery",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x2": {
+"label": "Artillery Sidewinder X2",
+"vendor": "Artillery",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x3_plus": {
+"label": "Artillery Sidewinder X3 Plus",
+"vendor": "Artillery",
+"bed_x": 300.0,
+"bed_y": 305.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x3_pro": {
+"label": "Artillery Sidewinder X3 Pro",
+"vendor": "Artillery",
+"bed_x": 240.0,
+"bed_y": 245.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x4_plus": {
+"label": "Artillery Sidewinder X4 Plus",
+"vendor": "Artillery",
+"bed_x": 300.0,
+"bed_y": 310.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"artillery_sidewinder_x4_pro": {
+"label": "Artillery Sidewinder X4 Pro",
+"vendor": "Artillery",
+"bed_x": 240.0,
+"bed_y": 250.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"babybelt_pro": {
+"label": "BabyBelt Pro",
+"vendor": "Printcepts",
+"bed_x": 95.0,
+"bed_y": 500.0,
+"height": 100.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_a1": {
+"label": "Bambu Lab A1",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_a1_mini": {
+"label": "Bambu Lab A1 mini",
+"vendor": "BBL",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_a2l": {
+"label": "Bambu Lab A2L",
+"vendor": "BBL",
+"bed_x": 330.0,
+"bed_y": 320.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_h2c": {
+"label": "Bambu Lab H2C",
+"vendor": "BBL",
+"bed_x": 330.0,
+"bed_y": 320.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_h2d": {
+"label": "Bambu Lab H2D",
+"vendor": "BBL",
+"bed_x": 350.0,
+"bed_y": 320.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_h2d_pro": {
+"label": "Bambu Lab H2D Pro",
+"vendor": "BBL",
+"bed_x": 350.0,
+"bed_y": 320.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_h2s": {
+"label": "Bambu Lab H2S",
+"vendor": "BBL",
+"bed_x": 340.0,
+"bed_y": 320.0,
+"height": 340.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_p1p": {
+"label": "Bambu Lab P1P",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_p1s": {
+"label": "Bambu Lab P1S",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_p2s": {
+"label": "Bambu Lab P2S",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_x1": {
+"label": "Bambu Lab X1",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_x1_carbon": {
+"label": "Bambu Lab X1 Carbon",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_x1e": {
+"label": "Bambu Lab X1E",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"bambu_lab_x2d": {
+"label": "Bambu Lab X2D",
+"vendor": "BBL",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 261.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"biqu_b1": {
+"label": "BIQU B1",
+"vendor": "BIQU",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"biqu_bx": {
+"label": "BIQU BX",
+"vendor": "BIQU",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"biqu_hurakan": {
+"label": "BIQU Hurakan",
+"vendor": "BIQU",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"blocks_pro_s100": {
+"label": "BLOCKS Pro S100",
+"vendor": "Blocks",
+"bed_x": 1000.0,
+"bed_y": 1000.0,
+"height": 900.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"blocks_rd50_v2": {
+"label": "BLOCKS RD50 V2",
+"vendor": "Blocks",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"blocks_rf50": {
+"label": "BLOCKS RF50",
+"vendor": "Blocks",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"chuanying_x1": {
+"label": "Chuanying X1",
+"vendor": "Chuanying",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"co_print_chromaset": {
+"label": "Co Print ChromaSet",
+"vendor": "Co Print",
+"bed_x": 225.0,
+"bed_y": 225.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"colido_160_v2": {
+"label": "CoLiDo 160 V2",
+"vendor": "CoLiDo",
+"bed_x": 160.0,
+"bed_y": 160.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"colido_diy_4_0": {
+"label": "CoLiDo DIY 4.0",
+"vendor": "CoLiDo",
+"bed_x": 225.0,
+"bed_y": 220.0,
+"height": 230.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"colido_diy_4_0_v2": {
+"label": "CoLiDo DIY 4.0 V2",
+"vendor": "CoLiDo",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 255.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"colido_sr1": {
+"label": "CoLiDo SR1",
+"vendor": "CoLiDo",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 251.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"colido_x16": {
+"label": "CoLiDo X16",
+"vendor": "CoLiDo",
+"bed_x": 160.0,
+"bed_y": 160.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"comgrow_t300": {
+"label": "Comgrow T300",
+"vendor": "Comgrow",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"comgrow_t500": {
+"label": "Comgrow T500",
+"vendor": "Comgrow",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"construct_1": {
+"label": "Construct 1",
+"vendor": "CONSTRUCT3D",
+"bed_x": 225.0,
+"bed_y": 260.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_10_max": {
+"label": "Creality CR-10 Max",
+"vendor": "Creality",
+"bed_x": 450.0,
+"bed_y": 450.0,
+"height": 470.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_10_se": {
+"label": "Creality CR-10 SE",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 265.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_10_v2": {
+"label": "Creality CR-10 V2",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_10_v3": {
+"label": "Creality CR-10 V3",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_6_max": {
+"label": "Creality CR-6 Max",
+"vendor": "Creality",
+"bed_x": 390.0,
+"bed_y": 390.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_6_se": {
+"label": "Creality CR-6 SE",
+"vendor": "Creality",
+"bed_x": 225.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_cr_m4": {
+"label": "Creality CR-M4",
+"vendor": "Creality",
+"bed_x": 450.0,
+"bed_y": 450.0,
+"height": 470.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3": {
+"label": "Creality Ender-3",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_pro": {
+"label": "Creality Ender-3 Pro",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_s1": {
+"label": "Creality Ender-3 S1",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_s1_plus": {
+"label": "Creality Ender-3 S1 Plus",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_s1_pro": {
+"label": "Creality Ender-3 S1 Pro",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v2": {
+"label": "Creality Ender-3 V2",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v2_neo": {
+"label": "Creality Ender-3 V2 Neo",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v3": {
+"label": "Creality Ender-3 V3",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v3_ke": {
+"label": "Creality Ender-3 V3 KE",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 245.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v3_plus": {
+"label": "Creality Ender-3 V3 Plus",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 330.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_3_v3_se": {
+"label": "Creality Ender-3 V3 SE",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_5": {
+"label": "Creality Ender-5",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_5_plus": {
+"label": "Creality Ender-5 Plus",
+"vendor": "Creality",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_5_pro_2019": {
+"label": "Creality Ender-5 Pro (2019)",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_5_s1": {
+"label": "Creality Ender-5 S1",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_5s": {
+"label": "Creality Ender-5S",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_ender_6": {
+"label": "Creality Ender-6",
+"vendor": "Creality",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_hi": {
+"label": "Creality Hi",
+"vendor": "Creality",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k1": {
+"label": "Creality K1",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k1_max": {
+"label": "Creality K1 Max",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k1_se": {
+"label": "Creality K1 SE",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k1c": {
+"label": "Creality K1C",
+"vendor": "Creality",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k2": {
+"label": "Creality K2",
+"vendor": "Creality",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k2_plus": {
+"label": "Creality K2 Plus",
+"vendor": "Creality",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_k2_pro": {
+"label": "Creality K2 Pro",
+"vendor": "Creality",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"creality_sermoon_v1": {
+"label": "Creality Sermoon V1",
+"vendor": "Creality",
+"bed_x": 175.0,
+"bed_y": 175.0,
+"height": 165.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"cubicon_xceler_i": {
+"label": "Cubicon xCeler-I",
+"vendor": "Cubicon",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 290.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"cubicon_xceler_mini": {
+"label": "Cubicon xCeler-Mini",
+"vendor": "Cubicon",
+"bed_x": 150.0,
+"bed_y": 150.0,
+"height": 150.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"cubicon_xceler_plus": {
+"label": "Cubicon xCeler-Plus",
+"vendor": "Cubicon",
+"bed_x": 310.0,
+"bed_y": 310.0,
+"height": 310.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_m2_direct": {
+"label": "D12 230 PRO M2 DIRECT",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_m2_mono_dual": {
+"label": "D12 230 PRO M2 MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_m2_mono_dual_pooptool": {
+"label": "D12 230 PRO M2 MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_smartpad_direct": {
+"label": "D12 230 PRO SMARTPAD DIRECT",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_smartpad_mono_dual": {
+"label": "D12 230 PRO SMARTPAD MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_230_pro_smartpad_mono_dual_pooptool": {
+"label": "D12 230 PRO SMARTPAD MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_m2_direct": {
+"label": "D12 300 PRO M2 DIRECT",
+"vendor": "Wanhao France",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_m2_mono_dual": {
+"label": "D12 300 PRO M2 MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_m2_mono_dual_pooptool": {
+"label": "D12 300 PRO M2 MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 310.0,
+"bed_y": 310.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_smartpad_direct": {
+"label": "D12 300 PRO SMARTPAD DIRECT",
+"vendor": "Wanhao France",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_smartpad_mono_dual": {
+"label": "D12 300 PRO SMARTPAD MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_300_pro_smartpad_mono_dual_pooptool": {
+"label": "D12 300 PRO SMARTPAD MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 310.0,
+"bed_y": 310.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_500_pro_m2_mono_dual": {
+"label": "D12 500 PRO M2 MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_500_pro_m2_mono_dual_pooptool": {
+"label": "D12 500 PRO M2 MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 510.0,
+"bed_y": 510.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_500_pro_smartpad_direct": {
+"label": "D12 500 PRO SMARTPAD DIRECT",
+"vendor": "Wanhao France",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_500_pro_smartpad_mono_dual": {
+"label": "D12 500 PRO SMARTPAD MONO DUAL",
+"vendor": "Wanhao France",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"d12_500_pro_smartpad_mono_dual_pooptool": {
+"label": "D12 500 PRO SMARTPAD MONO DUAL PoopTool",
+"vendor": "Wanhao France",
+"bed_x": 510.0,
+"bed_y": 510.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"dremel_3d20": {
+"label": "Dremel 3D20",
+"vendor": "Dremel",
+"bed_x": 230.0,
+"bed_y": 150.0,
+"height": 140.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"dremel_3d40": {
+"label": "Dremel 3D40",
+"vendor": "Dremel",
+"bed_x": 225.0,
+"bed_y": 155.0,
+"height": 170.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"dremel_3d45": {
+"label": "Dremel 3D45",
+"vendor": "Dremel",
+"bed_x": 225.0,
+"bed_y": 155.0,
+"height": 170.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"e3ng_v1_2s": {
+"label": "E3NG v1.2S",
+"vendor": "RH3D",
+"bed_x": 232.0,
+"bed_y": 232.0,
+"height": 245.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_centauri": {
+"label": "Elegoo Centauri",
+"vendor": "Elegoo",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_centauri_2": {
+"label": "Elegoo Centauri 2",
+"vendor": "Elegoo",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_centauri_carbon": {
+"label": "Elegoo Centauri Carbon",
+"vendor": "Elegoo",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_centauri_carbon_2": {
+"label": "Elegoo Centauri Carbon 2",
+"vendor": "Elegoo",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune": {
+"label": "Elegoo Neptune",
+"vendor": "Elegoo",
+"bed_x": 210.0,
+"bed_y": 210.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_2": {
+"label": "Elegoo Neptune 2",
+"vendor": "Elegoo",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_2d": {
+"label": "Elegoo Neptune 2D",
+"vendor": "Elegoo",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_2s": {
+"label": "Elegoo Neptune 2S",
+"vendor": "Elegoo",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_3": {
+"label": "Elegoo Neptune 3",
+"vendor": "Elegoo",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 280.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_3_max": {
+"label": "Elegoo Neptune 3 Max",
+"vendor": "Elegoo",
+"bed_x": 425.0,
+"bed_y": 425.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_3_plus": {
+"label": "Elegoo Neptune 3 Plus",
+"vendor": "Elegoo",
+"bed_x": 325.0,
+"bed_y": 325.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_3_pro": {
+"label": "Elegoo Neptune 3 Pro",
+"vendor": "Elegoo",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 280.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_4": {
+"label": "Elegoo Neptune 4",
+"vendor": "Elegoo",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 265.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_4_max": {
+"label": "Elegoo Neptune 4 Max",
+"vendor": "Elegoo",
+"bed_x": 426.0,
+"bed_y": 426.0,
+"height": 480.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_4_plus": {
+"label": "Elegoo Neptune 4 Plus",
+"vendor": "Elegoo",
+"bed_x": 325.0,
+"bed_y": 325.0,
+"height": 385.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_4_pro": {
+"label": "Elegoo Neptune 4 Pro",
+"vendor": "Elegoo",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 265.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_neptune_x": {
+"label": "Elegoo Neptune X",
+"vendor": "Elegoo",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"elegoo_orangestorm_giga": {
+"label": "Elegoo OrangeStorm Giga",
+"vendor": "Elegoo",
+"bed_x": 810.0,
+"bed_y": 805.0,
+"height": 1010.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"eryone_er20": {
+"label": "Eryone ER20",
+"vendor": "Eryone",
+"bed_x": 243.0,
+"bed_y": 220.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"eryone_er20_klipper": {
+"label": "Eryone ER20 Klipper",
+"vendor": "Eryone",
+"bed_x": 243.0,
+"bed_y": 220.0,
+"height": 190.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo42": {
+"label": "EXO42",
+"vendor": "Volumic",
+"bed_x": 420.0,
+"bed_y": 420.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo42_idre": {
+"label": "EXO42 IDRE",
+"vendor": "Volumic",
+"bed_x": 372.0,
+"bed_y": 420.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo42_performance": {
+"label": "EXO42 Performance",
+"vendor": "Volumic",
+"bed_x": 420.0,
+"bed_y": 420.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo42_stage_2": {
+"label": "EXO42 Stage 2",
+"vendor": "Volumic",
+"bed_x": 420.0,
+"bed_y": 420.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo65_idre": {
+"label": "EXO65 IDRE",
+"vendor": "Volumic",
+"bed_x": 602.0,
+"bed_y": 650.0,
+"height": 630.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"exo65_performance": {
+"label": "EXO65 Performance",
+"vendor": "Volumic",
+"bed_x": 650.0,
+"bed_y": 650.0,
+"height": 650.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_ad5x": {
+"label": "Flashforge AD5X",
+"vendor": "Flashforge",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_adventurer_3_series": {
+"label": "Flashforge Adventurer 3 Series",
+"vendor": "Flashforge",
+"bed_x": 150.0,
+"bed_y": 150.0,
+"height": 150.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_adventurer_4_series": {
+"label": "Flashforge Adventurer 4 Series",
+"vendor": "Flashforge",
+"bed_x": 220.0,
+"bed_y": 200.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_adventurer_5m": {
+"label": "Flashforge Adventurer 5M",
+"vendor": "Flashforge",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_adventurer_5m_pro": {
+"label": "Flashforge Adventurer 5M Pro",
+"vendor": "Flashforge",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_adventurer_a5": {
+"label": "Flashforge Adventurer A5",
+"vendor": "Flashforge",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_artemis": {
+"label": "Flashforge Artemis",
+"vendor": "Flashforge",
+"bed_x": 190.0,
+"bed_y": 195.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_creator_5": {
+"label": "Flashforge Creator 5",
+"vendor": "Flashforge",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_creator_5_pro": {
+"label": "Flashforge Creator 5 Pro",
+"vendor": "Flashforge",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_guider4": {
+"label": "Flashforge Guider4",
+"vendor": "Flashforge",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_guider4_pro": {
+"label": "Flashforge Guider4 Pro",
+"vendor": "Flashforge",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_guider_2s": {
+"label": "Flashforge Guider 2s",
+"vendor": "Flashforge",
+"bed_x": 280.0,
+"bed_y": 250.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flashforge_guider_3_ultra": {
+"label": "Flashforge Guider 3 Ultra",
+"vendor": "Flashforge",
+"bed_x": 300.0,
+"bed_y": 330.0,
+"height": 600.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flsun_q5": {
+"label": "FLSun Q5",
+"vendor": "FLSun",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flsun_qq_s_pro": {
+"label": "FLSun QQ-S Pro",
+"vendor": "FLSun",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 360.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flsun_s1": {
+"label": "FLSun S1",
+"vendor": "FLSun",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 430.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flsun_super_racer_sr": {
+"label": "FLSun Super Racer (SR)",
+"vendor": "FLSun",
+"bed_x": 270.0,
+"bed_y": 270.0,
+"height": 330.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flsun_t1": {
+"label": "FLSun T1",
+"vendor": "FLSun",
+"bed_x": 260.0,
+"bed_y": 260.0,
+"height": 330.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flsun_v400": {
+"label": "FLSun V400",
+"vendor": "FLSun",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 410.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"flyingbear_ghost7": {
+"label": "FlyingBear Ghost7",
+"vendor": "FlyingBear",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 205.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flyingbear_ghost_6": {
+"label": "FlyingBear Ghost 6",
+"vendor": "FlyingBear",
+"bed_x": 255.0,
+"bed_y": 210.0,
+"height": 210.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flyingbear_reborn3": {
+"label": "FlyingBear Reborn3",
+"vendor": "FlyingBear",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"flyingbear_s1": {
+"label": "FlyingBear S1",
+"vendor": "FlyingBear",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"folgertech_ft_5": {
+"label": "Folgertech FT-5",
+"vendor": "Folgertech",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"folgertech_ft_6": {
+"label": "Folgertech FT-6",
+"vendor": "Folgertech",
+"bed_x": 700.0,
+"bed_y": 350.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"folgertech_i3": {
+"label": "Folgertech i3",
+"vendor": "Folgertech",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 175.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a10_m": {
+"label": "Geeetech A10 M",
+"vendor": "Geeetech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a10_pro": {
+"label": "Geeetech A10 Pro",
+"vendor": "Geeetech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a10_t": {
+"label": "Geeetech A10 T",
+"vendor": "Geeetech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a20": {
+"label": "Geeetech A20",
+"vendor": "Geeetech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a20_m": {
+"label": "Geeetech A20 M",
+"vendor": "Geeetech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a20_t": {
+"label": "Geeetech A20 T",
+"vendor": "Geeetech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a30_m": {
+"label": "Geeetech A30 M",
+"vendor": "Geeetech",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a30_pro": {
+"label": "Geeetech A30 Pro",
+"vendor": "Geeetech",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_a30_t": {
+"label": "Geeetech A30 T",
+"vendor": "Geeetech",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 420.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_m1": {
+"label": "Geeetech M1",
+"vendor": "Geeetech",
+"bed_x": 105.0,
+"bed_y": 105.0,
+"height": 95.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_mizar": {
+"label": "Geeetech Mizar",
+"vendor": "Geeetech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_mizar_m": {
+"label": "Geeetech Mizar M",
+"vendor": "Geeetech",
+"bed_x": 255.0,
+"bed_y": 255.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_mizar_max": {
+"label": "Geeetech Mizar Max",
+"vendor": "Geeetech",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_mizar_pro": {
+"label": "Geeetech Mizar Pro",
+"vendor": "Geeetech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_mizar_s": {
+"label": "Geeetech Mizar S",
+"vendor": "Geeetech",
+"bed_x": 255.0,
+"bed_y": 255.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"geeetech_thunder": {
+"label": "Geeetech Thunder",
+"vendor": "Geeetech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 260.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_belt_printer": {
+"label": "Generic Belt Printer",
+"vendor": "Custom",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_klipper_printer": {
+"label": "Generic Klipper Printer",
+"vendor": "Custom",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_marlin_printer": {
+"label": "Generic Marlin Printer",
+"vendor": "Custom",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_repetier_printer": {
+"label": "Generic Repetier Printer",
+"vendor": "Custom",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_rrf_printer": {
+"label": "Generic RRF Printer",
+"vendor": "Custom",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"generic_toolchanger_printer": {
+"label": "Generic ToolChanger Printer",
+"vendor": "Custom",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"goofoo_gp1": {
+"label": "Goofoo GP1",
+"vendor": "Goofoo",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"goofoo_turbom": {
+"label": "Goofoo TurboM",
+"vendor": "Goofoo",
+"bed_x": 230.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"goofoo_velo": {
+"label": "Goofoo Velo+",
+"vendor": "Goofoo",
+"bed_x": 600.0,
+"bed_y": 500.0,
+"height": 600.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"goofoo_velo_tool": {
+"label": "Goofoo Velo+ Tool",
+"vendor": "Goofoo",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 600.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ideaformer_ir3_v2": {
+"label": "IdeaFormer IR3 V2",
+"vendor": "IdeaFormer",
+"bed_x": 250.0,
+"bed_y": 2000.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"infimech_ex": {
+"label": "InfiMech EX",
+"vendor": "InfiMech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 205.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"infimech_ex_aps": {
+"label": "InfiMech EX+APS",
+"vendor": "InfiMech",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 167.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"infimech_tx": {
+"label": "InfiMech TX",
+"vendor": "InfiMech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"infimech_tx_hardened_steel_nozzle": {
+"label": "InfiMech TX Hardened Steel Nozzle",
+"vendor": "InfiMech",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kinarb_1hb": {
+"label": "KINARB 1HB",
+"vendor": "Pragostroj",
+"bed_x": 600.0,
+"bed_y": 460.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kinarb_2hb": {
+"label": "KINARB 2HB",
+"vendor": "Pragostroj",
+"bed_x": 540.0,
+"bed_y": 450.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kingroon_klp1": {
+"label": "Kingroon KLP1",
+"vendor": "Kingroon",
+"bed_x": 230.0,
+"bed_y": 230.0,
+"height": 210.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kingroon_kp3s_3_0": {
+"label": "Kingroon KP3S 3.0",
+"vendor": "Kingroon",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kingroon_kp3s_pro_s1": {
+"label": "Kingroon KP3S PRO S1",
+"vendor": "Kingroon",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kingroon_kp3s_pro_v2": {
+"label": "Kingroon KP3S PRO V2",
+"vendor": "Kingroon",
+"bed_x": 205.0,
+"bed_y": 205.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"kingroon_kp3s_v1": {
+"label": "Kingroon KP3S V1",
+"vendor": "Kingroon",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"lh_stinger": {
+"label": "LH Stinger",
+"vendor": "LH",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"lh_stinger_mmu": {
+"label": "LH Stinger MMU",
+"vendor": "LH",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"longer_lk10": {
+"label": "LONGER LK10",
+"vendor": "LONGER",
+"bed_x": 225.0,
+"bed_y": 225.0,
+"height": 265.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"longer_lk10_plus": {
+"label": "LONGER LK10 Plus",
+"vendor": "LONGER",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"m1": {
+"label": "M1",
+"vendor": "Mellow",
+"bed_x": 106.0,
+"bed_y": 106.0,
+"height": 100.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"m3d_enabler_d7500": {
+"label": "M3D Enabler D7500",
+"vendor": "M3D",
+"bed_x": 150.0,
+"bed_y": 150.0,
+"height": 150.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"m3d_enabler_d8500": {
+"label": "M3D Enabler D8500",
+"vendor": "M3D",
+"bed_x": 210.0,
+"bed_y": 150.0,
+"height": 150.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"meltingplot_chx_350": {
+"label": "Meltingplot CHX 350",
+"vendor": "Meltingplot",
+"bed_x": 880.0,
+"bed_y": 422.0,
+"height": 943.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"meltingplot_mbl_133": {
+"label": "Meltingplot MBL 133",
+"vendor": "Meltingplot",
+"bed_x": 835.0,
+"bed_y": 405.0,
+"height": 394.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"meltingplot_mbl_136": {
+"label": "Meltingplot MBL 136",
+"vendor": "Meltingplot",
+"bed_x": 850.0,
+"bed_y": 405.0,
+"height": 396.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"meltingplot_mbl_308": {
+"label": "Meltingplot MBL 308",
+"vendor": "Meltingplot",
+"bed_x": 850.0,
+"bed_y": 405.0,
+"height": 896.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"meltingplot_mbl_480": {
+"label": "Meltingplot MBL 480",
+"vendor": "Meltingplot",
+"bed_x": 850.0,
+"bed_y": 405.0,
+"height": 1396.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"mm_boneking": {
+"label": "MM BoneKing",
+"vendor": "MagicMaker",
+"bed_x": 310.0,
+"bed_y": 306.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"mm_hj_sk": {
+"label": "MM hj SK",
+"vendor": "MagicMaker",
+"bed_x": 220.0,
+"bed_y": 210.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"mm_hqs_hj": {
+"label": "MM hqs hj",
+"vendor": "MagicMaker",
+"bed_x": 220.0,
+"bed_y": 210.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"mm_hqs_sf": {
+"label": "MM hqs SF",
+"vendor": "MagicMaker",
+"bed_x": 220.0,
+"bed_y": 210.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"mm_slb": {
+"label": "MM slb",
+"vendor": "MagicMaker",
+"bed_x": 125.0,
+"bed_y": 125.0,
+"height": 160.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"openeye_peacock_v2": {
+"label": "OpenEYE Peacock V2",
+"vendor": "OpenEYE",
+"bed_x": 233.5,
+"bed_y": 228.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"orca_arena_x1_carbon": {
+"label": "Orca Arena X1 Carbon",
+"vendor": "OrcaArena",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"peopoly_magneto_x": {
+"label": "Peopoly Magneto X",
+"vendor": "Peopoly",
+"bed_x": 300.0,
+"bed_y": 400.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"phrozen_arco": {
+"label": "Phrozen Arco",
+"vendor": "Phrozen",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one": {
+"label": "Prusa CORE One",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_hf": {
+"label": "Prusa CORE One HF",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_indx_4t": {
+"label": "Prusa CORE One INDX 4T",
+"vendor": "Prusa",
+"bed_x": 248.0,
+"bed_y": 205.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_indx_8t": {
+"label": "Prusa CORE One INDX 8T",
+"vendor": "Prusa",
+"bed_x": 248.0,
+"bed_y": 205.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_l": {
+"label": "Prusa CORE One L",
+"vendor": "Prusa",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 331.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_l_hf": {
+"label": "Prusa CORE One L HF",
+"vendor": "Prusa",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 331.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_core_one_mmu3": {
+"label": "Prusa CORE One MMU3",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 220.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mini": {
+"label": "Prusa MINI",
+"vendor": "Prusa",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mini_is": {
+"label": "Prusa MINI IS",
+"vendor": "Prusa",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk3_5": {
+"label": "Prusa MK3.5",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 210.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk3s": {
+"label": "Prusa MK3S",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 210.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk4": {
+"label": "Prusa MK4",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk4_mmu3": {
+"label": "Prusa MK4 MMU3",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk4_mmu3_hf": {
+"label": "Prusa MK4 MMU3 HF",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk4s": {
+"label": "Prusa MK4S",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_mk4s_hf": {
+"label": "Prusa MK4S HF",
+"vendor": "Prusa",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_xl": {
+"label": "Prusa XL",
+"vendor": "Prusa",
+"bed_x": 360.0,
+"bed_y": 360.0,
+"height": 360.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"prusa_xl_5t": {
+"label": "Prusa XL 5T",
+"vendor": "Prusa",
+"bed_x": 360.0,
+"bed_y": 360.0,
+"height": 360.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_q1_pro": {
+"label": "Qidi Q1 Pro",
+"vendor": "Qidi",
+"bed_x": 245.0,
+"bed_y": 245.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_q2": {
+"label": "Qidi Q2",
+"vendor": "Qidi",
+"bed_x": 270.0,
+"bed_y": 270.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_q2c": {
+"label": "Qidi Q2C",
+"vendor": "Qidi",
+"bed_x": 270.0,
+"bed_y": 270.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_cf_pro": {
+"label": "Qidi X-CF Pro",
+"vendor": "Qidi",
+"bed_x": 300.0,
+"bed_y": 250.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_max": {
+"label": "Qidi X-Max",
+"vendor": "Qidi",
+"bed_x": 300.0,
+"bed_y": 250.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_max_3": {
+"label": "Qidi X-Max 3",
+"vendor": "Qidi",
+"bed_x": 325.0,
+"bed_y": 325.0,
+"height": 315.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_max_4": {
+"label": "Qidi X-Max 4",
+"vendor": "Qidi",
+"bed_x": 390.0,
+"bed_y": 390.0,
+"height": 340.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_plus": {
+"label": "Qidi X-Plus",
+"vendor": "Qidi",
+"bed_x": 270.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_plus_3": {
+"label": "Qidi X-Plus 3",
+"vendor": "Qidi",
+"bed_x": 280.0,
+"bed_y": 280.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_plus_4": {
+"label": "Qidi X-Plus 4",
+"vendor": "Qidi",
+"bed_x": 305.0,
+"bed_y": 305.0,
+"height": 280.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_plus_5": {
+"label": "Qidi X-Plus 5",
+"vendor": "Qidi",
+"bed_x": 320.0,
+"bed_y": 320.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_smart_3": {
+"label": "Qidi X-Smart 3",
+"vendor": "Qidi",
+"bed_x": 175.0,
+"bed_y": 180.0,
+"height": 170.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"raise3d_pro3": {
+"label": "Raise3D Pro3",
+"vendor": "Raise3D",
+"bed_x": 255.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"raise3d_pro3_plus": {
+"label": "Raise3D Pro3 Plus",
+"vendor": "Raise3D",
+"bed_x": 255.0,
+"bed_y": 300.0,
+"height": 605.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_cast": {
+"label": "RatRig V-Cast",
+"vendor": "Ratrig",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_3_200": {
+"label": "RatRig V-Core 3 200",
+"vendor": "Ratrig",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_3_300": {
+"label": "RatRig V-Core 3 300",
+"vendor": "Ratrig",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_3_400": {
+"label": "RatRig V-Core 3 400",
+"vendor": "Ratrig",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_3_500": {
+"label": "RatRig V-Core 3 500",
+"vendor": "Ratrig",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_300": {
+"label": "RatRig V-Core 4 300",
+"vendor": "Ratrig",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_400": {
+"label": "RatRig V-Core 4 400",
+"vendor": "Ratrig",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_500": {
+"label": "RatRig V-Core 4 500",
+"vendor": "Ratrig",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_hybrid_300": {
+"label": "RatRig V-Core 4 HYBRID 300",
+"vendor": "Ratrig",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_hybrid_400": {
+"label": "RatRig V-Core 4 HYBRID 400",
+"vendor": "Ratrig",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_hybrid_500": {
+"label": "RatRig V-Core 4 HYBRID 500",
+"vendor": "Ratrig",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_300": {
+"label": "RatRig V-Core 4 IDEX 300",
+"vendor": "Ratrig",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_300_copy_mode": {
+"label": "RatRig V-Core 4 IDEX 300 COPY MODE",
+"vendor": "Ratrig",
+"bed_x": 150.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_300_mirror_mode": {
+"label": "RatRig V-Core 4 IDEX 300 MIRROR MODE",
+"vendor": "Ratrig",
+"bed_x": 120.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_400": {
+"label": "RatRig V-Core 4 IDEX 400",
+"vendor": "Ratrig",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_400_copy_mode": {
+"label": "RatRig V-Core 4 IDEX 400 COPY MODE",
+"vendor": "Ratrig",
+"bed_x": 200.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_400_mirror_mode": {
+"label": "RatRig V-Core 4 IDEX 400 MIRROR MODE",
+"vendor": "Ratrig",
+"bed_x": 170.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_500": {
+"label": "RatRig V-Core 4 IDEX 500",
+"vendor": "Ratrig",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_500_copy_mode": {
+"label": "RatRig V-Core 4 IDEX 500 COPY MODE",
+"vendor": "Ratrig",
+"bed_x": 250.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_core_4_idex_500_mirror_mode": {
+"label": "RatRig V-Core 4 IDEX 500 MIRROR MODE",
+"vendor": "Ratrig",
+"bed_x": 220.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ratrig_v_minion": {
+"label": "RatRig V-Minion",
+"vendor": "Ratrig",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"re3d_gigabot_4": {
+"label": "re3D Gigabot 4",
+"vendor": "re3D",
+"bed_x": 590.0,
+"bed_y": 600.0,
+"height": 600.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"re3d_gigabot_4_xlt": {
+"label": "re3D Gigabot 4 XLT",
+"vendor": "re3D",
+"bed_x": 590.0,
+"bed_y": 760.0,
+"height": 900.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"re3d_terabot_4": {
+"label": "re3D Terabot 4",
+"vendor": "re3D",
+"bed_x": 915.0,
+"bed_y": 915.0,
+"height": 1000.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"rolohaun_delta_flyer_refit": {
+"label": "Rolohaun Delta Flyer Refit",
+"vendor": "RolohaunDesign",
+"bed_x": 110.0,
+"bed_y": 110.0,
+"height": 115.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"rook_mk1_ldo": {
+"label": "Rook MK1 LDO",
+"vendor": "RolohaunDesign",
+"bed_x": 110.0,
+"bed_y": 110.0,
+"height": 111.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"seckit_go3": {
+"label": "Seckit Go3",
+"vendor": "SecKit",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 275.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"seckit_sk_tank": {
+"label": "SecKit SK-Tank",
+"vendor": "SecKit",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"seemecnc_artemis_300": {
+"label": "SeeMeCNC Artemis 300",
+"vendor": "SeeMeCNC",
+"bed_x": 290.0,
+"bed_y": 290.0,
+"height": 500.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_bossdelta_300": {
+"label": "SeeMeCNC BOSSdelta 300",
+"vendor": "SeeMeCNC",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 495.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_bossdelta_500_0505": {
+"label": "SeeMeCNC BOSSdelta 500 0505",
+"vendor": "SeeMeCNC",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_bossdelta_500_0510": {
+"label": "SeeMeCNC BOSSdelta 500 0510",
+"vendor": "SeeMeCNC",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 1000.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_bossdelta_500_0521": {
+"label": "SeeMeCNC BOSSdelta 500 0521",
+"vendor": "SeeMeCNC",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 2100.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_rostockmax_v3_2": {
+"label": "SeeMeCNC RostockMAX v3.2",
+"vendor": "SeeMeCNC",
+"bed_x": 270.0,
+"bed_y": 270.0,
+"height": 385.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"seemecnc_rostockmax_v4": {
+"label": "SeeMeCNC RostockMAX v4",
+"vendor": "SeeMeCNC",
+"bed_x": 280.0,
+"bed_y": 280.0,
+"height": 385.0,
+"round_bed": true,
+"nozzle": 0.4
+},
+"sh65": {
+"label": "SH65",
+"vendor": "Volumic",
+"bed_x": 650.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sh65_idre": {
+"label": "SH65 IDRE",
+"vendor": "Volumic",
+"bed_x": 602.0,
+"bed_y": 300.0,
+"height": 280.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sh65_performance": {
+"label": "SH65 Performance",
+"vendor": "Volumic",
+"bed_x": 650.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sh65_stage_2": {
+"label": "SH65 Stage 2",
+"vendor": "Volumic",
+"bed_x": 650.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250": {
+"label": "Snapmaker A250",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 230.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_bkit": {
+"label": "Snapmaker A250 BKit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 224.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_dual": {
+"label": "Snapmaker A250 Dual",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 190.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_dual_bkit": {
+"label": "Snapmaker A250 Dual BKit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 184.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_dual_qs_b_kit": {
+"label": "Snapmaker A250 Dual QS+B Kit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 169.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_dual_qskit": {
+"label": "Snapmaker A250 Dual QSKit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 175.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_qs_b_kit": {
+"label": "Snapmaker A250 QS+B Kit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 209.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a250_qskit": {
+"label": "Snapmaker A250 QSKit",
+"vendor": "Snapmaker",
+"bed_x": 230.0,
+"bed_y": 250.0,
+"height": 215.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350": {
+"label": "Snapmaker A350",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_bkit": {
+"label": "Snapmaker A350 BKit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 319.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_dual": {
+"label": "Snapmaker A350 Dual",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 285.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_dual_bkit": {
+"label": "Snapmaker A350 Dual BKit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 279.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_dual_qs_b_kit": {
+"label": "Snapmaker A350 Dual QS+B Kit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 264.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_dual_qskit": {
+"label": "Snapmaker A350 Dual QSKit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 270.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_qs_b_kit": {
+"label": "Snapmaker A350 QS+B Kit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 304.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_a350_qskit": {
+"label": "Snapmaker A350 QSKit",
+"vendor": "Snapmaker",
+"bed_x": 320.0,
+"bed_y": 350.0,
+"height": 310.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_artisan": {
+"label": "Snapmaker Artisan",
+"vendor": "Snapmaker",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_j1": {
+"label": "Snapmaker J1",
+"vendor": "Snapmaker",
+"bed_x": 324.0,
+"bed_y": 200.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"snapmaker_u1": {
+"label": "Snapmaker U1",
+"vendor": "Snapmaker",
+"bed_x": 270.0,
+"bed_y": 270.0,
+"height": 270.1,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv01": {
+"label": "Sovol SV01",
+"vendor": "Sovol",
+"bed_x": 280.0,
+"bed_y": 240.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv01_pro": {
+"label": "Sovol SV01 Pro",
+"vendor": "Sovol",
+"bed_x": 280.0,
+"bed_y": 240.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv02": {
+"label": "Sovol SV02",
+"vendor": "Sovol",
+"bed_x": 280.0,
+"bed_y": 240.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv05": {
+"label": "Sovol SV05",
+"vendor": "Sovol",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv06": {
+"label": "Sovol SV06",
+"vendor": "Sovol",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv06_ace": {
+"label": "Sovol SV06 ACE",
+"vendor": "Sovol",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv06_plus": {
+"label": "Sovol SV06 Plus",
+"vendor": "Sovol",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 340.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv06_plus_ace": {
+"label": "Sovol SV06 Plus ACE",
+"vendor": "Sovol",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv07": {
+"label": "Sovol SV07",
+"vendor": "Sovol",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv07_plus": {
+"label": "Sovol SV07 Plus",
+"vendor": "Sovol",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv08": {
+"label": "Sovol SV08",
+"vendor": "Sovol",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 345.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_sv08_max": {
+"label": "Sovol SV08 MAX",
+"vendor": "Sovol",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"sovol_zero": {
+"label": "Sovol Zero",
+"vendor": "Sovol",
+"bed_x": 152.4,
+"bed_y": 152.4,
+"height": 152.4,
+"round_bed": false,
+"nozzle": 0.4
+},
+"the_positron": {
+"label": "The Positron",
+"vendor": "Positron3D",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 165.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"thinker_x400": {
+"label": "Thinker X400",
+"vendor": "Eryone",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiertime_up300_hs": {
+"label": "Tiertime UP300 HS",
+"vendor": "Tiertime",
+"bed_x": 207.0,
+"bed_y": 255.0,
+"height": 230.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiertime_up310_pro": {
+"label": "Tiertime UP310 Pro",
+"vendor": "Tiertime",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiertime_up400_pro": {
+"label": "Tiertime UP400 Pro",
+"vendor": "Tiertime",
+"bed_x": 400.0,
+"bed_y": 350.0,
+"height": 380.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiertime_up600_hs": {
+"label": "Tiertime UP600 HS",
+"vendor": "Tiertime",
+"bed_x": 500.0,
+"bed_y": 400.0,
+"height": 600.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiq2": {
+"label": "TiQ2",
+"vendor": "iQ",
+"bed_x": 330.0,
+"bed_y": 330.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tiq8": {
+"label": "TiQ8",
+"vendor": "iQ",
+"bed_x": 500.0,
+"bed_y": 400.0,
+"height": 450.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"tronxy_x5sa_400_marlin_firmware": {
+"label": "Tronxy X5SA 400 Marlin Firmware",
+"vendor": "Tronxy",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"troodon_2_0_klipper": {
+"label": "Troodon 2.0 - Klipper",
+"vendor": "Vivedino",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 330.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"troodon_2_0_rrf": {
+"label": "Troodon 2.0 - RRF",
+"vendor": "Vivedino",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 330.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"twotrees_sk1": {
+"label": "TwoTrees SK1",
+"vendor": "TwoTrees",
+"bed_x": 256.0,
+"bed_y": 256.0,
+"height": 256.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"twotrees_sp_5_klipper": {
+"label": "TwoTrees SP-5 Klipper",
+"vendor": "TwoTrees",
+"bed_x": 310.0,
+"bed_y": 310.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ultimaker_2": {
+"label": "UltiMaker 2",
+"vendor": "UltiMaker",
+"bed_x": 223.0,
+"bed_y": 223.0,
+"height": 205.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ultimaker_2_extended": {
+"label": "UltiMaker 2 extended+",
+"vendor": "UltiMaker",
+"bed_x": 223.0,
+"bed_y": 223.0,
+"height": 305.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"ultimaker_s5": {
+"label": "UltiMaker S5",
+"vendor": "UltiMaker",
+"bed_x": 330.0,
+"bed_y": 240.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"virtu_e3": {
+"label": "VIRTU E3",
+"vendor": "RH3D",
+"bed_x": 230.0,
+"bed_y": 232.0,
+"height": 232.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_0_1": {
+"label": "Voron 0.1",
+"vendor": "Voron",
+"bed_x": 120.0,
+"bed_y": 120.0,
+"height": 120.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_2_4_250": {
+"label": "Voron 2.4 250",
+"vendor": "Voron",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 225.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_2_4_300": {
+"label": "Voron 2.4 300",
+"vendor": "Voron",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 275.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_2_4_350": {
+"label": "Voron 2.4 350",
+"vendor": "Voron",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 325.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_switchwire_250": {
+"label": "Voron Switchwire 250",
+"vendor": "Voron",
+"bed_x": 250.0,
+"bed_y": 210.0,
+"height": 240.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_trident_250": {
+"label": "Voron Trident 250",
+"vendor": "Voron",
+"bed_x": 250.0,
+"bed_y": 250.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_trident_300": {
+"label": "Voron Trident 300",
+"vendor": "Voron",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voron_trident_350": {
+"label": "Voron Trident 350",
+"vendor": "Voron",
+"bed_x": 350.0,
+"bed_y": 350.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"voxelab_aquila_x2": {
+"label": "Voxelab Aquila X2",
+"vendor": "Voxelab",
+"bed_x": 220.0,
+"bed_y": 220.0,
+"height": 250.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs20mk2": {
+"label": "VS20MK2",
+"vendor": "Volumic",
+"bed_x": 200.0,
+"bed_y": 200.0,
+"height": 220.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30mk2": {
+"label": "VS30MK2",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30mk3": {
+"label": "VS30MK3",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30mk3_stage_2": {
+"label": "VS30MK3 Stage 2",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30sc": {
+"label": "VS30SC",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30sc2": {
+"label": "VS30SC2",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 310.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30sc2_performance": {
+"label": "VS30SC2 Performance",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 310.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30sc2_stage_2": {
+"label": "VS30SC2 Stage 2",
+"vendor": "Volumic",
+"bed_x": 300.0,
+"bed_y": 200.0,
+"height": 310.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vs30ultra": {
+"label": "VS30ULTRA",
+"vendor": "Volumic",
+"bed_x": 290.0,
+"bed_y": 200.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vzbot_235_awd": {
+"label": "Vzbot 235 AWD",
+"vendor": "Vzbot",
+"bed_x": 235.0,
+"bed_y": 235.0,
+"height": 200.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"vzbot_330_awd": {
+"label": "Vzbot 330 AWD",
+"vendor": "Vzbot",
+"bed_x": 330.0,
+"bed_y": 330.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d12_300": {
+"label": "Wanhao D12-300",
+"vendor": "Wanhao",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_300_mk1": {
+"label": "Wanhao D9-300 MK1",
+"vendor": "Wanhao",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_300_mk1_bltouch_kit": {
+"label": "Wanhao D9-300 MK1 BLTouch kit",
+"vendor": "Wanhao",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_300_mk2": {
+"label": "Wanhao D9-300 MK2",
+"vendor": "Wanhao",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_300_mk3": {
+"label": "Wanhao D9-300 MK3",
+"vendor": "Wanhao",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_400_mk1": {
+"label": "Wanhao D9-400 MK1",
+"vendor": "Wanhao",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_400_mk1_bltouch_kit": {
+"label": "Wanhao D9-400 MK1 BLTouch kit",
+"vendor": "Wanhao",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_400_mk2": {
+"label": "Wanhao D9-400 MK2",
+"vendor": "Wanhao",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_400_mk3": {
+"label": "Wanhao D9-400 MK3",
+"vendor": "Wanhao",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_500_mk1": {
+"label": "Wanhao D9-500 MK1",
+"vendor": "Wanhao",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_500_mk1_bltouch_kit": {
+"label": "Wanhao D9-500 MK1 BLTouch kit",
+"vendor": "Wanhao",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_500_mk2": {
+"label": "Wanhao D9-500 MK2",
+"vendor": "Wanhao",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wanhao_d9_500_mk3": {
+"label": "Wanhao D9-500 MK3",
+"vendor": "Wanhao",
+"bed_x": 500.0,
+"bed_y": 500.0,
+"height": 500.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wemake3d_phoenixprov1": {
+"label": "WEMAKE3D PhoenixProV1",
+"vendor": "WEMAKE3D",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wemake3d_tinybotv1": {
+"label": "WEMAKE3D TinyBotV1",
+"vendor": "WEMAKE3D",
+"bed_x": 210.0,
+"bed_y": 210.0,
+"height": 400.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wondermaker_zr": {
+"label": "WonderMaker ZR",
+"vendor": "WonderMaker",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 300.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wondermaker_zr_ultra": {
+"label": "WonderMaker ZR Ultra",
+"vendor": "WonderMaker",
+"bed_x": 300.0,
+"bed_y": 270.0,
+"height": 290.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"wondermaker_zr_ultra_s": {
+"label": "WonderMaker ZR Ultra S",
+"vendor": "WonderMaker",
+"bed_x": 300.0,
+"bed_y": 270.0,
+"height": 290.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"xplorer_dual_gantry": {
+"label": "Xplorer Dual Gantry",
+"vendor": "Vivedino",
+"bed_x": 400.0,
+"bed_y": 342.5,
+"height": 401.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"xplorer_idex": {
+"label": "Xplorer IDEX",
+"vendor": "Vivedino",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 401.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"xplorer_iqex": {
+"label": "Xplorer IQEX",
+"vendor": "Vivedino",
+"bed_x": 400.0,
+"bed_y": 342.5,
+"height": 401.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"xplorer_single": {
+"label": "Xplorer Single",
+"vendor": "Vivedino",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 401.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s1000": {
+"label": "Z-Bolt S1000",
+"vendor": "Z-Bolt",
+"bed_x": 1000.0,
+"bed_y": 1000.0,
+"height": 1000.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s1000_dual": {
+"label": "Z-Bolt S1000 Dual",
+"vendor": "Z-Bolt",
+"bed_x": 1000.0,
+"bed_y": 1000.0,
+"height": 1000.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s300": {
+"label": "Z-Bolt S300",
+"vendor": "Z-Bolt",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s300_dual": {
+"label": "Z-Bolt S300 Dual",
+"vendor": "Z-Bolt",
+"bed_x": 300.0,
+"bed_y": 300.0,
+"height": 350.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s400": {
+"label": "Z-Bolt S400",
+"vendor": "Z-Bolt",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 700.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s400_dual": {
+"label": "Z-Bolt S400 Dual",
+"vendor": "Z-Bolt",
+"bed_x": 400.0,
+"bed_y": 400.0,
+"height": 700.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s600": {
+"label": "Z-Bolt S600",
+"vendor": "Z-Bolt",
+"bed_x": 600.0,
+"bed_y": 600.0,
+"height": 900.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s600_dual": {
+"label": "Z-Bolt S600 Dual",
+"vendor": "Z-Bolt",
+"bed_x": 600.0,
+"bed_y": 600.0,
+"height": 900.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"z_bolt_s800_dual": {
+"label": "Z-Bolt S800 Dual",
+"vendor": "Z-Bolt",
+"bed_x": 802.0,
+"bed_y": 802.0,
+"height": 802.0,
+"round_bed": false,
+"nozzle": 0.4
+}
+}
+}

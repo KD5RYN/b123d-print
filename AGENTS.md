@@ -57,6 +57,14 @@ config, or `formats="3mf,png"` on one export. If the user has not said what they
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
 
+## Printer profile (optional)
+
+By default b123d-print is in generic mode. If the user has set a printer (`list_parts` shows it, or
+`b123d-print printer show`), use it: keep the part inside the build volume in print orientation
+(the `fit` check fails otherwise — split the part or turn it), make walls whole multiples of the
+line width, and read the material notes (e.g. PLA is not for outdoor or hot places). Change the
+printer only when the user asks.
+
 ## Photos and measurements
 
 - **Before modeling: list every dimension you read from the photos** and which feature it

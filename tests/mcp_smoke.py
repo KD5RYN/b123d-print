@@ -62,7 +62,9 @@ async def main(keep: bool) -> None:
     ws = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-"))
     # B123D_PRINT_SMOKE_CMD runs another launcher, e.g. "uvx --from dist/b123d_print-0.1.0-py3-none-any.whl b123d-print-mcp"
     cmd = os.environ.get("B123D_PRINT_SMOKE_CMD", f"{sys.executable} -m b123d_print.mcp_server").split()
-    params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"])
+    # a private user config, so use_printer never touches the real one
+    env = {**os.environ, "XDG_CONFIG_HOME": str(ws / ".config")}
+    params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"], env=env)
     ok = True
 
     def expect(cond, what):
@@ -72,7 +74,7 @@ async def main(keep: bool) -> None:
 
     async with Client(params) as c:
         tools = {t.name for t in (await c.list_tools()).tools}
-        expect(tools >= {"list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export"}, f"tools: {sorted(tools)}")
+        expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export"}, f"tools: {sorted(tools)}")
         prompts = {p.name for p in (await c.list_prompts()).prompts}
         expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp"}, f"prompts: {sorted(prompts)}")
         g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
@@ -137,6 +139,17 @@ async def main(keep: bool) -> None:
         want = os.environ.get("B123D_PRINT_EXPECT_SANDBOX")  # e.g. "bubblewrap" in CI on Linux
         if want:
             expect(want.lower() in sb.lower(), f"sandbox in use is {want}")
+        res = await c.call_tool("use_printer", {"search": "bambu a1 mini"})
+        expect("bambu_lab_a1_mini" in text(res), "use_printer finds printers")
+        res = await c.call_tool("use_printer", {"name": "bambu_lab_a1_mini", "material": "petg"})
+        expect('"bed_x": 180' in text(res) and "PETG" in text(res), "use_printer sets printer + material")
+        big = BOX.replace("W: float = 30.0", "W: float = 200.0")
+        await c.call_tool("write_part", {"name": "box", "code": big})
+        res = await c.call_tool("check", {"name": "box", "variant": "standard"})
+        expect("[FAIL] fit" in text(res) and "A1 mini" in text(res), "fit check fails a 200 mm part on a 180 mm bed")
+        res = await c.call_tool("use_printer", {"name": "generic"})
+        res = await c.call_tool("check", {"name": "box", "variant": "standard"})
+        expect(" fit " not in text(res), "generic mode has no fit check")
         res = await c.call_tool("read_part", {"name": "../../etc"})
         expect(res.is_error and "bad part name" in text(res), "path traversal in a part name is refused, with a reason")
         res = await c.call_tool("render_preview", {"name": "nosuch"})

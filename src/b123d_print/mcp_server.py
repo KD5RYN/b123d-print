@@ -81,16 +81,63 @@ def list_parts() -> str:
     parts = [p.parent.name for p in find_parts(_root(), s.parts_dir)]
     return json.dumps(
         {
+            "version": _pkg_version(),
             "workspace": str(_root()),
             "parts_dir": s.parts_dir,
             "parts": parts,
             "examples": examples(),
             "settings": {"hole_comp": s.hole_comp, "clearance": s.clearance, "min_wall": s.min_wall,
                          "max_overhang": s.max_overhang, "formats": list(s.formats)},
+            "printer": _printer_summary(s),
             "sandbox": sandbox.describe(),
         },
         indent=1,
     )
+
+
+def _pkg_version() -> str:
+    from importlib.metadata import version
+
+    return version("b123d-print")
+
+
+def _printer_summary(s) -> dict:
+    from .profiles import load_material, load_printer
+
+    if not s.printer:
+        return {"mode": "generic", "note": "no printer profile: no build-volume check; use_printer to set one"}
+    out = {"mode": "printer", **load_printer(s.printer).as_dict()}
+    if s.material:
+        out["material"] = load_material(s.material).as_dict()
+    return out
+
+
+@mcp.tool()
+def use_printer(name: str = "", material: str = "", search: str = "") -> str:
+    """Optional printer profile (default is generic mode). search: find printer names
+    ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config; "generic"
+    clears it). material: pla, petg, asa, abs, tpu or the user's own. Only change the printer
+    when the user asks for it."""
+    from .config import set_user_setting
+    from .profiles import load_material, load_printer, search as find
+
+    if search and not name:
+        hits = find("printers", search)
+        return json.dumps({"matches": hits[:50], "more": max(0, len(hits) - 50)})
+    try:
+        if name in ("generic", "none"):
+            set_user_setting("printer", None)
+            set_user_setting("material", None)
+            return "Generic mode: no printer profile."
+        if name:
+            load_printer(name)
+            set_user_setting("printer", name)
+        if material:
+            load_material(material)
+            set_user_setting("material", material)
+    except (KeyError, ValueError) as e:
+        raise ToolError(str(e).strip('"')) from None
+    return json.dumps(_printer_summary(load_settings(_root())), indent=1)
 
 
 @mcp.tool()

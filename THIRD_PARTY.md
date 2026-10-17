@@ -13,8 +13,10 @@ they are installed as dependencies, under their own licenses. Versions are the o
 | [NumPy](https://numpy.org) 2.5 | tessellation math in the checks | BSD-3-Clause (and bundled 0BSD, MIT, Zlib, CC0) |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) 2.3 | the MCP server | MIT |
 | [uv](https://github.com/astral-sh/uv) | install / run (`uvx`), build backend `uv_build` | Apache-2.0 or MIT |
+| [lib3mf](https://github.com/3MFConsortium/lib3mf) (via build123d) | 3MF export | BSD |
+| [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) printer profiles | source of the printer table (`data/printers_orca.json`) | AGPL-3.0 — see below |
 
-build123d also pulls in ocpsvg (Apache-2.0), ocp-gordon (Apache-2.0), lib3mf (BSD),
+build123d also pulls in ocpsvg (Apache-2.0), ocp-gordon (Apache-2.0),
 ezdxf (MIT), sympy (BSD), scipy (BSD), anytree (Apache-2.0), svgpathtools (MIT) and others;
 `uv pip list` shows the full set and each package's metadata carries its license.
 
@@ -27,4 +29,9 @@ ezdxf (MIT), sympy (BSD), scipy (BSD), anytree (Apache-2.0), svgpathtools (MIT) 
   each installed package (they are in each `*.dist-info/` folder, left in place by the
   Dockerfile) and point to the OCCT source (https://github.com/Open-Cascade-SAS/OCCT); LGPL
   lets users replace the library, which a pip-installable stack already allows.
+- **Printer table:** `src/b123d_print/data/printers_orca.json` holds only facts (model name,
+  build volume, bed shape, nozzle size) read from OrcaSlicer's printer profiles by
+  `tools/sync_orca_printers.py`; the OrcaSlicer commit is recorded in the file. No OrcaSlicer
+  files, text or code are included. Thanks to the OrcaSlicer project and the printer makers who
+  maintain those profiles.
 - **Example parts** in `src/b123d_print/examples/` are original designs, MIT like the rest.
