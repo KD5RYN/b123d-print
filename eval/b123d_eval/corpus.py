@@ -9,7 +9,6 @@ import os
 import tomllib
 import urllib.request
 from dataclasses import dataclass, field
-from importlib.resources import files
 from pathlib import Path
 
 MAX_DOWNLOAD = 25_000_000
@@ -17,7 +16,7 @@ DEFAULT_CACHE = Path(".b123d-eval") / "cache"  # under the cwd; git-ignored in t
 
 
 def default_manifest() -> Path:
-    return Path(str(files("b123d_print.evals").joinpath("corpus.toml")))
+    return Path(__file__).resolve().parents[1] / "corpus.toml"
 
 
 @dataclass

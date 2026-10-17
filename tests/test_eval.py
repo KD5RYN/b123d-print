@@ -2,15 +2,19 @@
 reference, then compare + reports. No network, no API key."""
 
 import json
+import sys
+from pathlib import Path
 
 import anyio
 import pytest
 from build123d import Box, Cylinder, Pos, export_stl
 
 from b123d_print.compare import Criteria
-from b123d_print.evals import corpus
-from b123d_print.evals.agents import Limits
-from b123d_print.evals.runner import Endpoint, run_eval
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))  # repo-only tooling, not in the package
+from b123d_eval import corpus  # noqa: E402
+from b123d_eval.agents import Limits  # noqa: E402
+from b123d_eval.runner import Endpoint, run_eval  # noqa: E402
 
 MANIFEST = """
 [[part]]

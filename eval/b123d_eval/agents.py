@@ -193,7 +193,7 @@ class ClaudeAgent(Agent):
         try:
             import anthropic
         except ImportError:
-            raise RuntimeError("the claude agent needs the 'eval' extra: uv sync --extra eval (or pip install 'b123d-print[eval]')") from None
+            raise RuntimeError("the claude agent needs the anthropic SDK: uv run --group eval python eval/run.py ...") from None
         self.anthropic = anthropic
         self.model = os.environ.get("B123D_EVAL_MODEL", DEFAULT_MODEL)
         self.effort = os.environ.get("B123D_EVAL_EFFORT", "high")

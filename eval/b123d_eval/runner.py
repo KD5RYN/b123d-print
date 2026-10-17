@@ -2,8 +2,8 @@
 key dimensions, rendered views of the reference), let it design and export through the MCP
 server, then compare the export with the reference and score it.
 
-    b123d-print eval run --agent fake --only <id>      # no model, proves the pipeline
-    b123d-print eval run --agent claude --only <id>    # B123D_EVAL_MODEL, ANTHROPIC_API_KEY
+    uv run python eval/run.py run --agent fake --only <id>                 # no model, proves the pipeline
+    uv run --group eval python eval/run.py run --agent claude --only <id>  # B123D_EVAL_MODEL, ANTHROPIC_API_KEY
 
 Every item runs in a fresh workspace with its own stdio server (or, with --mcp-url, against an
 HTTP server whose workspace is visible here at --remote-workspace). Results: <out>/results.json,
@@ -26,8 +26,8 @@ from pathlib import Path
 import anyio
 import numpy as np
 
-from ..compare import Criteria, compare, load_mesh, merge, render_comparison
-from ..render import render
+from b123d_print.compare import Criteria, compare, load_mesh, merge, render_comparison
+from b123d_print.render import render
 from .agents import Limits, RunState, Task, ToolBox, make_agent
 from .corpus import DEFAULT_CACHE, Item, fetch
 
