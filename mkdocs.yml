@@ -1,0 +1,72 @@
+site_name: b123d-print
+site_description: Design, check and export 3D-printable parts with build123d, from any LLM via MCP
+site_url: https://kd5ryn.github.io/b123d-print/
+repo_url: https://github.com/KD5RYN/b123d-print
+repo_name: KD5RYN/b123d-print
+edit_uri: edit/main/docs/
+copyright: MIT © KD5RYN and contributors
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.footer
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/brightness-7, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/brightness-4, name: Light mode}
+
+# the generated reference blocks (<!-- generated: ... -->) come from the code
+hooks:
+  - tools/docs_hooks.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed: {alternate_style: true}
+  - pymdownx.snippets: {base_path: ["."], check_paths: true}
+
+# --strict turns every one of these into an error
+validation:
+  nav: {omitted_files: warn, not_found: warn, absolute_links: warn}
+  links: {not_found: warn, anchors: warn, absolute_links: warn, unrecognized_links: warn}
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Quick start: getting-started/quick-start.md
+      - Connect your MCP client: getting-started/mcp-clients.md
+      - Docker: getting-started/docker.md
+      - CLI and Python: getting-started/cli.md
+  - Using it:
+      - How a session goes: using/workflow.md
+      - MCP tools and prompts: using/tools.md
+      - Output formats: using/formats.md
+      - Settings: using/settings.md
+      - Hole compensation: using/hole-compensation.md
+      - Printer profiles: using/printer-profiles.md
+      - The checks: using/checks.md
+      - Sandbox: using/sandbox.md
+  - Writing part scripts:
+      - The part script: scripts/convention.md
+      - Checks API: scripts/checks-api.md
+      - Examples: scripts/examples.md
+      - Workflow rules (AGENTS.md): scripts/rules.md
+  - Reference: reference.md
+  - Updating: updating.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing:
+      - How to contribute: contributing/index.md
+      - Releasing: contributing/releasing.md
+  - Credits and licenses: credits.md

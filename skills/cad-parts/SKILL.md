@@ -17,5 +17,6 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
 2. **For a new design** use the MCP prompt `design_part_from_photos`; to change a part,
    `modify_part`; to review one, `verify_part`; to calibrate holes, `calibrate_hole_comp`.
 3. **Tools** (b123d-print MCP server): `list_parts`, `new_part`, `read_part`, `write_part`,
-   `build_part`, `render_preview`, `section`, `check`, `export`. Without the MCP server, use the
+   `build_part`, `render_preview`, `section`, `check`, `export`, and `use_printer` (only when the user
+   asks to set a printer). Without the MCP server, use the
    CLI from a workspace: `b123d-print new|build|check|config` (`uvx --from <b123d-print> b123d-print ...`).

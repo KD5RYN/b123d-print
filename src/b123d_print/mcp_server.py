@@ -343,13 +343,18 @@ def calibrate_hole_comp() -> str:
    (or B123D_PRINT_HOLE_COMP). Do not hard-code it in part scripts."""
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=__doc__.splitlines()[0])
+def build_parser() -> argparse.ArgumentParser:
+    """The server's command line; the docs' reference is generated from it."""
+    ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=" ".join(__doc__.split("\n\n")[0].split()))
     ap.add_argument("--workspace", default=os.environ.get("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
     ap.add_argument("--timeout", type=float, default=float(os.environ.get("B123D_PRINT_TIMEOUT", 120)),
                     help="seconds per build (default 120)")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> None:
+    args = build_parser().parse_args()
     root = Path(args.workspace).expanduser().resolve() if args.workspace else Path.cwd()
     root.mkdir(parents=True, exist_ok=True)
     if os.environ.get("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1":
