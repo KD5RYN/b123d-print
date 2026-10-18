@@ -1,9 +1,37 @@
 # b123d-print
 
-Design 3D-printable parts with an AI assistant — any assistant. You describe a part (photos,
-caliper readings); the model writes a [build123d](https://github.com/gumyr/build123d) Python
-script; b123d-print builds it in a sandbox, renders it, cuts cross-sections, runs print checks,
-and exports the formats you pick: STEP, STL, 3MF, PNG.
+**Vibe CAD for 3D printing.** Tell your AI assistant what you need, in plain words, with a
+photo and a few caliper readings. It designs the part, looks at it from every side, checks it
+for printing problems and hands you a file for your slicer. No CAD skills needed, and it works
+with any assistant that supports MCP: Claude, Gemini CLI, Cursor, VS Code Copilot, Codex and
+more.
+
+## What you can make
+
+Ask the way you would ask a friend who owns calipers and a CAD program. These were designed
+this way, and printed:
+
+- *"A box for this IR blaster board: the LED pointing out the top, a screw-on lid, two tabs to
+  mount it on the wall."* A two-part case, checked against a stand-in of the board so it fits.
+- *"An outdoor case for this motion sensor. It should slide off a wall plate and keep the rain
+  out."* Dovetail rails, a click-in detent, a drain slot, and a cover that prints without
+  supports.
+- *"An adapter plate: 2-gang box behind, 1-gang smart switch in front."* Counterbored screw
+  holes, and a wall check added after the first print broke through a 0.05 mm skin no render
+  showed.
+
+Or [remix](using/remix.md) a model you downloaded (STL, 3MF or STEP) and change it:
+
+- *"Here's an L bracket STL I downloaded: turn its two mounting holes into slots and add
+  gussets."* The original is loaded as a solid and changed, the checks tell the original's
+  flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
+  not printed yet.)
+
+And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
+part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
+screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
+[build123d](https://github.com/gumyr/build123d) script, so each change is exact, and you get
+STEP files to keep editing in other CAD if you want.
 
 | | |
 | --- | --- |
@@ -11,6 +39,28 @@ and exports the formats you pick: STEP, STL, 3MF, PNG.
 | *Two-part box for an IR transceiver board, with the board stand-ins* | *Section through the LED: lid cone, board, clearances* |
 | ![Outdoor motion sensor case, arch cover](images/tuya_motion_sensor_outdoor_case_arch_assembly.png) | ![Wall plate section through the counterbores](images/plate_2gang_to_1gang_xy2.45.png) |
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
+| ![Remix: the downloaded L bracket and the version with slots and gussets](images/remix_bracket_before_after.png) | ![Remix: the original colored where the remix differs](images/remix_bracket_vs_original.png) |
+| *Remix: a downloaded bracket, before and after* | *Where the remix differs: red cut, grey added* |
+
+## Get started in 2 minutes
+
+The MCP server is a plug-in that gives your AI assistant CAD tools. It runs on your own
+computer. The easy way: paste this into your AI assistant (Claude Code, Claude Desktop, Cursor,
+Gemini CLI, Codex, …):
+
+```text
+Install the b123d-print MCP server for me. It runs with
+`uvx --from b123d-print b123d-print-mcp --workspace <folder>`
+where <folder> is a folder for my parts, such as ~/parts.
+Install uv first if it is missing (https://docs.astral.sh/uv/).
+Add the server to your MCP settings, tell me when to restart you,
+and after the restart check that its tools (list_parts, new_part,
+build_part, ...) are available.
+```
+
+It will probably ask to run a few commands: that is expected. Prefer to do it yourself, or want
+to see what it does? [Quick start](getting-started/quick-start.md) has the three manual steps.
+Then ask: *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."*
 
 **Scope: parts for FDM 3D printing, nothing else.** Everything is built around a printed part:
 print orientation with the bed at Z=0, hole compensation, mating clearance, calibration coupons,
@@ -27,9 +77,7 @@ framework.
 - **`b123d-print-mcp`** — an [MCP](https://modelcontextprotocol.io) server, so it works from
   Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex and other MCP clients. Part
   scripts are model-written code: they run in a [sandbox](using/sandbox.md) with a timeout and
-  no network. Runs per client over stdio, on a home server [over SSH](getting-started/ssh.md)
-  (one key and workspace per machine), or as one shared [HTTP service](getting-started/http.md)
-  with a token and a workspace per client.
+  no network.
 - **[`compare`](using/compare.md)** — measure a part against a reference STL, 3MF or STEP: size,
   volume and surface differences, a 0–100 score, pass/fail, and a deviation view.
 - **[Remix](using/remix.md)** — start from someone else's STL, 3MF or STEP: `import_model` makes
@@ -43,9 +91,10 @@ framework.
 
 ## Where to start
 
-- New here: [Quick start](getting-started/quick-start.md), then
+- New here: [Quick start](getting-started/quick-start.md); other assistants:
   [connect your MCP client](getting-started/mcp-clients.md).
-- Parts on a home server, design from a laptop: [Remote over SSH](getting-started/ssh.md).
+- Parts on a home server, many agents sharing one server, or Docker:
+  [Advanced: run it on another machine](advanced/index.md).
 - Writing or reviewing part scripts: [The part script](scripts/convention.md) and the
   [Checks API](scripts/checks-api.md).
 - Something wrong: [Troubleshooting](troubleshooting.md).

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (0.3.0)
+## 0.2.0 — 2026-10-17
+
+The part-script convention is unchanged from 0.1.0; existing scripts keep working.
 
 **Remixing an existing model**
 - `import_model("ref/bracket.stl")` loads an STL, 3MF or STEP as a solid to change. Meshes are
@@ -17,10 +19,6 @@
 **Faster**
 - Tessellation reads triangles by index (rendering and the overhang check on a 9k-face solid:
   20 s -> 1 s each); the thin check slices the triangle mesh on solids with many faces.
-
-## 0.2.0 — 2026-10-17
-
-The part-script convention is unchanged from 0.1.0; existing scripts keep working.
 
 **Remote use**
 - **SSH mode (recommended for a home server):** MCP over `ssh`, one `authorized_keys` line per

@@ -1,5 +1,5 @@
 site_name: b123d-print
-site_description: Design, check and export 3D-printable parts with build123d, from any LLM via MCP
+site_description: "Vibe CAD for 3D printing: describe a part, your AI assistant designs, checks and exports it (build123d, MCP)"
 site_url: https://kd5ryn.github.io/b123d-print/
 repo_url: https://github.com/KD5RYN/b123d-print
 repo_name: KD5RYN/b123d-print
@@ -47,10 +47,12 @@ nav:
   - Getting started:
       - Quick start: getting-started/quick-start.md
       - Connect your MCP client: getting-started/mcp-clients.md
-      - Remote over SSH (recommended): getting-started/ssh.md
+      - CLI and Python: getting-started/cli.md
+  - "Advanced: another machine":
+      - Which mode?: advanced/index.md
+      - Remote over SSH (home server): getting-started/ssh.md
       - Over the network (HTTP): getting-started/http.md
       - Docker: getting-started/docker.md
-      - CLI and Python: getting-started/cli.md
   - Using it:
       - How a session goes: using/workflow.md
       - MCP tools and prompts: using/tools.md

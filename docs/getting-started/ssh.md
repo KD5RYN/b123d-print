@@ -1,17 +1,11 @@
-# Remote over SSH (recommended)
+# Remote over SSH
 
 To keep your parts on a home server and design from a laptop, run the MCP server over **SSH**.
 Every MCP client can start a stdio server, and `ssh` is one: the client runs
 `ssh you@server`, and SSH does the rest. Login and encryption come from SSH keys you probably
 already have, so there are no certificates, tokens or open ports to set up.
 
-## Which remote mode?
-
-| Mode | Use it for | Login | Files come back by |
-| --- | --- | --- | --- |
-| [Local (stdio)](mcp-clients.md) | everything on one machine | none needed | they are already on your disk |
-| **SSH** (this page) | a home server and a few of your own machines | your SSH key, one line per machine in `authorized_keys` | `b123d-print pull`, or `export(embed=true)` |
-| [HTTP](http.md) | many agents at once, eval runs, a shared service | a bearer token, TLS from a reverse proxy | download links |
+For how SSH compares with local and HTTP mode, see [Which mode?](../advanced/index.md#which-mode).
 
 ## Set it up
 
