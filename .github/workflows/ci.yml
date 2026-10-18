@@ -12,8 +12,11 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    # GitHub-hosted runners only: on a public repo, self-hosted runners would run fork PRs' code.
+  # Everything below runs in parallel; each job does one thing, so the slowest job (not the sum)
+  # sets the wait. GitHub-hosted runners only: on a public repo, self-hosted runners would run
+  # fork PRs' code.
+
+  unit:
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - name: Linux sandbox (bubblewrap)
         if: runner.os == 'Linux'
         run: |
@@ -29,22 +34,38 @@ jobs:
           # Ubuntu 24.04 blocks unprivileged user namespaces by default; bwrap needs them
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: uv sync --frozen
-      - run: uv run pytest -q
-      - run: uv run b123d-print check
-      - name: MCP end to end (incl. sandbox escapes)
-        run: uv run python tests/mcp_smoke.py
-        env:
-          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
-      - name: MCP end to end over HTTP (tokens, workspaces, links, parallel builds)
-        run: uv run python tests/mcp_smoke.py --http
-        env:
-          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
-      - name: MCP end to end over HTTP with builds in a separate worker process
-        run: uv run python tests/mcp_smoke.py --split
-        env:
-          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
-      - name: MCP end to end through the SSH forced command (sshd simulated)
-        run: uv run python tests/mcp_smoke.py --ssh
+      - name: Unit tests (parallel)
+        run: uv run pytest -q -n auto
+      - name: Checks on every bundled example
+        run: uv run b123d-print check
+
+  e2e:
+    # the MCP end-to-end test, one job per transport
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, mode: stdio, flag: "", what: "stdio, incl. sandbox escapes"}
+          - {os: ubuntu-latest, mode: http, flag: "--http", what: "HTTP: tokens, workspaces, links, parallel builds"}
+          - {os: ubuntu-latest, mode: split, flag: "--split", what: "HTTP with builds in a separate worker process"}
+          - {os: ubuntu-latest, mode: ssh-sim, flag: "--ssh", what: "the SSH forced command (sshd simulated)"}
+          - {os: macos-latest, mode: stdio, flag: "", what: "stdio, macOS sandbox"}
+          - {os: macos-latest, mode: http, flag: "--http", what: "HTTP, macOS sandbox"}
+    name: e2e (${{ matrix.os }}, ${{ matrix.mode }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Linux sandbox (bubblewrap)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - run: uv sync --frozen
+      - name: MCP end to end (${{ matrix.what }})
+        run: uv run python tests/mcp_smoke.py ${{ matrix.flag }}
         env:
           B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
 
@@ -54,6 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap openssh-server
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
@@ -69,6 +92,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: uv build
       - name: MCP end to end from the built wheel via uvx
         run: |
@@ -82,6 +107,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: docker build -t b123d-print-mcp .
       - name: MCP end to end against the container
         run: |
@@ -89,6 +116,16 @@ jobs:
           # same /tmp path inside and outside, so the test can look at the files the server wrote
           B123D_PRINT_SMOKE_CMD="docker run -i --rm --network none --user $(id -u):$(id -g) -v /tmp:/tmp b123d-print-mcp" \
             uv run python tests/mcp_smoke.py
+
+  docker-compose:
+    # the two-container HTTP setup: front + network-less worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: docker build -t b123d-print-mcp .
       - name: The compose example is valid
         run: cd deploy && B123D_PRINT_IMAGE=b123d-print-mcp docker compose config -q
       - name: HTTP mode refuses to start without a token
