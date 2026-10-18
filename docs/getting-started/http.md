@@ -14,6 +14,63 @@ elsewhere.
     For one person reaching a home server, running the server over SSH (stdio) is simpler and
     needs no tokens at all. HTTP mode is for many agents at once: eval runs, a team, a lab.
 
+## Connect a new AI
+
+Every AI tool that connects (Claude Code on a laptop, an eval runner, a teammate's agent) gets
+its own named token. With the server running from [Compose](#compose), one command next to
+`compose.yaml` makes the token and the client config:
+
+```bash
+docker compose run --rm -T b123d-print token add claude-laptop
+```
+
+The token appears once, alone on its own line, and is never shown again: the server keeps
+only its SHA-256. Below it comes the config to paste into the tool:
+
+```text
+added claude-laptop: workspaces claude-laptop. The token (above) is shown only this once.
+
+Connect an MCP client:
+  URL     https://cad.example.com/mcp
+  Header  Authorization: Bearer <token>
+
+Claude Code, in the project folder (--scope project keeps the token out of ~/.claude.json,
+which other agent tools import):
+  claude mcp add --scope project --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer <token>"
+
+Other clients (Cursor, VS Code, ...; key names vary):
+  {"mcpServers": {"b123d-print": {"type": "http", "url": "https://cad.example.com/mcp",
+    "headers": {"Authorization": "Bearer <token>"}}}}
+
+Revoke it with: b123d-print-mcp token revoke claude-laptop
+```
+
+Run the `claude mcp add` line in the project folder where you use Claude Code, or paste the JSON
+into another client, and the tool is connected.
+
+- **Its workspace is its name.** The tool's parts land in `parts/workspaces/claude-laptop/`, and
+  the URL needs no `?workspace=`. For a tool that needs several, such as an eval runner, pass
+  patterns: `--workspace 'eval-*'` (repeatable, `'*'` for all); the printed URL then carries an
+  example (`?workspace=eval-1`) and the tool picks one per connection.
+- **The address** in the printed config is `--url`, else `B123D_PRINT_PUBLIC_URL` (set it once
+  in [`.env`](#settings-in-env)), else a `https://<your-server>` placeholder to fill in.
+- **Names:** letters, digits, `_` and `-`, up to 64 characters. No dots: the name is also a
+  workspace name.
+- **Stop a tool** with `docker compose run --rm -T b123d-print token revoke claude-laptop`;
+  `token list` shows names, workspaces, dates and a hash prefix, never the tokens. Neither
+  needs a restart.
+- **Without Docker,** the same commands are `b123d-print-mcp token add|list|revoke`, with
+  `--tokens-file` or `B123D_PRINT_TOKENS_FILE` pointing at the file the server reads.
+
+!!! warning "One token per tool, added per project"
+    `claude mcp add` at its default (user) scope writes the token in plain text into
+    `~/.claude.json`, and other agent tools import MCP servers from that file: one machine's
+    grok-cli connected that way without anyone entering a token. So give **each tool its own
+    token**, limited to its own workspace; add it **per project** (`--scope project` writes
+    `.mcp.json` in that folder; keep that file out of git); and revoke a token when a tool should
+    stop. A token used outside its workspaces gets 403, and the server log names the token of
+    every request (`docker compose logs b123d-print`).
+
 ## Start it
 
 Make a token for each agent or tool that will connect (it is printed once; only its SHA-256 is
@@ -64,8 +121,8 @@ the log says who did what, and one token can be revoked without touching the oth
 
 | Command | Does |
 | --- | --- |
-| `b123d-print-mcp token add <name> [--workspace PATTERN ...] [--url URL]` | make a token and print it once, with ready-to-paste client config (URL, header, a `claude mcp add --scope project` line, JSON); `--workspace` names or patterns (`grok-*`, `*` for all), repeatable; default: one workspace named like the token, so its clients need no `?workspace=`; `--url` (or `B123D_PRINT_PUBLIC_URL`) is the address in that config |
-| `b123d-print-mcp token list` | names, workspaces and dates (never the tokens) |
+| `b123d-print-mcp token add <name> [--workspace PATTERN ...] [--url URL]` | make a token, print it once with the client config ([Connect a new AI](#connect-a-new-ai)); `--workspace` names or patterns, repeatable (default: the token's name); `--url` the address in the printed config |
+| `b123d-print-mcp token list` | names, workspaces, dates and a hash prefix (never the tokens) |
 | `b123d-print-mcp token revoke <name>` | delete it |
 
 All three use `--tokens-file` or `B123D_PRINT_TOKENS_FILE`.
@@ -73,7 +130,7 @@ All three use `--tokens-file` or `B123D_PRINT_TOKENS_FILE`.
 - **No restart needed.** The server re-reads the file when it changes (and on SIGHUP): a revoked
   token is refused on its next request, a new one works at once.
 - **Workspaces.** A request for a workspace outside the token's patterns gets **403**. A token
-  with exactly one plain workspace (`--workspace mac-jon`) uses it when the client sends no
+  with exactly one plain workspace (the default: its own name) uses it when the client sends no
   `?workspace=`; a token with patterns must name one. `_` stands for the shared root workspace.
 - **The log names the token** of every request:
   `b123d-print-mcp: 10.0.0.7 grok-chromebook POST /mcp ws=grok-1 -> 200`. Download links show
@@ -83,14 +140,7 @@ All three use `--tokens-file` or `B123D_PRINT_TOKENS_FILE`.
 - **`B123D_PRINT_TOKEN` still works**: it is a token named `default` that may use every
   workspace. You can use both at once while moving to named tokens.
 
-!!! warning "Where your client keeps the token"
-    `claude mcp add --header "Authorization: Bearer ..."` stores the token in plain text in
-    `~/.claude.json`, and other agent tools import MCP servers from that file. One Chromebook's
-    grok-cli connected this way with nobody entering a token, and read the workspace that config
-    named. To keep a token to one tool: add the server per project (`claude mcp add --scope
-    project`, which writes `.mcp.json` in that folder; keep it out of git) instead of the user
-    config, give **each tool its own named token** limited to its own workspaces, and revoke a
-    token as soon as a tool should no longer connect.
+See [Connect a new AI](#connect-a-new-ai) for why each tool gets its own token, added per project.
 
 ### If it does not start
 
@@ -117,11 +167,13 @@ longer stop timeout than that: `stop_grace_period` in Compose, `docker stop -t`,
 
 ## Several clients at once
 
-**Give every client its own workspace.** A client adds `?workspace=<name>` to the URL (or sends
-the header `X-B123D-Workspace: <name>`), and its parts live in
-`<workspace>/workspaces/<name>/`, created on first use. Names use letters, digits, `_` and `-`,
-up to 64 characters. Clients without a name share the server's root workspace and can overwrite
-each other's parts. Named [tokens](#tokens) limit which workspaces a client may use; the part
+**Every client works in its own workspace**, `<workspace>/workspaces/<name>/`, created on first
+use. A named token's default is the workspace with its own name, so most clients never say
+which. A client can pick one with `?workspace=<name>` in the URL (or the header
+`X-B123D-Workspace: <name>`), if its token allows it. Names use letters, digits, `_` and `-`, up to
+64 characters. A client that names none and whose token has no single default (the shared
+`B123D_PRINT_TOKEN`, a `'*'` token, or `--insecure-no-auth`) works in the server's root
+workspace, `_`, where clients can overwrite each other's parts. Named [tokens](#tokens) limit which workspaces a client may use; the part
 scripts themselves all run in the same sandbox, so do not rely on workspaces to keep secrets
 apart.
 
@@ -169,11 +221,10 @@ listed in `--allowed-hosts`.
 Claude Code:
 
 ```bash
-claude mcp add --scope project --transport http b123d-print "http://HOST:8000/mcp?workspace=claude-1" --header "Authorization: Bearer $TOKEN"
+claude mcp add --scope project --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer $TOKEN"
 ```
 
-Use the token made for this tool (`token add claude-laptop` prints this line ready to paste), and see the
-warning under [Tokens](#tokens) about where clients store it.
+`token add` prints this line, filled in, for each token ([Connect a new AI](#connect-a-new-ai)).
 
 Clients that take a JSON config with remote servers (Cursor, VS Code, and others; the exact key
 names vary, check your client's docs):
@@ -183,7 +234,7 @@ names vary, check your client's docs):
   "mcpServers": {
     "b123d-print": {
       "type": "http",
-      "url": "http://HOST:8000/mcp?workspace=myagent",
+      "url": "https://cad.example.com/mcp",
       "headers": {"Authorization": "Bearer <token>"}
     }
   }
@@ -223,19 +274,54 @@ mkdir -p parts config && sudo chown 1000:1000 parts config
 ```
 
 ```bash
-docker compose run --rm -T b123d-print token add claude-laptop
+echo "B123D_PRINT_PUBLIC_URL=https://cad.example.com" >> .env
 ```
 
 ```bash
 docker compose up -d && docker compose ps
 ```
 
+Then [connect each AI](#connect-a-new-ai) with `docker compose run --rm -T b123d-print token add <name>`.
+
 Both services show `(healthy)` once they run; `/health` answers 503 `"degraded"` while the worker
 is down, and builds then fail at once with "the build worker is not running". `parts` and `config`
 must be writable by uid 1000, the user the image runs as (or set `B123D_PRINT_UID` /
-`B123D_PRINT_GID`). The tokens live in `config/`, which only the HTTP container mounts. Behind the
-optional Caddy block, set `B123D_PRINT_PUBLIC_URL` to the address clients use, so download links
-point there. To run a locally built image instead of GHCR's, set `B123D_PRINT_IMAGE`.
+`B123D_PRINT_GID`). The tokens live in `config/`, which only the HTTP container mounts.
+
+#### Settings in `.env`
+
+Compose reads these from a `.env` file next to `compose.yaml`, so the file itself stays as
+shipped and `git pull` updates it cleanly:
+
+| Variable | Default | What |
+| --- | --- | --- |
+| `B123D_PRINT_PUBLIC_URL` | taken from each request | the address clients use (behind a proxy, its `https://` URL): used in download links and in the config `token add` prints |
+| `B123D_PRINT_LISTEN` | `127.0.0.1:8000` | where the port is published: localhost for a reverse proxy on the same machine (the optional Caddy block), `8000` for the whole network |
+| `B123D_PRINT_IMAGE` | `ghcr.io/kd5ryn/b123d-print-mcp:latest` | the image; `b123d-print-mcp` for one [built from a clone](#from-a-clone) |
+| `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together |
+| `B123D_PRINT_PARTS`, `B123D_PRINT_CONFIG` | `./parts`, `./config` | the parts folder and the tokens folder |
+| `B123D_PRINT_UID`, `B123D_PRINT_GID` | `1000` | the user the containers run as |
+
+#### From a clone
+
+To run unreleased code, or to deploy from a checkout you can update with `git pull`:
+
+```bash
+git clone https://github.com/KD5RYN/b123d-print && cd b123d-print
+```
+
+```bash
+docker build -t b123d-print-mcp .
+```
+
+```bash
+cd deploy && echo "B123D_PRINT_IMAGE=b123d-print-mcp" >> .env
+```
+
+Then continue as above, in `deploy/`. The repository's `.gitignore` already covers
+`deploy/.env`, `deploy/parts/`, `deploy/config/` and `deploy/compose.override.yaml`, so your
+settings, parts and tokens never show up as changes. To update it, see
+[Updating](../updating.md#a-compose-install).
 
 ### `docker run`
 
