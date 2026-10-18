@@ -8,7 +8,10 @@ sshd runs that command whatever the client asks for, and puts what it asked for 
 SSH_ORIGINAL_COMMAND. `ssh-serve` answers only:
 
     (nothing), mcp, b123d-print-mcp   the MCP server over stdio, in the key's workspace
-    pull <part> [--formats f]         a tar stream of that part's out/ files (read-only)
+    pull <part> [--formats f]         a tar stream of that part's out/ files (read-only; what 0.3.0 clients ask for)
+    pull <part> --tree [--formats f] [--variant v]
+                                      a tar of the whole part, relative to its folder: <part>.py,
+                                      out/..., ref/... (handoff.part_files; what `b123d-print pull` asks for)
     push <part> <file> [--overwrite]  store stdin as the reference file <parts_dir>/<part>/ref/<file>
                                       (STL/3MF/STEP only, size-capped; see refs.py)
     version                           version, workspace and sandbox, to check the setup
@@ -52,6 +55,8 @@ def _serve_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="pull", add_help=False, exit_on_error=False)
     ap.add_argument("part")
     ap.add_argument("--formats")
+    ap.add_argument("--variant")
+    ap.add_argument("--tree", action="store_true")
     return ap
 
 
@@ -81,7 +86,7 @@ def parse_request(original: str | None) -> tuple[str, dict]:
         try:
             a, extra = _serve_parser().parse_known_args(words[1:])
         except (argparse.ArgumentError, SystemExit):
-            raise Refused("usage: pull <part> [--formats step,stl,3mf,png]") from None
+            raise Refused("usage: pull <part> [--tree] [--formats step,stl,3mf,png] [--variant v]") from None
         if extra:
             raise Refused(f"pull: unexpected {' '.join(extra)!r}")
         if not PART_RE.match(a.part):
@@ -90,7 +95,10 @@ def parse_request(original: str | None) -> tuple[str, dict]:
             fmts = parse_formats(a.formats) if a.formats else FORMATS
         except ValueError as e:
             raise Refused(f"pull: {e}") from None
-        return "pull", {"part": a.part, "formats": fmts}
+        if a.variant is not None and (not a.tree or not re.match(r"^[A-Za-z0-9_.-]{0,64}$", a.variant)):
+            raise Refused(f"pull: bad --variant {a.variant!r}")
+        return "pull", {"part": a.part, "formats": fmts, "tree": a.tree, "variant": a.variant,
+                        "filtered": bool(a.formats)}
     if words[0] == "push":
         from .refs import RefError, check_name
 
@@ -132,10 +140,12 @@ def out_files(workspace: Path, part: str, formats=FORMATS) -> list[Path]:
     return found
 
 
-def write_tar(files: list[Path], stream) -> None:
+def write_tar(files: list[Path] | list[tuple[str, Path]], stream) -> None:
+    """A tar of `files`: paths (stored by file name) or (name in the tar, path) pairs."""
     with tarfile.open(fileobj=stream, mode="w|") as tf:
-        for f in files:
-            info = tf.gettarinfo(str(f), arcname=f.name)
+        for item in files:
+            arc, f = item if isinstance(item, tuple) else (item.name, item)
+            info = tf.gettarinfo(str(f), arcname=arc)
             info.uid = info.gid = 0
             info.uname = info.gname = ""
             info.mode = 0o644
@@ -184,6 +194,18 @@ def serve(workspace: str, dest: str | None, timeout: float | None, original: str
         stdout.write(f"stored {p.relative_to(ws.resolve()).as_posix()} ({len(data)} bytes)\n".encode())
         stdout.flush()
         return 0
+    if args["tree"]:
+        from .handoff import HandoffError, part_files
+
+        try:
+            tree = part_files(ws, load_settings(ws).parts_dir, args["part"], args["variant"],
+                              args["formats"] if args["filtered"] else None)
+        except (HandoffError, SyntaxError, OSError) as e:
+            print(f"b123d-print: refused: pull: {e}", file=stderr)
+            return 1
+        write_tar(tree, stdout)
+        stdout.flush()
+        return 0
     files = out_files(ws, args["part"], args["formats"])
     if not files:
         print(f"b123d-print: no {'/'.join(args['formats'])} files for part {args['part']!r} on the server: "
@@ -206,13 +228,20 @@ def split_command(s: str) -> list[str]:
     return [w[1:-1] if len(w) > 1 and w[0] == w[-1] and w[0] in "\"'" else w for w in shlex.split(s, posix=False)]
 
 
-def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: str = "ssh") -> list[Path]:
-    """Run `ssh <dest> pull <part>` and unpack the files into out_dir. Raises RuntimeError on failure."""
+def pull(part: str, dest: str, project: Path, formats: str | None = None, ssh: str = "ssh",
+         variant: str | None = None) -> list[Path]:
+    """Run `ssh <dest> pull <part> --tree` and write the part into the project folder, in the same
+    layout as a local install: <project>/<parts_dir>/<part>/<part>.py, out/..., ref/... (parts_dir
+    from the project's b123d-print.toml, default parts). Raises RuntimeError on failure."""
+    from .handoff import safe_rel
+
     if not PART_RE.match(part):
         raise RuntimeError(f"bad part name {part!r}")
     if formats:
         parse_formats(formats)  # fail here, not on the server
-    remote = ["pull", part] + (["--formats", formats] if formats else [])
+    remote = ["pull", part, "--tree"] + (["--formats", formats] if formats else []) + (
+        ["--variant", variant] if variant is not None else [])
+    out_dir = project / load_settings(project).parts_dir / part
     # ssh joins the remote words with spaces and the server splits them again: quote each
     cmd = split_command(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -221,9 +250,10 @@ def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: s
     try:
         with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
             for m in tf:
-                if not m.isfile() or "/" in m.name or "\\" in m.name or m.name.startswith(".") or not m.name:
+                if not m.isfile() or not safe_rel(m.name):
                     raise RuntimeError(f"unexpected entry {m.name!r} from the server; nothing more written")
                 target = out_dir / m.name
+                target.parent.mkdir(parents=True, exist_ok=True)
                 with tf.extractfile(m) as src, open(target, "wb") as dst:
                     shutil.copyfileobj(src, dst)
                 got.append(target)
@@ -234,6 +264,8 @@ def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: s
         err = proc.stderr.read().decode(errors="replace").strip()
         proc.wait()
     if proc.returncode != 0 or not got:
+        if "unexpected '--tree'" in err or "usage: pull" in err:
+            err += "\n(the server runs b123d-print 0.3.0 or older: upgrade it for `pull` of a whole part)"
         raise RuntimeError(err or f"ssh exited with code {proc.returncode}" + (f" ({rest[:200]!r})" if rest else ""))
     return got
 
@@ -352,7 +384,7 @@ it accepts the host key and should print the version and workspace):
   VS Code (.vscode/mcp.json):
 {_indent(vscode, 4)}
 
-  Exported files, copied to the client:
+  A part (script, out/, ref/), copied into parts/<part>/ of the project folder you run it in:
     b123d-print pull <part> --from {dest}
 
   A model to remix (STL/3MF/STEP), copied to the server:

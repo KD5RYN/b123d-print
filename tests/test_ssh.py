@@ -27,7 +27,7 @@ def ws(tmp_path, monkeypatch):
     out = w / "parts" / "box" / "out"
     out.mkdir(parents=True)
     (w / "b123d-print.toml").write_text("", encoding="utf-8")
-    (w / "parts" / "box" / "box.py").write_text("SECRET = 1\n", encoding="utf-8")
+    (w / "parts" / "box" / "box.py").write_text("SECRET = 1\n", encoding="utf-8", newline="")
     for name, data in (("box.3mf", b"3mf-bytes"), ("box.stl", b"stl-bytes"), ("box.png", b"png"), (".hidden.stl", b"no")):
         (out / name).write_bytes(data)
     (tmp_path / "outside.stl").write_bytes(b"outside")
@@ -85,6 +85,20 @@ def test_pull_serves_only_out_files(ws):
     assert untar(out) == {"box.3mf": b"3mf-bytes"}
     code, out, err = run_serve(ws, "pull nosuch")
     assert code == 1 and out == b"" and "export it first" in err
+
+
+def test_pull_tree_serves_the_whole_part(ws):
+    (ws / "parts/box/ref").mkdir()
+    (ws / "parts/box/ref/orig.stl").write_bytes(b"solid ref")
+    code, out, err = run_serve(ws, "pull box --tree")
+    assert code == 0, err
+    assert untar(out) == {"box.py": b"SECRET = 1\n", "out/box.3mf": b"3mf-bytes", "out/box.png": b"png",
+                          "out/box.stl": b"stl-bytes", "ref/orig.stl": b"solid ref"}
+    code, out, err = run_serve(ws, "pull box --tree --formats 3mf --variant standard")
+    assert code == 0 and set(untar(out)) == {"box.py", "out/box.3mf", "ref/orig.stl"}, err
+    for bad in ("pull box --variant x", "pull box --tree --variant '../x'", "pull nosuch --tree"):
+        code, out, err = run_serve(ws, bad)
+        assert code == 1 and out == b"" and "refused" in err, bad
 
 
 def test_workspace_is_pinned_by_the_key(ws, tmp_path):
@@ -175,16 +189,17 @@ def test_pull_cli(ws, tmp_path, monkeypatch):
     monkeypatch.setenv("B123D_PRINT_FAKE_SSH_FORCED", forced(ws))
     dest = tmp_path / "got"
     files = ssh.pull("box", "me@cad", dest, "3mf,stl", ssh=FAKE_SSH)
-    assert sorted(p.name for p in files) == ["box.3mf", "box.stl"]
-    assert (dest / "box.3mf").read_bytes() == b"3mf-bytes"
-    with pytest.raises(RuntimeError, match="export it first"):
+    assert sorted(p.relative_to(dest).as_posix() for p in files) == [
+        "parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"]  # the local layout
+    assert (dest / "parts/box/out/box.3mf").read_bytes() == b"3mf-bytes"
+    with pytest.raises(RuntimeError, match="no part"):
         ssh.pull("nosuch", "me@cad", dest, ssh=FAKE_SSH)
     with pytest.raises(RuntimeError, match="bad part name"):
         ssh.pull("../x", "me@cad", dest, ssh=FAKE_SSH)
     r = subprocess.run([sys.executable, "-m", "b123d_print.cli", "pull", "box", "--from", "me@cad", "--formats", "png",
                         "-o", str(tmp_path / "cli"), "--ssh", FAKE_SSH], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert [p.name for p in (tmp_path / "cli").iterdir()] == ["box.png"]
+    assert [p.name for p in (tmp_path / "cli/parts/box/out").iterdir()] == ["box.png"]
 
 
 def test_shell_metacharacters_never_reach_a_shell(ws, tmp_path, monkeypatch):

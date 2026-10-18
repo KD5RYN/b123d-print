@@ -189,7 +189,33 @@ clients together. `list_parts` reports the limit.
 
 ## Get the files
 
-Over HTTP the files the server writes stay on the server. The tools hand them to you three ways:
+Over HTTP the server is a workbench, not storage: the files it writes are a temporary working
+copy on the server ([removed after 30 days unused](#workspace-retention)), and the client brings
+them home. Agents use only the MCP tools and the links they return; the server gives no shell,
+ssh or scp access, and the tool descriptions and results say so.
+
+**The whole part, in one step.** `download_part("bracket")` returns one signed link to a zip of
+the part in the same layout a local install writes into the project folder:
+
+```text
+parts/bracket/bracket.py      the script
+parts/bracket/out/...         exports, renders, section views (all variants and formats)
+parts/bracket/ref/...         reference models (remixes)
+```
+
+```bash
+curl -fLo bracket.zip '<link>'
+unzip -o bracket.zip          # in the project folder; on Windows: tar -xf bracket.zip
+```
+
+`variant=` and `formats=` narrow the `out/` files (the script and `ref/` always come along);
+the zip is made when the link is fetched, so it holds the files as they are then. Like the other
+links it needs no token, opens only that part (with that filter) in that workspace, and expires.
+The server's instructions, `AGENTS.md` and the prompts make this the required last step of
+remote work: `download_part`, unzip, check the files are there, then report. Results show
+workspace-relative paths (`parts/bracket/out/bracket.3mf`), never the server's own folders.
+
+Single files, too:
 
 - **Download links.** `export` lists every file with an HTTPS link, and `render_preview`,
   `section` and `compare` add one for their image. A link needs no token, so `curl -fO <url>`,
@@ -208,8 +234,20 @@ Over HTTP the files the server writes stay on the server. The tools hand them to
   the result, for clients that can neither fetch URLs nor read resources. It is off by default:
   embedded models cost a lot of context.
 
-Only the files in `parts/<part>/out/` are served: not the part scripts and nothing outside the
-workspace. Agents never need a shell on the server.
+The per-file links serve only the files in `parts/<part>/out/`; the script and `ref/` come only
+in `download_part`'s zip. Nothing outside the workspace is ever served. Agents never need a shell
+on the server.
+
+### Workspace retention
+
+A named workspace (`?workspace=<name>`, kept in `<workspace>/workspaces/<name>`) that nobody has
+used for **30 days** is removed, with everything in it (its parts and its `b123d-print.toml`,
+so its printer choice too). Every request and every link fetch counts as a use; the server
+checks at startup and then hourly, logs each removal by name, and never removes a workspace
+while a request for it (a queued or running build included) is in flight. Set the number of
+days with `--retention-days` or `B123D_PRINT_RETENTION_DAYS` (`0` = never). The shared root
+workspace (clients without `?workspace=`) is never removed. Tool results say how long the copy
+is kept ("deleted after 30 days unused").
 
 The other way, a model to [remix](../using/remix.md): `upload_reference` returns a signed
 **upload link**, and `curl -fT bracket.stl '<link>'` on your machine stores the file as
@@ -297,7 +335,7 @@ must be writable by uid 1000, the user the image runs as (or set `B123D_PRINT_UI
 #### Settings in `.env`
 
 Compose reads these from a `.env` file next to `compose.yaml`, so the file itself stays as
-shipped and `git pull` updates it cleanly:
+shipped and `git pull` updates it cleanly (`deploy/.env.example` lists them with their defaults):
 
 | Variable | Default | What |
 | --- | --- | --- |
@@ -305,6 +343,7 @@ shipped and `git pull` updates it cleanly:
 | `B123D_PRINT_LISTEN` | `127.0.0.1:8000` | where the port is published: localhost for a reverse proxy on the same machine (the optional Caddy block), `8000` for the whole network |
 | `B123D_PRINT_IMAGE` | `ghcr.io/kd5ryn/b123d-print-mcp:latest` | the image; `b123d-print-mcp` for one [built from a clone](#from-a-clone) |
 | `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together |
+| `B123D_PRINT_RETENTION_DAYS` | `30` | remove a workspace nobody used for this many days ([retention](#workspace-retention)); `0` = never |
 | `B123D_PRINT_PARTS`, `B123D_PRINT_CONFIG` | `./parts`, `./config` | the parts folder and the tokens folder |
 | `B123D_PRINT_UID`, `B123D_PRINT_GID` | `1000` | the user the containers run as |
 

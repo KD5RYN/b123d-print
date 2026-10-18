@@ -23,8 +23,9 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
    style's suggestions; filament and time are rough estimates), `export`, `compare` (to measure a part
    against a reference STL/3MF/STEP the user put in the workspace), `upload_reference`,
    `describe_model` and `before_after` (remixing an existing model: get it onto the server, inspect
-   it, compare the remix with it), and `use_printer` (only when the user asks to set a printer). If the server is remote, over HTTP download exported files
-   from the links `export` returns (`curl -fO <url>`, no token, they expire) or read the
-   `b123d-print://files/` resources; over SSH run the `b123d-print pull ...` command `export`
-   gives; never open a shell on the server. Without the MCP server, use the
+   it, compare the remix with it), and `use_printer` (only when the user asks to set a printer). If the server is remote (HTTP or SSH), its copy is
+   temporary: the last step before reporting is `download_part` (over HTTP `curl -fLo <name>.zip
+   '<link>'` and unzip it in the project folder; over SSH the `b123d-print pull` command it gives),
+   which writes `parts/<name>/<name>.py`, `out/` and `ref/` like a local install; check the files
+   are there. Use only the MCP tools and their links: never ssh, scp or a shell on the server. Without the MCP server, use the
    CLI from a workspace: `b123d-print new|build|check|metrics|config` (`uvx --from <b123d-print> b123d-print ...`).
