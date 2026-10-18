@@ -337,18 +337,35 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     return json.dumps(_printer_summary(load_settings(_root())), indent=1)
 
 
+def _human_size(n: int) -> str:
+    """Bytes as B / KB / MB, so a 34 KB export does not read as "0.0 MB"."""
+    if n < 1000:
+        return f"{n} B"
+    if n < 1_000_000:
+        return f"{n / 1000:.0f} KB"
+    return f"{n / 1e6:.1f} MB"
+
+
 @mcp.tool()
-def new_part(name: str, description: str = "", example: str | None = None) -> str:
+def new_part(name: str, description: str = "", example: str | None = None, show_code: bool = False) -> str:
     """Create parts/<name>/<name>.py from the template (Dims dataclass, build(d), VARIANTS,
-    views, checks) and return its code. name: lower_snake_case. example: copy a bundled example
-    instead (see list_parts), e.g. 'hole_coupon' to calibrate hole compensation."""
+    views, checks). name: lower_snake_case. example: copy a bundled example instead (see
+    list_parts), e.g. 'hole_coupon' to calibrate hole compensation. Returns a short confirmation;
+    the template is the b123d-print://template resource (or read_part), show_code=True returns
+    the new file's code here. Usually the next step is write_part with the whole script."""
     if not (_root() / "b123d-print.toml").exists():
         init_workspace(_root())
     try:
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
-    return f"Created {p.relative_to(_root())}. Edit it with write_part. Current code:\n\n{p.read_text(encoding="utf-8")}"
+    rel = p.relative_to(_root())
+    if show_code:
+        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
+    src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
+    return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
+            "shows the current code. A single part returned by build() is named 'part' in checks "
+            f"(or '{name}'); return {{'name': part}} to name several.")
 
 
 @mcp.tool()
@@ -460,7 +477,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
     files = [Path(f) for v in res["variants"] for f in v["files"]]
     total = sum(f.stat().st_size for f in files)
-    out.append(f"Exported {len(files)} file(s), {total / 1e6:.1f} MB in all.")
+    out.append(f"Exported {len(files)} file(s), {_human_size(total)} in all.")
     if not formats and not formats_configured(_root()):
         out.append("These are the default formats (STEP, STL, 3MF and PNG). Narrow them: 3MF for Bambu/Orca/Prusa "
                    "slicers, STEP to edit in other CAD; pass formats= (e.g. formats='3mf') or set `formats` in the config.")

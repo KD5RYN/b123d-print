@@ -71,3 +71,28 @@ def test_template_renders():
 
     code = data("part_template.py").format(name="x", title="X", description="d")
     compile(code, "x.py", "exec")
+
+
+def test_single_part_alias(tmp_path, monkeypatch):
+    """A bare Part from build() is "part" in checks, and the script's own name works too (issue #23)."""
+    from b123d_print.project import load, run_checks
+    from b123d_print.config import load_settings
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    p = tmp_path / "spacer_tube.py"
+    p.write_text(
+        "from build123d import Box\nfrom b123d_print import Wall\n"
+        "def build(d=None):\n    return Box(20, 20, 10)\n"
+        "def checks(d=None):\n    return [Wall('spacer_tube', 'XY', 0, label='by script name'), Wall('part', 'XY', 0)]\n",
+        encoding="utf-8",
+    )
+    findings = run_checks(load(p), "", load_settings(tmp_path))
+    walls = [f for f in findings if f.check == "wall"]
+    assert len(walls) == 2 and all(f.level == "ok" for f in walls), [f.line() for f in findings]
+    assert sum(f.check == "overhang" for f in findings) == 1  # the alias does not add a second part
+
+
+def test_human_size():
+    from b123d_print.mcp_server import _human_size
+
+    assert (_human_size(512), _human_size(34_000), _human_size(2_500_000)) == ("512 B", "34 KB", "2.5 MB")
