@@ -12,9 +12,28 @@ Releases: [PyPI](https://pypi.org/project/b123d-print/#history) and
 | `uv tool install b123d-print` (CLI) | `uv tool upgrade b123d-print` |
 | Docker image `ghcr.io/kd5ryn/b123d-print-mcp` | `docker pull ghcr.io/kd5ryn/b123d-print-mcp`, restart the client |
 | Docker image built from a clone | `git pull && docker build -t b123d-print-mcp .` in your clone, restart the client |
+| HTTP server with Compose | see [below](#a-compose-install) |
 | Claude Code plugin | `/plugin marketplace update b123d-print`, then restart Claude Code |
 
-After updating:
+## A Compose install
+
+For the [HTTP server with Compose](getting-started/http.md#compose). The parts, the tokens and
+your `.env` stay as they are; clients reconnect on their own (the server is stateless).
+
+With the GHCR image, in the folder that holds `compose.yaml`:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+[Built from a clone](getting-started/http.md#from-a-clone), in the clone:
+
+```bash
+git pull && docker build -t b123d-print-mcp . && cd deploy && docker compose up -d
+```
+
+## After updating
+
 
 - **Workspaces** keep your parts and settings. The workflow text in a workspace's `AGENTS.md`
   is a copy; refresh it with `b123d-print init --update-agents` (MCP clients always get the

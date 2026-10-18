@@ -155,10 +155,13 @@ def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True
         out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
                               "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
     named = {(k or "part"): v for k, v in parts.items()}
+    lookup = dict(named)
+    if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
+        lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
     on_original: dict = {}  # the same checks on the original, for telling inherited findings from new ones
     for spec in check_specs(mod, d, named, asm):
         try:
-            found = spec.run(named, asm, settings)
+            found = spec.run(lookup, asm, settings)
             if orig is not None and isinstance(spec, INHERITABLE) and getattr(spec, "other", None) is None:
                 twin = replace(spec, part=ORIGINAL)
                 k = repr(twin)

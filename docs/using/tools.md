@@ -8,7 +8,7 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | Tool | What it does |
 | --- | --- |
 | `list_parts` | parts, bundled examples, settings in effect, printer, sandbox in use, version |
-| `new_part(name, description?, example?)` | scaffold from the template, or copy a bundled example |
+| `new_part(name, description?, example?, show_code?)` | scaffold from the template, or copy a bundled example; returns a short confirmation (`show_code=True` also returns the new file's code; the template itself is the `b123d-print://template` resource) |
 | `read_part(name)` | the script's current code |
 | `write_part(name, code)` | replace the script (syntax-checked before saving) |
 | `build_part(name, variant?)` | run it: bounding box, volume, validity, dimensions, errors; writes no files |

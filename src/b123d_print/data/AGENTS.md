@@ -232,6 +232,8 @@ Do all of this every time you change geometry, before telling the user the part 
 from b123d_print import Gap, Overhang, Probe, ThinFeature, Wall
 
 def checks(d):
+    # Part names: a single Part returned by build() is "part" (the script's own name also works);
+    # build() returning {"base": ..., "lid": ...} names them.
     return [
         # thinnest material in the section, within `radius` of `near` (the section's 2D coords:
         # XY -> (x, y), XZ -> (x, z), YZ -> (y, z)); fails below `min` (default: config min_wall)

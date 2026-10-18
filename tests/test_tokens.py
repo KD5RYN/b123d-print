@@ -74,7 +74,7 @@ def cli(tmp_path, *args):
 
 def test_cli(tmp_path):
     r = cli(tmp_path, "add", "grok-chromebook", "--workspace", "grok-*")
-    assert r.returncode == 0 and r.stdout.startswith("b1p_") and "only time" in r.stderr
+    assert r.returncode == 0 and r.stdout.startswith("b1p_") and "only this once" in r.stderr
     secret = r.stdout.strip()
     text = (tmp_path / "tokens.toml").read_text(encoding="utf-8")
     assert secret not in text and tokens.digest(secret) in text  # only the hash is stored
@@ -85,3 +85,16 @@ def test_cli(tmp_path):
     assert cli(tmp_path, "revoke", "grok-chromebook").returncode == 0
     assert "grok-chromebook" not in cli(tmp_path, "list").stdout
     assert cli(tmp_path, "revoke", "grok-chromebook").returncode == 1
+
+
+def test_cli_default_workspace_and_client_config(tmp_path):
+    r = cli(tmp_path, "add", "claude-laptop", "--url", "https://cad.example.com/")
+    tok = r.stdout.strip()
+    assert r.returncode == 0 and tokens.read(tmp_path / "tokens.toml")[0]["claude-laptop"].workspaces == ["claude-laptop"]
+    # one workspace: the URL needs no ?workspace=; the Claude Code line is project-scoped
+    assert "URL     https://cad.example.com/mcp\n" in r.stderr
+    assert f'claude mcp add --scope project --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer {tok}"' in r.stderr
+    assert '"url": "https://cad.example.com/mcp"' in r.stderr and "token revoke claude-laptop" in r.stderr
+    r = cli(tmp_path, "add", "eval", "--workspace", "eval-*")
+    assert "https://<your-server>/mcp?workspace=eval-1" in r.stderr and "--url" in r.stderr
+    assert cli(tmp_path, "add", "has.dot").returncode == 2  # a token name is also its default workspace name
