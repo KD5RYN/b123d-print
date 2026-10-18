@@ -58,6 +58,7 @@ class Material:
     name: str
     label: str = ""
     clearance: float | None = None  # overrides the default mating clearance when set
+    density: float | None = None  # g/cm^3 from the maker's datasheet; the filament estimate uses it
     notes: str = ""
 
     def summary(self) -> str:

@@ -1,0 +1,16 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Least cost"
+description = "Least filament and print time that still does the job."
+review = """
+Look for: supports that a turn or a chamfer would remove [DS-C4]; bulk that is mostly infill and
+could be pocketed (when the shell dominates, hollowing saves little) [DS-C5]; small tall parts
+that are all layer time: print several, or lay them down [DS-C7]; strength from walls, not
+infill [DS-C2]; orientation compared with numbers, not a rule [DS-C8]. Build a trial variant and
+compare it with design_metrics; the estimates are rough, so only claim differences over 10 %.
+Typical: "lay it on its side: no supports"; "pocket the underside with 2 mm walls";
+"print four at once".
+"""
+max_support_share = 0.1
+max_infill_share = 0.5
+max_layer_time_share = 0.5

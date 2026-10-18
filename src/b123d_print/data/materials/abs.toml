@@ -1,2 +1,3 @@
 label = "ABS"
+density = 1.05  # g/cm^3, Bambu ABS datasheet
 notes = "Heat-resistant (~95 C), tough. Not UV-stable outdoors (use ASA). Shrinks and warps; avoid long flat thin parts."

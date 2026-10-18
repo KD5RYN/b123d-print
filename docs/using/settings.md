@@ -26,6 +26,9 @@ max_overhang = 45    # degrees from vertical
 max_bridge = 10      # mm; longer bridges warn
 max_triangles = 50000  # import_model refuses bigger meshes
 formats = ["step", "stl", "3mf", "png"]
+style = "functional"   # design review style for parts without STYLE
+filament_price = 25    # per kg: design_metrics shows a cost
+print_flow = 10        # mm^3/s for the rough print-time estimate
 ```
 
 ## Keys
@@ -48,6 +51,9 @@ An unknown key is an error, so typos don't pass silently.
 | `printer` | `""` (generic) | optional [printer profile](printer-profiles.md) |
 | `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
 | `formats` | all four | what export writes: `step`, `stl`, `3mf`, `png` ([formats](formats.md)) |
+| `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft` or [your own](design-review.md#custom-styles) |
+| `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
+| `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |
 | `parts_dir` | `"parts"` | folder in the workspace that holds `<name>/<name>.py` |
 
 All clearances are per side. Part scripts read any of them with `load_settings(__file__)`, e.g.

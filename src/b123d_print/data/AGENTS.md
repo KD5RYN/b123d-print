@@ -226,6 +226,28 @@ Do all of this every time you change geometry, before telling the user the part 
 7. **Report:** overall size (X × Y × Z), key feature dimensions, validity, the clearances and
    hole compensation applied, check results, print orientation and any supports needed.
 
+## Design review (after the print checks pass)
+
+The rules and their sources are in
+[DESIGN_GUIDE](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/).
+
+- Every part has a **style**: `STYLE` in `Dims`, else the workspace `style` setting, else
+  `functional`. The styles are `functional`, `modern` (minimal), `least_cost`, `rugged`
+  (outdoor) and `soft` (handheld). For a new part, if the user has said nothing about looks,
+  ask once. The industrial look is functional with `EDGES = "chamfer"` and exposed standard
+  screws.
+- Optional script fields: `SHOW = ["+Y", "+Z"]` (sides seen in use, in print orientation) limits
+  the surface findings to those sides; `UP = "+Y"` is the side up in use (water traps);
+  `EDGES = "chamfer"` or `"fillet"` is the edge language.
+- When `check` has no failures, run the design review (the `design_review` prompt, or
+  `design_metrics` plus the rubric): the numbers, renders of the sides seen in use, and 3–7
+  concrete suggestions, each citing its rule ([DS-G1]) and the numbers it would change.
+- **Report; do not change the part without the user's OK.** A trial variant to measure a
+  suggestion is fine; leave the script as it was unless the user agrees.
+- Filament is a simple estimate (roughly ±20 %), print time and supports are rough estimates:
+  say so, and use them to compare versions, not as a quote.
+- Never suggest a proportion rule such as the golden ratio [DS-G9].
+
 ## Checks reference
 
 ```python

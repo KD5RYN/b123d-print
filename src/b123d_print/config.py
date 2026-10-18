@@ -41,6 +41,9 @@ class Settings:
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
+    style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft or your own
+    filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
+    print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
 
@@ -57,7 +60,7 @@ _ENV = {
     "max_bridge": "B123D_PRINT_MAX_BRIDGE",
     "max_triangles": "B123D_PRINT_MAX_TRIANGLES",
 }
-NUMBERS = tuple(_ENV)  # the numeric settings
+NUMBERS = (*_ENV, "filament_price", "print_flow")  # the numeric settings
 # measured per printer + material (calibration.toml): a calibration for the active printer beats
 # the same key in the user config, but not the workspace config or the environment
 CALIBRATED = ("hole_comp", "hole_comp_h", "clearance", "press_fit", "free_fit", "pip_clearance", "max_overhang", "max_bridge")
@@ -97,9 +100,16 @@ def _read(path: Path) -> dict:
                 flat[k] = float(flat[k])
             except (TypeError, ValueError):
                 raise ValueError(f"{path}: {k} must be a number, got {flat[k]!r}") from None
-    for k in ("printer", "material", "parts_dir"):
+    for k in ("printer", "material", "parts_dir", "style"):
         if k in flat:
             flat[k] = str(flat[k])
+    if flat.get("style"):
+        from .styles import normalize
+
+        try:
+            flat["style"] = normalize(flat["style"])
+        except ValueError as e:
+            raise ValueError(f"{path}: {e}") from None
     return flat
 
 

@@ -1,0 +1,17 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Rugged / outdoor"
+description = "Survives sun, water, heat, drops and being opened again and again."
+review = """
+Look for: the material (ASA for sun, PETG in shade; PLA softens at about 55 C) [DS-R1]; water
+traps with the part's UP side up: a 2-3 mm drain at the low point, or slope the floor [DS-R3];
+sealed enclosures need 4+ walls in the slicer [DS-R4] and O-ring grooves to the Parker tables on
+a vertical wall or a flat top [DS-R5]; rounded outside corners, outside radius = inside radius +
+wall [DS-R7]; loads and knocks along the layers; heat-set inserts and stainless screws for parts
+opened often [DS-R8].
+Typical: "print it in ASA"; "the pocket holds 2.3 cm3: add a 3 mm drain at the low corner";
+"outer corners r = 1 + 2 = 3 mm".
+"""
+outdoor_material = true
+max_water_cm3 = 0.5
+max_sharp_edge_share = 0.0

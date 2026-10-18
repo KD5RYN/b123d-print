@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, compare, to-step, config, list, and MCP over
+"""`b123d-print` command line: init, new, build, check, metrics, styles, compare, to-step, config, list, and MCP over
 SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -118,6 +118,50 @@ def cmd_check(args) -> int:
     else:
         print("FAILED" if worst else "all checks passed")
     return worst
+
+
+def cmd_metrics(args) -> int:
+    """Design metrics and the style's findings for each part (rough estimates; never fails)."""
+    from . import metrics
+    from .project import dims, load, printables, variant_key, variants
+
+    out = []
+    for script in _targets(args):
+        settings = load_settings(script)
+        mod = load(script)
+        for key in variants(mod):
+            if args.variant and variant_key(args.variant) != key:
+                continue
+            d = dims(mod, key)
+            res = metrics.design_metrics(mod, d, printables(mod, d), settings, style=args.style, up=args.up)
+            out.append({"part": script.stem, "variant": key or "standard", **res})
+            if not args.json:
+                print(f"{script.stem}{'[' + key + ']' if key else ''}\n{metrics.text(res)}\n")
+    if args.json:
+        json.dump(out, sys.stdout, indent=1, default=str)
+        print()
+    return 0
+
+
+def cmd_styles(args) -> int:
+    """List the design styles (workspace, user, built-in), or show one with based_on applied."""
+    from dataclasses import fields
+
+    from . import styles
+
+    root, _ = workspace(args.root)
+    if not args.name:
+        for n, src in styles.available(root).items():
+            print(f"{n:16} {src}")
+        return 0
+    st = styles.load_style(args.name, root)
+    print(f"# {st.name}: {st.source}" + (f" (based on {st.based_on})" if st.based_on else ""))
+    for f in fields(st):
+        v = getattr(st, f.name)
+        if f.name in ("name", "source", "based_on") or v is None or v is False or v == "":
+            continue
+        print(f'{f.name} = """{v.strip()}\n"""' if f.name == "review" else f"{f.name} = {json.dumps(v)}")
+    return 0
 
 
 def cmd_build(args) -> int:
@@ -286,6 +330,14 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "check":
             p.add_argument("--json", action="store_true")
             p.add_argument("-v", "--verbose", action="store_true", help="also list passing checks")
+    p = sub.add_parser("metrics", help="design metrics and the style's suggestions (filament, time, edges, ...)")
+    p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
+    p.add_argument("--variant")
+    p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft")
+    p.add_argument("--up", help="the side that points up in use, for water traps: +X, -Y, ... (default: UP, else +Z)")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("styles", help="list the design styles (yours and the built-in ones), or show one")
+    p.add_argument("name", nargs="?", help="a style to show, with based_on applied")
     p = sub.add_parser("printer", help="optional printer/material profile (default: generic)")
     psub = p.add_subparsers(dest="pcmd", required=True)
     q = psub.add_parser("list", help="search the printer profiles (from OrcaSlicer's library + yours)")
@@ -386,6 +438,11 @@ def main(argv: list[str] | None = None) -> int:
         for p in find_parts(root, parts_dir):
             print(p.relative_to(root))
         return 0
+    if args.cmd in ("metrics", "styles"):
+        try:
+            return cmd_metrics(args) if args.cmd == "metrics" else cmd_styles(args)
+        except ValueError as e:
+            sys.exit(str(e))
     return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step}[args.cmd](args)
 
 

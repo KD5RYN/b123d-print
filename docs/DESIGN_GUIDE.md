@@ -1,18 +1,18 @@
-# Design styles and design review (sourced proposal)
+# Design styles and design review (sourced)
 
-The print checks answer "will it print and will it fit". This page proposes the next layer:
+The print checks answer "will it print and will it fit". This page describes the next layer:
 **after the print checks pass, the AI reviews whether the part is a good design for its purpose
 and for a style the user chose**, and reports concrete suggestions. It never changes the part
 by itself.
 
-**Status: proposal (phase 1), not implemented.** It defines the styles, the rules behind them
-(IDs `DS-*`), a `design_metrics` tool with measured accuracy, the `design_review` prompt and the
-AGENTS.md step. Open questions for review are in [§9](#9-open-questions).
+**Status: implemented** (the `design_metrics` tool and `b123d-print metrics`, the
+`design_review` prompt, the AGENTS.md step). It defines the styles, the rules behind them (IDs
+`DS-*`), the metrics and the review flow. The decisions of the 2026-10-18 review are in
+[§9](#9-decisions-review-of-2026-10-18); how to use it is on [Design review](using/design-review.md).
 
 Every source was fetched on 2026-10-18; claims come from the fetched page, PDF or source file,
 never from memory. The raw notes (one claim per source, with what each page says) are kept with
-the research, outside the repository. The estimator numbers in §5 come from an experiment run
-the same day against Bambu Studio 02.08.02.61 ([§5.9](#59-how-the-estimates-were-measured)).
+the research, outside the repository.
 
 ## 1. How to read this
 
@@ -40,8 +40,8 @@ Design is partly taste, so this page separates three kinds of statement:
 
 **Nothing here fails a build.** The review produces findings at two levels: **suggest** (worth
 changing for the chosen style) and **note** (information, a trade-off). Print checks keep
-deciding pass/fail. **Proposed (ours)** marks a threshold we chose from our own experiment or
-judgment; those are the numbers to tune once phase 2 runs on the example parts.
+deciding pass/fail. **Proposed (ours)** marks a threshold the project chose as a starting value;
+it is not a sourced number, and it will be tuned as parts are reviewed.
 
 **IDs.** Code cites `DS-G1`, AGENTS.md `[DS-G1]`. The hyphen keeps them apart from the
 BEST_PRACTICES IDs (`BP-W1`, `[W1]`) and from `tests/test_rules.py`'s `[A-Z]\d+` pattern; a
@@ -63,7 +63,7 @@ Source keys are listed under [Sources](#sources).
 | DS-G6 | **Honesty: no fake features** (dummy screws, fake vents, decoration pretending to be function). | RAMS #6. SUL (rhetorical, architecture). | normative | **r** | Rubric. |
 | DS-G7 | **Symmetry is a style choice, not a universal quality.** Symmetry tracks beauty for abstract patterns; in 3D products continuity weighed about 3× symmetry (1 study); its effect on preference depends on what the buyer values. | JH-ERP, VRL17 (42 students, bottles), CVS10 (422 respondents, conjoint). | evidence | **m** | Metric: mirror symmetry (M8). Used by modern/minimal only. |
 | DS-G8 | **Curvature is a style choice.** People prefer curved over angular shapes on average, but the effect is moderate, depends on personality and expertise, and shifts with fashion; angular shapes hold attention longer. | BN06 (n = 14), BPG16 (4 experiments: liking curves, not disliking angles), COT17 (n = 119; marginal for simple shapes), SB09, GMN16 (review), CAR10 (cars over decades). | evidence | **m** | Metric: share of outside edges rounded (M7). Emphasized by soft/handheld and modern; not a general score. |
-| DS-G9 | *Dropped:* **fixed proportions (golden ratio, 1:1.618 boxes).** | MCM10 and SWT16: no robust population preference, large stable individual differences. CAR10: Fechner's result traces to familiarity. DEV *(press)*. | evidence | **d** | Proportions (M1) are reported as numbers only; the review never suggests a ratio. |
+| DS-G9 | **Never suggest fixed proportions** (golden ratio, 1:1.618 boxes). | MCM10 and SWT16: no robust population preference, large stable individual differences. CAR10: Fechner's result traces to familiarity. DEV *(press)*. | evidence | **r** | Proportions (M1) are reported as numbers only; the review never suggests a ratio. |
 
 ### 2.1 Surfaces, seams and splits on FDM
 
@@ -87,13 +87,13 @@ Source keys are listed under [Sources](#sources).
 
 | # | Rule | Evidence | Kind | Class | Proposed behavior |
 |---|---|---|---|---|---|
-| DS-C1 | **Filament mass ≈ density × (shell + infill × interior).** Slicer defaults: 2 walls, 15–20 % sparse infill, 4–5 top / 3–4 bottom layers; Cura's infill line spacing makes the infill fraction equal the density setting. | ORCA-PROC, PRUSA-INI, CURA-DEF. Our experiment (§5.9): 2.7 % mean error at defaults. | evidence | **m** | M2. |
+| DS-C1 | **Filament mass ≈ density × (shell + infill × interior).** Slicer defaults: 2 walls, 15–20 % sparse infill, 4–5 top / 3–4 bottom layers; Cura's infill line spacing makes the infill fraction equal the density setting. | ORCA-PROC, PRUSA-INI, CURA-DEF. | evidence | **m** | M2: a simple estimate, roughly ±20 %. |
 | DS-C2 | **Strength comes from walls; add walls before infill.** 10–15 % infill is usually enough. | PRUSA-INFILL, HACKSPACE (extra perimeters ~2.5× more filament-efficient than infill, one bending test), BP-W4. | evidence | **r** | When least cost meets a load: suggest wall count, not infill. |
-| DS-C3 | **Print time is set by volumetric flow, the number of layers and a minimum layer time**: about 8–12 mm³/s on a standard hotend, 15–20 on Prusa's Nextruder, 21 for Bambu PLA profiles; minimum layer time 3–20 s by slicer and material. Acceleration is the main error in simple estimates. | PRUSA-MVS, ORCA-FIL, CURA-DEF, MEDINA19 (<8.5 % with a calibrated speed model; up to 59 % with programmed speeds). Our experiment (§5.9). | evidence | **m** | M3. |
-| DS-C4 | **Supports cost filament and time, and leave rough faces.** Turn the part, chamfer the overhang, split. | BP-S1, BP-S2. Our experiment: support ≈ 0.18 × (downward area × height) for Bambu grid supports. PAGE26: support mass is the hardest thing to estimate (45 % weighted error). | evidence | **m** | M5. |
+| DS-C3 | **Print time is set by volumetric flow, the number of layers and a minimum layer time**: about 8–12 mm³/s on a standard hotend, 15–20 on Prusa's Nextruder, 21 for Bambu PLA profiles; minimum layer time 3–20 s by slicer and material. Acceleration is the main error in simple estimates. | PRUSA-MVS, ORCA-FIL, CURA-DEF, MEDINA19 (<8.5 % with a calibrated speed model; up to 59 % with programmed speeds). | evidence | **m** | M3: one rule, a rough estimate. |
+| DS-C4 | **Supports cost filament and time, and leave rough faces.** Turn the part, chamfer the overhang, split. | BP-S1, BP-S2. PAGE26: support mass is the hardest thing to estimate (45 % weighted error). | evidence | **m** | M5: rough. |
 | DS-C5 | **Removing volume saves only where infill dominates.** A shell-dominated part (thin walls, small) saves little by hollowing; a block saves a lot by pocketing. | Our mass model (DS-C1); PL-COST (volume vs cost, mostly powder/resin) **(1 src)**. | evidence | **m** | M2 reports the shell / infill split; suggestions follow it. |
 | DS-C6 | **Layer height trades time for finish**: time scales roughly with 1 / layer height, less than proportionally (×1.85 from 0.2 to 0.1 mm in one test). | 3DPRINTERLY-LH, XYZDIMS *(both community)*. | evidence | **i** | Mentioned with DS-S1. |
-| DS-C7 | **Small or tall thin parts are limited by minimum layer time; print several at once.** Unit cost falls with batch size and flattens after 6–7 parts. | ORCA-PROC / CURA-DEF (min layer time), our experiment (10×10×80 tower), HK24, BAUM17. | evidence | **m** | M3 reports the minimum-layer-time share. |
+| DS-C7 | **Small or tall thin parts are limited by minimum layer time; print several at once.** Unit cost falls with batch size and flattens after 6–7 parts. | ORCA-PROC / CURA-DEF (min layer time), HK24, BAUM17. | evidence | **m** | M3 reports the per-layer share of the time. |
 | DS-C8 | **Orientation's effect on time is case-specific** (laying an L-bracket flat cut 58 % in one vendor case; standing a bracket up was faster in another). | CATI, FACFOX. *Disagree*: by design. | evidence | **i** | Compare variants with M3 instead of a rule. |
 | DS-C9 | *Dropped:* a universal "cost per gram" or labour model. Labour was 42 % of cost in one batch study; it depends on the user. | HK24. | evidence | **d** | Cost = grams × the user's `filament_price` only. |
 
@@ -123,7 +123,7 @@ Source keys are listed under [Sources](#sources).
 
 ## 4. The styles
 
-A **style** is a short name the user picks for a part. It decides which metrics the review
+A **style** is a short name the user picks for a part; there are five. It decides which metrics the review
 highlights, which rubric questions it asks and which thresholds produce a **suggest**. All
 styles also apply the general rules (§2) at **note** level. The definitions are ours (§1); the
 rules they cite are sourced.
@@ -159,46 +159,41 @@ that the other styles lack.
 - **Metrics:** M7 (treated share, distinct radii), M8 symmetry, M9 face count, M6 stepping on
   show faces, M10.
 - **Suggest when** *(proposed, ours)*: < 90 % of outside edge length treated (bed edges
-  excluded); > 2 radius families or > 1 chamfer size; best mirror symmetry < 0.98 with no
+  excluded); more than one edge-break size or more than one styling radius, or > 1 chamfer size; best mirror symmetry < 0.98 with no
   functional reason (ask); holes or screw heads on faces the user calls visible.
 - **Typical suggestions:** "Radii 1, 1.5, 2 and 4 mm: use 1 mm edge breaks and 4 mm for the
   vertical corners"; "Move the screws to the underside or behind a press-fit cover"; "The lid's
   opening notch is the only cue for how to open it: keep it".
 
-### 4.3 industrial / utilitarian
+### 4.3 The industrial look: functional with `EDGES = "chamfer"`
 
-*Honest structure: visible standard fasteners, ribs, chamfers, nothing hidden or decorative.*
+Industrial/utilitarian is **not a separate style** (decision 1, §9): no design source defines it
+beyond an encyclopedia article ("machine aesthetic") and a course blog. Its look is functional
+plus two choices the script can state:
 
-- **Looks for:** structure that reads (ribs at wall thickness, BP-R4/R5); chamfers as the main
-  edge treatment (DS-S4), consistent sizes (DS-G1); exposed fasteners of one standard size
-  (DS-G3, *exposed is a definition, ours*); no fake features (DS-G6); knife edges broken
-  (BP-R3).
-- **Metrics:** M7 (chamfer vs fillet share, distinct chamfer sizes), M9 (fastener classes),
-  M5, M6.
-- **Suggest when** *(proposed, ours)*: fillet length > chamfer length on outside edges; > 2
-  chamfer sizes; > 1 screw size; sharp outside edges with no break (M7 sharp share > 30 %).
-- **Typical suggestions:** "Replace the 2 mm fillets with 1 mm chamfers (prints without
-  overhang, matches the bed chamfer)"; "Four M3 button heads on the face instead of hidden M2
-  screws: one size, one driver".
+- `EDGES = "chamfer"`: chamfers are the edge language (DS-S4, they print at a constant angle);
+  the review suggests when fillet length exceeds chamfer length or more than two chamfer sizes
+  appear (DS-G1).
+- Exposed standard fasteners of one size (DS-G3), ribs at wall thickness (BP-R4/R5), no fake
+  features (DS-G6), knife edges broken (BP-R3): rubric items, as in functional.
 
-**Note:** no design source defines this style beyond an encyclopedia article ("machine
-aesthetic") and a course blog; it is a definition. Jon may prefer to fold it into functional
-([§9](#9-open-questions)).
+`EDGES = "fillet"` does the same for a rounded language (any style).
 
 ### 4.4 least cost
 
 *Least filament and print time that still does the job.*
 
 - **Looks for:** supports (DS-C4); infill-dominated volume that could be pocketed (DS-C5);
-  minimum-layer-time-dominated parts (DS-C7); walls vs infill for strength (DS-C2);
+  parts dominated by per-layer time (DS-C7); walls vs infill for strength (DS-C2);
   orientation compared by numbers, not a rule (DS-C8); layer height (DS-C6).
 - **Metrics:** M2 mass (and cost if `filament_price` is set), M3 time with its breakdown, M5
   supports. For each suggestion the AI may build a variant and compare the two with M2/M3.
 - **Suggest when** *(proposed, ours)*: support mass > 10 % of part mass; infill > 50 % of the
-  extruded volume (pocketing pays); minimum-layer-time share > 30 % of time (print several);
-  a variant the AI tried saves > 10 % of mass or time.
+  extruded volume (pocketing pays); per-layer share > 50 % of the time (print several);
+  a variant the AI tried saves > 10 % of mass or time (the estimates are rough: smaller
+  differences are noise).
 - **Typical suggestions:** "Lay it on its side: supports drop from 6.1 g to 0 and time from
-  48 to 31 min (estimated)"; "Pocket the underside with 2 mm walls: −18 g (infill was 70 % of
+  48 to 31 min (rough estimate)"; "Pocket the underside with 2 mm walls: −18 g (infill was 70 % of
   the mass)"; "It is a 400-layer pin: print four at once, the time per part falls ~3×".
 
 ### 4.5 rugged / outdoor
@@ -208,11 +203,12 @@ aesthetic") and a course blog; it is a definition. Jon may prefer to fold it int
 - **Looks for:** material (DS-R1, DS-R2); water traps and drainage in the installed
   orientation (DS-R3); sealing walls and grooves (DS-R4, DS-R5); impact orientation, walls and
   outside radii (DS-R7); inserts and stainless hardware (DS-R8); target IP code (DS-R6).
-- **Metrics:** M11 water traps (assembly orientation), M7 sharp outside corners, M2 shell
-  thickness assumptions (walls setting), M5.
+- **Metrics:** M11 water traps (with `UP` pointing up), M7 sharp outside corners, M5; wall
+  count for sealed parts is a slicer setting (DS-R4).
 - **Suggest when** *(proposed, ours)*: the material setting is PLA, or unset (ask); any water
-  trap ≥ 0.5 cm³ (M11); outside corner radius < wall thickness on an exposed corner; screws
-  threaded straight into plastic on a part opened more than a few times.
+  trap over 0.5 cm³ (M11); any sharp outside edge (M7; the suggestion gives outside radius =
+  inside radius + wall); screws threaded straight into plastic on a part opened more than a few
+  times (rubric).
 - **Typical suggestions:** "Print it in ASA: PLA softens at ~55 °C, a part in the sun gets
   hotter"; "The top pocket holds 2.3 cm³ of water: add a 3 mm drain at the low corner, or
   slope the floor 5°"; "Outer corners r = inner r 1 + wall 2 = 3 mm".
@@ -233,207 +229,167 @@ aesthetic") and a course blog; it is a definition. Jon may prefer to fold it int
 
 ### 4.7 Where the style lives
 
-1. **Part script:** a `STYLE: str = "functional"` field in `Dims` (so a variant can override
-   it: `VARIANTS = {"outdoor": dict(STYLE="rugged", ...)}`), with a source comment like any
-   other field ("typed by the user").
-2. **Workspace:** `[workspace] style = "modern"` in `b123d-print.toml` for a project whose
-   parts share a look.
+1. **Part script:** `STYLE` in `Dims` (a variant can override it:
+   `VARIANTS = {"outdoor": dict(STYLE="rugged")}`). The template has `STYLE: str = ""`, which
+   means "use the workspace's". A module-level `STYLE` also works.
+2. **Workspace:** `style = "modern"` in `b123d-print.toml` for a project whose parts share a look.
 3. **Default:** `functional`.
 
-Precedence: the script's `STYLE`, then the workspace, then the default. Unknown values are an
-error that lists the six names. When a user starts a new part (`design_part_from_photos`,
-`new_part`) and has said nothing about looks, the AI asks **once**: "Any style for this part?
-functional (default), modern/minimal, industrial, least cost, rugged/outdoor, soft/handheld".
-A blank answer means functional. The template gets the field with `"functional"`.
+Names: `functional`, `modern`, `least_cost`, `rugged`, `soft` (also accepted: `minimal`,
+`least cost`, `outdoor`, `handheld`, and `industrial`, which means functional). Anything else
+is an error that lists them. When a user starts a new part and has said nothing about looks,
+the AI asks **once**; a blank answer means functional. One style per part, no modifiers; the
+cost numbers are always shown (decision 2).
+
+**Styles are files.** Each built-in style is a small TOML file (`src/b123d_print/data/styles/`)
+holding its label, description, its thresholds (the "Suggest when" values above) and its
+`review` text (the rubric). Users add their own in `~/.config/b123d-print/styles/` or the
+workspace's `styles/`; the first found wins (workspace, user, built-in), so a file with a
+built-in's name replaces it, and `based_on` starts from another style. The fields and an example
+are on [Design review](using/design-review.md#custom-styles).
+
+Optional script fields, also in `Dims` or at module level:
+
+- `SHOW = ["+Y", "+Z"]`: the sides seen in use, in print orientation. Stair-stepping (M6) is
+  then measured on those sides only, and supports under a visible side are flagged. Without
+  `SHOW` the AI asks which sides show when it matters, or judges all faces (decision 5).
+- `UP = "+Y"`: the side that points up in use, for water traps (M11). Default `+Z`.
+- `EDGES = "chamfer"` or `"fillet"`: the edge language (§4.3).
 
 ---
 
 ## 5. `design_metrics`
 
-An MCP tool and a CLI command that compute objective numbers for a built part:
+An MCP tool and a CLI command that compute numbers for a built part:
 
 ```
-design_metrics(name, variant=None, part=None, up="auto")      # MCP
-b123d-print metrics <name> [--variant K] [--json] [--up print|assembly]   # CLI
+design_metrics(name, variant=None, style="", up="", as_json=False)     # MCP
+b123d-print metrics [parts...] [--variant K] [--style S] [--up +Y] [--json]   # CLI
 ```
 
-It builds the part (like `check`), computes M1–M11 for each printable part and returns a table
-plus JSON. Settings come from the usual layers: printer profile (nozzle, layer height, speed
-class), material (density), and new optional `[print]` keys: `walls` (2), `top_layers` (5),
-`bottom_layers` (3 → 4 for Prusa-like profiles), `infill` (0.15), `filament_price` (per kg,
-no default: cost omitted). `up="auto"` uses the assembly orientation when the script has
-`assembly(d)` (for water traps and show faces), else print orientation.
+It builds the part (in the sandbox, over MCP), computes M1–M11 for each printable part, then
+the findings the style's thresholds trigger (§4), each citing its rule. It never fails and
+changes nothing.
 
-Every metric is **deterministic** and tested on shapes with known answers. The estimates (M2,
-M3, M5) state their accuracy in the output, e.g. `mass 20.3 g (±7 % vs slicer at defaults)`.
+Settings it reads: the printer profile's nozzle and layer height (generic: 0.4 and 0.2), the
+material profile's new `density` field (PLA 1.24 when no material is set, and it says so), and
+three new optional settings: `style`, `filament_price` (per kg; a cost appears when set) and
+`print_flow` (mm³/s for the time estimate, default 10). Printer profiles are unchanged:
+they come from OrcaSlicer as before.
+
+**The estimates are simple on purpose** (decision 7): filament is roughly ±20 %, time and
+supports are rough estimates, and the output says so next to every number. They are for
+comparing two versions of a part and for spotting what dominates (supports, infill, layer
+count), not for quoting. No slicer calibration is claimed.
+
+*Background only:* during the research a shell + infill model of this kind was compared with
+Bambu Studio's own figures on ten simple shapes at default settings and landed within a few
+per cent for filament; time depended much more on the printer's speed and acceleration. That
+comparison is why the filament rule is trusted to roughly ±20 % across settings and why time is
+only a rough figure; it is not a calibration, and no test depends on it.
 
 ### 5.1 M1: size and proportions
 
 Bounding box X × Y × Z, volume, surface area, sorted aspect ratios. **Report only** (DS-G9).
-*Test:* a 60 × 40 × 20 box gives 3 : 2 : 1, volume 48 000, area 8 800.
 
-### 5.2 M2: filament mass (and cost)
+### 5.2 M2: filament mass (and M4: cost)
 
 ```
-T_wall = walls × 0.44 mm (≈ line width × 1.05; 0.42 per extra wall beyond 2)
-T_top = top_layers × h,  T_bot = bottom_layers × h
-for each face: t(n) = max(T_top·n_z  if n_z > 0 else T_bot·|n_z|,  T_wall·√(1 − n_z²))
-               (curved faces: t averaged over a 7 × 7 grid of (u, v) normals)
-shell    = min(V, Σ area_f × t_f)
-extruded = shell + infill × (V − shell)
-mass     = extruded × density       cost = mass × filament_price / 1000
+T_wall = 2 walls × 1.1 × nozzle            (≈ 0.88 mm at 0.4)
+T_top  = 5 × layer,  T_bot = 3 × layer      (the slicers' defaults, DS-C1)
+per triangle of the part's mesh: t = max(T_top·n_z if n_z > 0 else T_bot·|n_z|,  T_wall·√(1 − n_z²))
+shell    = min(V, Σ area × t)
+extruded = shell + 15 % × (V − shell)
+grams    = extruded × density;   cost = grams × filament_price / 1000
 ```
 
-Output: mass, extruded volume, shell share, infill share, cost. Densities (g/cm³, maker
-datasheets): PLA 1.24, PETG 1.27, ABS 1.05, ASA 1.07, TPU 1.22, added to the material
-profiles as `density`. *Note:* Bambu's slicer profile uses 1.26 for PLA, and ASA ranges
-1.05–1.13 by brand; the profile value is a default the user can change.
-
-**Accuracy** (vs Bambu Studio, 10 shapes, §5.9): mean 2.7 %, max 6.8 % at defaults; 40 %
-infill 1.8 % / 4.2 %; 4 walls 8 % / 15 % (overestimates: overlapping lines); 0.28 mm layers
-6 % / 16 %. Stated in output as **±7 % at default settings, ±15 % otherwise**. For context,
-PAGE26 (a graph neural network trained on ~90 000 parts) reports 10.6 % weighted mass error,
-and Kormann 2026 found geometry-only indices rank parts well but predict poorly
-(R² 0.58): our model uses the slicer's own structure (shell + infill), which is why it does
-better than a geometric index.
-
-*Tests:* a 20 mm cube → shell = 6 faces analytically (2048 mm³ at defaults); a solid thinner
-than 2 × T_wall is all shell; infill 0 and 1 give shell and V; a regression fixture stores the
-10 Bambu Studio reference masses and asserts the ±7 %.
+Output: grams, extruded volume, the shell and infill shares (DS-C5), cost. Stated as **a simple
+estimate, roughly ±20 %**.
 
 ### 5.3 M3: print time
 
-Per-layer model with a minimum layer time ([MEDINA19] shows acceleration, not programmed
-speed, drives the error; a minimum-layer-time floor is in every slicer):
+One rule, labeled **rough estimate**:
 
 ```
-N layers = height / h;  sections at ≤ 100 heights give area A_l
-v_l = extruded × A_l / ΣA                    (volume printed in layer l)
-t_l = max(t_min, v_l / Q + c0 + c_t · (A_up + A_down) / N)
-time = Σ t_l (scaled to N layers)
+minutes = (extruded + support volume) / print_flow  +  layers × 3 s
 ```
 
-`Q` (effective mm³/s), `c_t` (s per mm² of top/bottom skin) and `c0` (s per layer) come from a
-**speed class** in the printer profile; `t_min` from the class too (5–6 s):
+`print_flow` (default 10 mm³/s, a standard hotend: PRUSA-MVS gives 8–12; high-flow hotends
+20 and more) is the one setting that adjusts it. 3 s per layer stands for layer change, travel
+and seam (ours; the slicers' minimum layer time, 3-20 s, is the floor for small layers, DS-C3);
+the output reports the per-layer share, which is what makes small tall parts slow (DS-C7).
 
-| class | examples | Q | c_t | c0 | fitted against |
-|---|---|---|---|---|---|
-| fast | Bambu X1/P1/H2, CoreXY with input shaping | 20 | 0.040 | 2.25 | Bambu Studio X1C profile |
-| medium | fast bed-slingers (Bambu A1/A1 mini, MK4) | 19 | 0.035 | 3.75 | Bambu Studio A1 mini profile |
-| classic | 40–80 mm/s, ~1000 mm/s² machines | 4.5 | 0.010 | 3.0 | X1C process slowed to 40–80 mm/s, 8 mm³/s |
+### 5.4 M5: supports
 
-Printers without a class (generic mode) report the **range** fast…classic. Output: time,
-minimum-layer-time share, skin share, and "relative" when comparing variants.
-
-**Accuracy** (leave-one-out across 10 shapes): fast 9.3 % mean / 24 % max; medium 10.4 % /
-28 %; classic 9.9 % / 34 %. A plain volume / flow model is 28–32 % mean, 81–85 % max (it
-misses minimum layer time). Stated as **±10 % typical, ±35 % worst, vs the slicer's estimate**,
-which is itself only right when its speed/acceleration limits match the firmware (Prusa forum,
-PrusaSlicer issue, klipper_estimator README) and excludes heat-up and homing. PAGE26 reports
-12.8 %; MEDINA19 <8.5 % with full toolpaths. Good enough to compare variants and spot the
-dominant cost; not a quote.
-
-*Tests:* monotonic in height, infill and layer height; the 10 × 10 × 80 tower is ≥ 90 %
-minimum-layer-time; regression fixture of the 30 reference times (3 classes × 10 shapes)
-within the stated band.
-
-**Calibration (optional, phase 2 or 3):** `b123d-print printer calibrate time <part> <slicer
-minutes>` scales Q to one slicer reading of the user's own printer.
-
-### 5.4 M4: cost
-
-M2 × `filament_price`. No energy, machine or labour model (DS-C9).
-
-### 5.5 M5: supports
-
-From the existing overhang analysis (`overhang_faces` with bridges): downward faces steeper
-than `max_overhang` that are not bridges, in print orientation.
+From the overhang analysis: downward faces steeper than `max_overhang` that are not bridges
+within `max_bridge`, in print orientation.
 
 ```
-column  = Σ area_f × |n_z| × height of the face above whatever is below it (ray down; the bed if nothing)
-support = k × column,  k = 0.18 (grid supports, 2.5 mm spacing + 2 interface layers)
-time   += support / Q_s,  Q_s ≈ 0.7 × Q
+column  = Σ area × |n_z| × height above whatever is below it (ray down; the bed if nothing)
+support = 20 % × column  (supports are roughly a fifth solid)
 ```
 
-Output: supported area, support grams and minutes, and **which faces** (so the review can tell
-whether they are visible). **Accuracy:** k measured 0.16–0.20 on 4 shapes in one slicer with
-one support style (§5.9); tree/organic supports use less. Stated as **±30 %, grid supports**.
-*Tests:* a T-shape on a post: column = 2 × 25 × 30 × 30 mm³ analytically; zero for parts with
-only bridges or chamfered overhangs.
+Output: supported area, grams, and which faces. Rough.
 
-### 5.6 M6: stair-stepping (surface quality)
+### 5.5 M6: stair-stepping (surface quality)
 
-Per face, area-weighted cusp height `h_c = h × |n_z|` over a (u, v) grid, and the **stepping
-band**: the area whose normal is between 1° and 30° from vertical-up or -down (shallow slopes,
-not flat faces). Output: band area (cm² and % of the up-facing area) and the faces in it.
-**Accuracy:** exact for the model; the model matches measured roughness trends (BUJ19), not
-absolute Ra. *Tests:* a box has 0 band area; a 10° wedge top is all band; a hemisphere's band
-share equals the analytic fraction of its area with polar angle 1–30° (cos 1° − cos 30° ≈ 13.4 %
-of the dome).
+From the mesh: cusp height `h_c = layer × |n_z|` (DS-S1), and the **stepping band**, the area
+tilted 1–30° from flat (shallow slopes, not flat faces), up-facing and down-facing. Output:
+band area (cm²) and its share of the up-facing area, limited to the `SHOW` sides when set.
 
-### 5.7 M7: edge treatment
+### 5.6 M7: edge treatment
 
 For **outside (convex) edges**, by length:
 
 1. **Edge pairs:** for each edge between two faces, the angle between their normals at the
-   edge midpoint; < 5° is tangent (a smooth seam); convex vs concave by a probe just inside the
+   midpoint; under 5° is tangent (a smooth seam); convex vs concave by a probe just inside the
    solid along −(n1 + n2).
-2. **Fillet faces:** cylindrical or toroidal faces bounded by tangent seams along their long
-   sides and spanning < 180° (holes span ≥ 260°, see `holes()`; bosses are full cylinders).
-   Length = spine length; radius from the surface. Convex fillets count as rounded edges;
-   concave ones are inside fillets (relevant to BP-R1).
-3. **Chamfer faces:** planar faces at most 3 mm wide, bounded on both long sides by convex
-   sharp edges turning 20–70°; size = width.
-4. **Sharp:** remaining convex edges turning > 20°.
-5. **Bed edges** (on Z = 0 in print orientation) are counted separately (BedEdge handles them).
+2. **Fillet faces:** cylindrical or toroidal faces with a tangent edge, spanning under 180°
+   (holes from `holes()` and full bosses excluded). Length = area / (radius × angle); convex
+   when the outward normal points away from the centre of curvature, else an inside fillet.
+3. **Chamfer faces:** planar faces at most 3 mm wide between two convex 20–70° turns; size =
+   the leg (width × cos of the turn).
+4. **Sharp:** other convex edges turning more than 20°.
+5. **Bed edges** (on the lowest Z) are counted apart; BedEdge already checks them. Hole rims
+   are not counted.
 
-Output: sharp / filleted / chamfered shares of outside edge length, distinct radii (clustered
-within 0.05 mm) labeled *edge break* (≤ 1 mm) or *styling*, distinct chamfer sizes, inside
-corners sharp vs filleted, and downward-facing fillets (DS-S4). **Accuracy:** exact on B-rep
-parts built with build123d's `fillet`/`chamfer`; on imported meshes (remix) every edge is
-sharp, so M7 is skipped for mesh-based parts. *Tests* (60 × 40 × 20 box; bed edges excluded): plain box 100 % sharp; vertical edges r3 →
-the 4 vertical edges (80 mm) filleted, the top edges sharp, radii {3}; `fillet(all, 2)` 100 %
-filleted, radii {2}; top edges chamfered 1 mm → ≈ 72 % chamfered (200 of ~276 mm), sizes {1}; r2 + r5 + a Ø6 hole →
-radii {2, 5} (the hole excluded). A feasibility prototype of steps 1–2 already gave the
-expected shares on these shapes.
+Output: sharp / filleted / chamfered shares, distinct radii (within 0.05 mm) as edge breaks
+(≤ 1 mm) or styling radii (DS-S9), chamfer sizes, inside radii, bed edges, and fillets that face
+down past the overhang limit (DS-S4). On imported meshes every edge is sharp: read M7 with that
+in mind for remixes.
 
-### 5.8 M8–M11
+### 5.7 M8–M11
 
-- **M8 symmetry:** mirror the part about the X and Y planes through its bounding-box centre
-  (and its centroid) and report vol(part ∩ mirror) / vol(part); best of the planes. Rotational
-  symmetry is not measured. *Tests:* box 1.000; one off-centre Ø6 hole in 60 × 40 × 20 → 0.988
-  (prototype); an L-bracket < 0.9.
-- **M9 economy:** printable parts, solids, faces; holes from `holes()` grouped into fastener
-  classes by the nearest clearance/insert/pilot size for M2–M6 (using `hole_comp`), and the
-  number of distinct classes. *Test:* a plate with 4 × M3 clearance and 2 × M4 → 2 classes.
-- **M10 seam corners:** the share of layers (sections at ≤ 100 heights) whose outer contour
-  has a vertex turning more than 30° (where a slicer can hide the seam, DS-S3). *Tests:* a
-  cylinder 0; a box 1; a cylinder with one vertical V-groove 1.
-- **M11 water traps:** in the use orientation (`up`), voxelize at 1 mm (0.5 mm under 30 mm
-  parts); empty cells outside the part that cannot drain: flood "drainable" from the bounding
-  box's side and bottom faces, moving only to neighbouring cells at the same or a higher level;
-  air cells open to the top but not reached hold water. Sealed voids are excluded. Output:
-  volume and location of each trap. *Tests:* a cup holds its inner volume (± one voxel layer);
-  the same cup with a 3 mm floor hole holds 0; a sloped floor holds 0; a closed box holds 0.
+- **M8 symmetry:** vol(part ∩ mirror) / vol(part) for mirrors about the planes through the
+  bounding-box centre; best of x and y (DS-G7).
+- **M9 economy:** printable parts, solids, faces; round holes (`holes()`, minus hole
+  compensation) matched to the clearance, heat-set insert or pilot size of M2–M8 screws (BP-T2,
+  BP-T6), and the number of distinct screw sizes (DS-G3). A guess, and the output says so.
+- **M10 seam corners:** the share of layers whose outer contour has a corner turning more than
+  30° (DS-S3).
+- **M11 water traps:** with `UP` pointing up, a voxel grid (1 mm; 0.5 mm under 30 mm) with a cell
+  of air around the part; air drains when it can reach the sides or the bottom moving sideways or
+  down. Air that cannot drain but is open to the top is a trap (volume, centre, low point);
+  sealed voids are not (DS-R3).
 
-### 5.9 How the estimates were measured
+### 5.8 Tests
 
-Bambu Studio 02.08.02.61 CLI, system profiles **flattened by hand** (the CLI did not resolve
-`inherits` for presets passed with `--load-settings`: an unflattened A1 mini preset sliced at
-2 mm³/s and 60 mm/s). Bambu PLA Basic. "Model printing time" (excludes start G-code). Shapes:
-cubes 20 and 40, plate 100 × 60 × 3, tower 10 × 10 × 80, cylinder Ø50 × 30, open box
-80 × 60 × 40 (2 mm walls), L-bracket with two holes, sphere Ø50, block 120 × 80 × 30, ring
-Ø60/52 × 10. Settings varied: 40 % infill, 4 walls, 0.28 mm layers. Supports: "normal(auto)"
-grid on a T at 30 and 60 mm, a ledge, an arch. CuraEngine standalone was not usable (it needs
-the frontend's full settings stack), so other slicers are untested: phase 2 should add a
-PrusaSlicer or OrcaSlicer comparison before claiming the numbers for them.
+`tests/test_metrics.py`, on shapes with known answers: a 60 × 40 × 20 box is all sharp,
+symmetric, with seam corners on every layer; filleted vertical edges give exactly their 80 mm
+of fillet and radius 3; all edges filleted is all rounded; a top chamfer gives size 1; a hole is
+not a radius; a cylinder has no seam corner; a cup holds its inner volume of water and does not
+with a drain hole or turned over; a T on a post has the analytic support column; the filament
+estimate equals the shell formula for a cube and grows with infill; the time rule is the stated
+formula; the findings fire at the thresholds; styles and directions parse. Sanity tests only:
+no slicer fixtures.
 
 ---
 
+
 ## 6. `design_review`
 
-An MCP **prompt** (`design_review(name, style="")`) plus a resource with this page's rubric
-(the rules table, condensed). It is the step after `verify_part`:
+An MCP **prompt** (`design_review(name, style="")`) that carries this page's rules, condensed
+(`src/b123d_print/data/design_review.md`). It is the step after `verify_part`:
 
 1. **Style:** `style` argument, else the script's `STYLE`, else the workspace, else ask once
    (default functional). Say which one is used.
@@ -460,61 +416,43 @@ The AI may build a **trial variant** to quantify a least-cost suggestion (e.g. a
 orientation), but it reports the numbers and leaves the script as it was unless the user
 agrees; trial variants are not written into the part.
 
-## 7. AGENTS.md step (proposed text)
+## 7. AGENTS.md step
 
-A new short section after "Verify before reporting", mirrored to the repo-root `AGENTS.md`:
+AGENTS.md (both copies) has a **Design review (after the print checks pass)** section: every
+part has a style; ask once for a new part; run the review when `check` has no failures; report 3–7
+suggestions with rule IDs; **do not change the part without the user's OK**; the estimates are
+rough; never a proportion rule. `design_part_from_photos` asks for the style with the
+dimensions, and `verify_part` and the report step offer the review. The rubric the prompt
+carries is `src/b123d_print/data/design_review.md`.
 
-> **Design review (after the print checks pass)**
->
-> - Every part has a **style**: `STYLE` in `Dims`, else the workspace `style`, else
->   `functional`. For a new part, if the user has said nothing about looks, ask once:
->   functional, modern/minimal, industrial, least cost, rugged/outdoor or soft/handheld.
-> - When `check` has no failures, run the design review for that style (`design_review`
->   prompt, or `design_metrics` plus the rubric in DESIGN_GUIDE): the metrics, renders from the
->   sides seen in use, and 3–7 concrete suggestions, each with its rule ID ([DS-G1]) and the
->   numbers it would change.
-> - **Report; do not change the part without the user's OK.** A trial variant to measure a
->   suggestion is fine; keep it out of the script unless the user agrees.
-> - Estimates are estimates: mass ±7 % at default slicer settings, time ±10 % typical (±35 %
->   worst) vs the slicer, supports ±30 %. Never quote them as exact.
-> - Never suggest a proportion rule such as the golden ratio [DS-G9].
+## 8. Implementation
 
-`design_part_from_photos` and `new_part` gain the style question in step 1; `verify_part`
-ends with "then offer a design review".
+- `src/b123d_print/metrics.py`: M1–M11, the style findings and the text report (cites `DS-*`).
+- `src/b123d_print/styles.py` and `data/styles/*.toml`: the style files, their lookup
+  (workspace, user, built-in), `based_on`, and errors for unknown fields; `b123d-print styles`.
+- Settings: `style`, `filament_price`, `print_flow`; `density` in material profiles. Printer
+  profiles unchanged.
+- MCP: the `design_metrics` tool and the `design_review` prompt; CLI: `b123d-print metrics`.
+- `STYLE` in the part template; optional `SHOW`, `UP`, `EDGES`.
+- Tests: `tests/test_metrics.py` (known shapes), `tests/test_design_rules.py` (the `DS-*` IDs in
+  code, AGENTS.md and the rubric exist on this page; class-m rules have a metric; class-d rules
+  are never cited).
 
-## 8. Implementation plan (phase 2)
+## 9. Decisions (review of 2026-10-18)
 
-1. `src/b123d_print/metrics.py`: M1–M11 (reusing `holes()`, `overhang_faces`, the section
-   code in `checks.py`); cite `DS-*` IDs in comments.
-2. Settings: `walls`, `top_layers`, `bottom_layers`, `infill`, `filament_price` under
-   `[print]`; `style` under `[workspace]`; `density` in material profiles; `speed_class` in
-   printer profiles (built-ins mapped by model; Orca-derived profiles default to medium).
-3. MCP: `design_metrics` tool, `design_review` prompt, `b123d-print://design-guide` resource;
-   CLI `b123d-print metrics`.
-4. `STYLE` in the part template; style question in the prompts; AGENTS.md step (both copies).
-5. Tests: the known-shape tests in §5 (`tests/test_metrics.py`), a stored Bambu Studio
-   reference table for the estimator, and `tests/test_design_rules.py` keeping `DS-*` IDs in
-   step between this page, the code and AGENTS.md (cited IDs exist; class-m rules have a
-   metric; class-d rules are never cited).
-6. Docs: a "Design review" page under Using, this page in the nav next to BEST_PRACTICES.
-7. Run on the shipped examples (`esp_ir_blaster`, `tuya_motion_sensor_outdoor_case`, the
-   bracket remix) per style and tune the *proposed (ours)* thresholds before release.
-
-## 9. Open questions
-
-1. **Industrial style**: keep it (a definition with no design source of its own), or fold it
-   into functional with a "chamfers + exposed fasteners" option?
-2. **One style or style + modifiers?** E.g. "rugged + least cost". Proposal: one style; least
-   cost metrics are always shown, so a second style is rarely needed.
-3. **STYLE in `Dims`** (variants can override it) vs a module constant (it isn't a dimension).
-4. **Speed classes**: are three classes enough, and is generic mode's range (fast…classic)
-   acceptable, or should generic assume medium?
-5. **Show faces:** should the user be able to declare visible faces in the script (e.g.
-   `SHOW = ["+Y", "+Z"]`) so M6/M5/seam findings are scoped automatically, instead of the AI
-   asking each time?
-6. **Thresholds** marked *proposed (ours)*: accept as starting values to tune in phase 2?
-7. **Slicer comparison** for PrusaSlicer/Orca before release, or ship with the Bambu-only
-   calibration and say so?
+1. **Industrial** is folded into functional as `EDGES = "chamfer"` with exposed standard
+   fasteners. Five styles.
+2. **One style per part**, no modifiers; the cost numbers are always shown.
+3. **STYLE lives in `Dims`** (variants can override it), then the workspace, then functional.
+4. **No speed classes**, and printer profiles stay as they come from OrcaSlicer; one optional
+   setting, `print_flow`, adjusts the time estimate.
+5. **SHOW** is optional; without it the AI asks or judges all faces.
+6. The **thresholds** marked *proposed (ours)* are the starting values.
+7. **Simple estimates**: filament roughly ±20 %, time one rule labeled "rough estimate"; no
+   slicer-calibration tests or claims.
+8. **Custom styles**: the built-in styles ship as the same kind of file a user writes; user and
+   workspace style folders; `based_on`; a file with a built-in's name replaces it; clear errors
+   for unknown fields.
 
 ---
 

@@ -1,2 +1,3 @@
 label = "ASA"
+density = 1.07  # g/cm^3, Prusament ASA (brands: 1.05-1.13)
 notes = "UV- and heat-resistant (~95 C): good for outdoor parts. Shrinks and warps more than PLA/PETG; avoid long flat thin parts."

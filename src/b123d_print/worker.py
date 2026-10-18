@@ -46,6 +46,8 @@ from b123d_print import remix  # noqa: E402
 import scipy.sparse.csgraph  # noqa: E402,F401  (import_model's mesh repair, loaded before the guard)
 from b123d_print.render import render, report, section_view, side_by_side  # noqa: E402
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
+from b123d_print import metrics  # noqa: E402
+import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (
     "socket.",  # connect, bind, getaddrinfo, ...
@@ -287,6 +289,10 @@ def do(job: dict) -> dict:
             res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0)]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
+    if op == "metrics":
+        res = metrics.design_metrics(mod, d, printables(mod, d), settings, style=job.get("style") or None,
+                                     up=job.get("up") or None)
+        return {"variant": k or "standard", "metrics": res, "text": metrics.text(res)}
     if op == "before_after":
         parts, orig, _ = built(mod, d)
         if orig is None:

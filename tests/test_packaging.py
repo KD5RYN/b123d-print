@@ -26,6 +26,7 @@ def test_eval_tooling_not_in_wheel_or_sdist(tmp_path):
     for names in (wheel_names, sdist_names):
         assert not [n for n in names if EVAL_ONLY.search(n)], "eval tooling leaked into a distribution"
     assert "b123d_print/compare.py" in wheel_names
+    assert {"b123d_print/data/styles/functional.toml", "b123d_print/data/design_review.md"} <= set(wheel_names)
     requires = re.findall(r"^Requires-Dist: (\S+)", meta, re.M)
     assert not [r for r in requires if r.startswith("anthropic")], requires
 
