@@ -8,15 +8,18 @@
 # B123D_PRINT_IMAGE=b123d-print-mcp, `docker build -t b123d-print-mcp ..`.
 #
 #   mkdir -p parts config && sudo chown 1000:1000 parts config   # the image runs as uid 1000 ("cad")
-#   docker compose run --rm b123d-print token add claude-laptop --workspace 'claude-*'   # prints the token ONCE
+#   echo "B123D_PRINT_PUBLIC_URL=https://cad.example.com" >> .env  # the address clients use (optional)
 #   docker compose up -d && docker compose ps                    # both (healthy)
-#   docker compose run --rm b123d-print token list               # or: token revoke <name> (no restart needed)
 #
-# Clients: http://<this-host>:8000/mcp?workspace=claude-1, header "Authorization: Bearer <token>".
-# One token per agent or tool, each limited to its workspaces; a token with exactly one workspace
-# (e.g. --workspace mac-jon) uses it when the client gives none. The port is published on
-# localhost only: put a TLS reverse proxy in front (Caddy below), or use "8000:8000" on a trusted
-# network.
+# Connect an AI (one token per agent or tool; prints the token ONCE, with the client config):
+#   docker compose run --rm -T b123d-print token add claude-laptop        # workspace "claude-laptop"
+#   docker compose run --rm -T b123d-print token add eval --workspace 'eval-*'
+#   docker compose run --rm -T b123d-print token list                     # token revoke <name>: no restart
+#
+# Settings in a .env file next to this one (no need to edit this file): B123D_PRINT_IMAGE,
+# B123D_PRINT_PUBLIC_URL, B123D_PRINT_LISTEN (default 127.0.0.1:8000: put a TLS reverse proxy in
+# front, e.g. the Caddy block below; 8000 on a trusted network), B123D_PRINT_PARTS,
+# B123D_PRINT_CONFIG, B123D_PRINT_UID/GID, B123D_PRINT_MAX_BUILDS.
 x-common: &common
   image: ${B123D_PRINT_IMAGE:-ghcr.io/kd5ryn/b123d-print-mcp:latest}
   restart: unless-stopped
@@ -28,7 +31,7 @@ services:
   b123d-print:
     <<: *common
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${B123D_PRINT_LISTEN:-127.0.0.1:8000}:8000"
     volumes:
       - ${B123D_PRINT_PARTS:-./parts}:/work
       - ${B123D_PRINT_CONFIG:-./config}:/config        # tokens.toml: only token hashes; not visible to the worker
@@ -36,12 +39,12 @@ services:
       B123D_PRINT_TRANSPORT: http
       B123D_PRINT_TOKENS_FILE: /config/tokens.toml
       B123D_PRINT_JOB_QUEUE: /work/.b123d-print/jobs   # builds go to the worker below
-      B123D_PRINT_MAX_BUILDS: "2"                      # builds at once, all clients together
+      B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}   # builds at once, all clients together
       B123D_PRINT_TIMEOUT: "120"                       # seconds per build
       B123D_PRINT_SHUTDOWN_GRACE: "30"                 # on stop: let running calls finish this long
-      # Behind a reverse proxy (the Caddy block below), set the address clients use, so the
-      # download links in tool results point there and not at this container:
-      # B123D_PRINT_PUBLIC_URL: "https://cad.example.com"
+      # the address clients use (behind a reverse proxy: its https URL), for download links and
+      # the config `token add` prints; empty: taken from each request
+      B123D_PRINT_PUBLIC_URL: ${B123D_PRINT_PUBLIC_URL:-}
     stop_grace_period: 45s                             # > B123D_PRINT_SHUTDOWN_GRACE
     # the image's HEALTHCHECK probes /health (503 while the worker is down)
 
@@ -50,7 +53,7 @@ services:
     network_mode: none                                 # part scripts get no network at all
     command: ["worker", "--queue", "/work/.b123d-print/jobs"]
     environment:
-      B123D_PRINT_MAX_BUILDS: "2"
+      B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}
     stop_grace_period: 15s
     healthcheck:
       test: ["CMD", "b123d-print-mcp", "worker", "--queue", "/work/.b123d-print/jobs", "--check"]
