@@ -65,6 +65,15 @@ BLOCKED_EVENTS = (
     "smtplib.",
     "telnetlib.",
     "sys.addaudithook",  # no hook that could swallow ours
+    # Windows: starting processes below subprocess, and registry writes
+    "_winapi.CreateProcess",
+    "winreg.ConnectRegistry",
+    "winreg.CreateKey",
+    "winreg.DeleteKey",
+    "winreg.DeleteValue",
+    "winreg.LoadKey",
+    "winreg.SaveKey",
+    "winreg.SetValue",
 )
 BLOCKED_IMPORTS = {"_posixsubprocess", "socket", "_socket", "ssl", "_ssl", "subprocess"}
 WRITE_EVENTS = {"os.remove", "os.rename", "os.rmdir", "os.mkdir", "shutil.rmtree", "os.truncate", "os.chmod", "os.symlink", "os.link"}
@@ -84,8 +93,13 @@ def _allowed_native_dirs() -> list[str]:
     for mod in ("lib3mf",):
         spec = importlib.util.find_spec(mod)
         if spec and spec.origin:
-            out.append(os.path.realpath(os.path.dirname(spec.origin)))
+            out.append(_norm(os.path.dirname(spec.origin)))
     return out
+
+
+def _norm(path) -> str:
+    """Real path, case-folded on Windows (where C:\\Users and c:\\users are the same folder)."""
+    return os.path.normcase(os.path.realpath(os.fsdecode(path)))
 
 
 ALLOWED_NATIVE = _allowed_native_dirs()
@@ -94,12 +108,12 @@ ALLOWED_NATIVE = _allowed_native_dirs()
 def ctypes_guard(event: str, args) -> None:
     if event == "ctypes.dlopen":
         name = args[0] if args else None
-        p = os.path.realpath(os.fsdecode(name)) if name else ""
+        p = _norm(name) if name else ""
         if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
             raise SandboxViolation(f"blocked in part scripts: loading native library {name!r}")
     elif event == "ctypes.dlsym":
         name = getattr(args[0], "_name", None) if args else None
-        p = os.path.realpath(os.fsdecode(name)) if isinstance(name, (str, bytes)) else ""
+        p = _norm(name) if isinstance(name, (str, bytes)) else ""
         if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
             raise SandboxViolation(f"blocked in part scripts: symbol lookup in {name!r}")
     elif event in ("ctypes.cdata", "ctypes.dlsym/handle", "ctypes.set_errno", "ctypes.seh_exception"):
@@ -107,12 +121,12 @@ def ctypes_guard(event: str, args) -> None:
 
 
 def install_guard(writable: list[str]) -> None:
-    roots = [os.path.realpath(p) for p in writable]
+    roots = [_norm(p) for p in writable]
 
     def can_write(path) -> bool:
         if isinstance(path, int):
             return True  # an already-open fd
-        p = os.path.realpath(os.fsdecode(path))
+        p = _norm(path)
         return any(p == r or p.startswith(r + os.sep) for r in roots)
 
     def hook(event: str, args) -> None:

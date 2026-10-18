@@ -84,6 +84,7 @@ def test_servable(tmp_path):
             links.servable(tmp_path, "parts", p)
 
 
+@pytest.mark.symlinks
 def test_servable_refuses_symlinks(tmp_path):
     out = tmp_path / "parts/box/out"
     out.mkdir(parents=True)

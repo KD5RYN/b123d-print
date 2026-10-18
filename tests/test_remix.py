@@ -156,6 +156,7 @@ def test_to_step_cli(tmp_path):
 # --- import_model: paths, cache -------------------------------------------------------------------
 
 
+@pytest.mark.symlinks
 def test_import_model_paths_and_cache(ws, tmp_path):
     shape_stl(ws / "parts" / "rx" / "ref" / "b.stl", Box(10, 10, 10))
     script = ws / "parts" / "rx" / "rx.py"
@@ -212,6 +213,7 @@ def test_store_rules(ws, tmp_path, monkeypatch):
         refs.store(ws, "parts", "rx", "big.stl", data)
 
 
+@pytest.mark.symlinks
 def test_store_refuses_symlinks(ws, tmp_path):
     (tmp_path / "elsewhere").mkdir()
     os.symlink(tmp_path / "elsewhere", ws / "parts" / "linked")

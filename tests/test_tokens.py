@@ -31,7 +31,8 @@ def test_round_trip(tmp_path):
     tokens.write(p, {"a": tok("a", ["a-*", "shared"]), "b": tok("b")}, "link-secret")
     got, secret = tokens.read(p)
     assert secret == "link-secret" and got["a"].workspaces == ["a-*", "shared"] and got["b"].sha256 == tok("b").sha256
-    assert oct(os.stat(p).st_mode & 0o777) == "0o600"
+    if sys.platform != "win32":  # no POSIX modes on Windows (the file inherits the folder's ACL)
+        assert oct(os.stat(p).st_mode & 0o777) == "0o600"
 
 
 @pytest.mark.parametrize("bad", ['[tokens.x]\nsha256 = "nothex"\n', '[tokens.x]\nsha256 = "' + "a" * 64 + '"\nworkspaces = []\n',

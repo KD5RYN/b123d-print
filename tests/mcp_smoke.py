@@ -23,6 +23,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -486,7 +487,10 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
                 break
         expect(await asyncio.to_thread(beating, beat), "a build is running before shutdown")
         t0 = time.monotonic()
-        server.terminate()
+        if sys.platform == "win32":  # no SIGTERM there (terminate() is TerminateProcess): Ctrl+Break to its group
+            server.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            server.terminate()
         code = await asyncio.to_thread(server.wait, 30)
         took = time.monotonic() - t0
         try:
@@ -605,7 +609,8 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
             log = ws.parent / f"{ws.name}-server.log"
             server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port),
                                              "--shutdown-grace", "3", *extra],
-                                      env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"))
+                                      env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"),
+                                      creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
             url = f"http://127.0.0.1:{port}/mcp"
             for _ in range(300):  # first start can be slow (imports, bytecode)
                 try:
