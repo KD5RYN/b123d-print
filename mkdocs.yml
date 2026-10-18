@@ -70,6 +70,7 @@ nav:
       - Examples: scripts/examples.md
       - Workflow rules (AGENTS.md): scripts/rules.md
       - Design rules (sourced): BEST_PRACTICES.md
+      - Design styles and review (proposal): DESIGN_GUIDE.md
   - Reference: reference.md
   - Updating: updating.md
   - Troubleshooting: troubleshooting.md
