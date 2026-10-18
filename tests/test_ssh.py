@@ -218,18 +218,24 @@ def test_pull_rejects_a_malicious_tar(tmp_path):
 def test_build_slot_limits_across_processes(tmp_path, monkeypatch):
     """Two slots: two other processes hold them, so a third caller waits until one lets go."""
     monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    # Order, not wall-clock: under a loaded CI runner the holders start at different times, so
+    # the test checks that our slot came only AFTER the short holder let go of its slot.
     hold = ("import sys, time; from pathlib import Path; from b123d_print import sandbox; "
             "sandbox.SLOT_DIR = Path(sys.argv[1]); s = sandbox.build_slot(2, poll=0.02); s.__enter__(); "
-            "print('held', flush=True); time.sleep(float(sys.argv[2]))")
-    procs = [subprocess.Popen([sys.executable, "-c", hold, str(tmp_path / "slots"), t], stdout=subprocess.PIPE, text=True)
-             for t in ("1.5", "30")]
+            "print('held', flush=True); time.sleep(float(sys.argv[2])); "
+            "Path(sys.argv[3]).write_text(repr(time.time())); s.__exit__(None, None, None)")
+    released = tmp_path / "released"
+    procs = [subprocess.Popen([sys.executable, "-c", hold, str(tmp_path / "slots"), t, str(released)],
+                              stdout=subprocess.PIPE, text=True)
+             for t in ("1.0", "30")]
     try:
         for p in procs:
             assert p.stdout.readline().strip() == "held"
-        t0 = time.monotonic()
+        assert not released.exists()  # both slots are taken now
         with sandbox.build_slot(2, poll=0.02) as slot:
-            waited = time.monotonic() - t0
-        assert slot in (0, 1) and waited > 0.8, f"got a slot after {waited:.2f} s"
+            got = time.time()
+        assert released.exists(), "got a slot while both were still held"
+        assert slot in (0, 1) and got >= float(released.read_text()) - 0.05, "got a slot before it was released"
     finally:
         for p in procs:
             p.kill()
