@@ -117,3 +117,98 @@ def test_link_base_url():
 def test_bad_public_url_refused():
     r = run_server("--public-url", "cad.example.com", B123D_PRINT_TOKEN="a-long-enough-token-123")
     assert r.returncode != 0 and "--public-url must look like" in r.stderr
+
+
+def guarded_call(app, path, chunks, headers=(), method="POST"):
+    """Run app with a body arriving in `chunks`; returns the event order and the response start."""
+    events, start = [], {}
+    body = list(chunks)
+    cl = sum(len(c) for c in body)
+
+    async def go():
+        async def receive():
+            if not body:
+                events.append("receive-after-end")
+                return {"type": "http.disconnect"}
+            c = body.pop(0)
+            events.append(f"read {len(c)}")
+            return {"type": "http.request", "body": c, "more_body": bool(body)}
+
+        async def send(msg):
+            if msg["type"] == "http.response.start":
+                events.append("reply")
+                start.update(msg)
+
+        await app({"type": "http", "method": method, "path": path, "query_string": b"",
+                   "headers": [(b"content-length", str(cl).encode()), *headers], "client": ("127.0.0.1", 1)},
+                  receive, send)
+
+    asyncio.run(go())
+    return events, start
+
+
+def test_early_replies_wait_for_the_body():
+    """A reply that does not read the body (401, 403, a refused link) still drains it first:
+    behind a proxy, replying mid-body made it drop the connection (about every other request)."""
+    tok = "s3cret-token-0123456789"
+    app = TokenAuth(inner, tokens.Store(None, tok))
+    for headers in ([], bearer("wrong")):  # 401
+        events, start = guarded_call(app, "/mcp", [b"x" * 10, b"y" * 10, b"z" * 10], headers)
+        assert start["status"] == 401 and events == ["read 10", "read 10", "read 10", "reply"], events
+    events, start = guarded_call(app, "/upload/ws/1.bad/up/x.stl", [b"a" * 5, b"b" * 5],
+                                 method="PUT")  # the app (`inner`) answers without reading: the guard reads
+    assert events == ["read 5", "read 5", "reply"] and start["status"] == 200, events
+
+
+def test_drain_gives_up_on_a_big_body():
+    from b123d_print import mcp_server as m
+
+    app = TokenAuth(inner, tokens.Store(None, "s3cret-token-0123456789"))
+    events, start = guarded_call(app, "/mcp", [b"x" * (m.DRAIN_LIMIT + 1)])  # announced too big: not read at all
+    assert events == ["reply"] and (b"connection", b"close") in start["headers"], events
+
+
+def test_no_reply_before_the_body_over_a_real_socket():
+    """The failure as a proxy saw it, against uvicorn and the real app: the 401 (and a refused upload
+    link) must not come back while the body is still on its way, and the connection stays usable."""
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
+    from b123d_print.mcp_server import http_app
+
+    srv = uvicorn.Server(uvicorn.Config(http_app("127.0.0.1", tokens.Store(None, "s3cret-token-0123456789")),
+                                        host="127.0.0.1", port=0, log_level="warning"))
+    t = threading.Thread(target=srv.run, daemon=True)
+    t.start()
+    try:
+        for _ in range(500):
+            if srv.started:
+                break
+            time.sleep(0.01)
+        port = srv.servers[0].sockets[0].getsockname()[1]
+        body = b'{"jsonrpc":"2.0","id":1,"method":"ping"}'
+        for head in (b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer wrong\r\n"
+                     b"Content-Type: application/json\r\n",
+                     b"PUT /upload/ws/1.bad/up/x.stl HTTP/1.1\r\nHost: 127.0.0.1\r\n"):
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+                s.sendall(head + b"Content-Length: %d\r\n\r\n" % len(body))
+                s.settimeout(0.5)
+                try:
+                    early = s.recv(65536)
+                except TimeoutError:
+                    early = b""
+                assert early == b"", f"replied before the body arrived: {early[:60]!r}"
+                s.settimeout(5)
+                s.sendall(body + b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                data = b""
+                while b'"status"' not in data:
+                    c = s.recv(65536)
+                    assert c, f"connection closed after the early reply: {data[:200]!r}"
+                    data += c
+                assert data.startswith((b"HTTP/1.1 401", b"HTTP/1.1 404")) and b"HTTP/1.1 200" in data, data[:300]
+    finally:
+        srv.should_exit = True
+        t.join(10)

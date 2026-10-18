@@ -918,6 +918,59 @@ async def upload(request):
     return PlainTextResponse(f"stored {p.relative_to(root).as_posix()} ({n} bytes)\n", status_code=201)
 
 
+DRAIN_LIMIT = 8 * 1024 * 1024  # request body read and thrown away before an early reply; more -> close
+
+
+class _BodyGuard:
+    """Make every reply wait until the request body has been read (the app's own reads count).
+
+    An app may answer without reading the body (a 401, a refused upload link, the SDK's 406).
+    Behind a reverse proxy that starts a race: the proxy (Caddy, Go's net/http) gets the reply
+    while it is still forwarding the body, its front end throws the rest of the client's body
+    away, the forwarding fails short, and the proxy closes the upstream connection in the middle
+    of the reply: the client sees "peer closed connection without sending complete message
+    body", about every other time. So `start()` drains (reads and discards) what is left, up to
+    DRAIN_LIMIT; past that, or when Content-Length says more is coming, it gives up and the
+    reply goes out with `Connection: close`."""
+
+    def __init__(self, scope, receive, limit: int = DRAIN_LIMIT):
+        h = dict(scope["headers"])
+        cl = h.get(b"content-length", b"").strip()
+        self.left = int(cl) if cl.isdigit() else None  # bytes still to come, None if unknown (chunked)
+        self.done = (self.left == 0) if cl else b"transfer-encoding" not in h
+        self._receive, self.limit = receive, limit
+
+    def _saw(self, msg) -> None:
+        if msg["type"] == "http.disconnect" or not msg.get("more_body", False):
+            self.done = True
+        elif self.left is not None:
+            self.left -= len(msg.get("body", b""))
+
+    async def receive(self):
+        msg = await self._receive()
+        self._saw(msg)
+        return msg
+
+    async def drain(self) -> bool:
+        """Read and discard the rest of the body; False when it is over the limit (then close)."""
+        n = 0
+        while not self.done:
+            if self.left is not None and self.left > self.limit - n:
+                return False
+            msg = await self._receive()
+            self._saw(msg)
+            n += len(msg.get("body", b""))
+            if n > self.limit and not self.done:
+                return False
+        return True
+
+    async def start(self, msg) -> dict:
+        """Called with http.response.start: drain first; the message, with Connection: close if needed."""
+        if not self.done and not await self.drain():
+            msg = {**msg, "headers": [*msg.get("headers", []), (b"connection", b"close")]}
+        return msg
+
+
 async def _deny(send, status: int, error: str, description: str) -> None:
     body = json.dumps({"error": error, "error_description": description}).encode()
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
@@ -942,7 +995,7 @@ class TokenAuth:
     their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
     may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
     token's single workspace if it has exactly one, else the shared root workspace. Every request
-    is logged with the token's name.
+    is logged with the token's name. No reply starts before the request body is in (_BodyGuard).
 
     (The SDK's own bearer auth is the OAuth resource-server path: it wants an issuer URL and a
     token verifier fixed when MCPServer is built, and advertises OAuth metadata that would send
@@ -955,6 +1008,13 @@ class TokenAuth:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         status = {"code": 0}
+        guard = _BodyGuard(scope, receive)
+        receive, send_raw = guard.receive, send
+
+        async def send(msg):  # every reply, ours and the app's, waits for the request body: see _BodyGuard
+            if msg["type"] == "http.response.start":
+                msg = await guard.start(msg)
+            await send_raw(msg)
 
         async def send_logged(msg):
             if msg["type"] == "http.response.start":
