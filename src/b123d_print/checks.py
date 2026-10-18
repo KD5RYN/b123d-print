@@ -29,6 +29,8 @@ from .render import AXES, section_faces, tessellate
 
 FAIL, WARN, OK = "fail", "warn", "ok"
 CORNER = 4.0  # see wall_thickness
+REACH = 2.0  # mm: first round of wall_thickness's ray cast (see _face_thinnest)
+CHUNK = 128  # rays cast at once (fewer: a tighter box around them, so fewer segments to test)
 PARALLEL = float(np.cos(np.radians(10)))  # walls whose normals are within 10 deg of opposite are parallel
 
 
@@ -192,9 +194,8 @@ def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, ed
     edges, loops = [], []
     for w in [face.outer_wire(), *face.inner_wires()]:
         pts = []
-        for e in w.order_edges():
-            n = max(2, int(np.ceil(e.length / st)) + 1)
-            xy = [(p.X, p.Y) for p in e.positions(list(np.linspace(0, 1, n)))]
+        for e in wire_edges(w):
+            xy = [(p[0], p[1]) for p in edge_points(e, st).tolist()]
             if pts and np.hypot(xy[0][0] - pts[-1][0], xy[0][1] - pts[-1][1]) > np.hypot(xy[-1][0] - pts[-1][0], xy[-1][1] - pts[-1][1]):
                 xy.reverse()
             edges.append((e, xy))
@@ -394,20 +395,29 @@ def line_width(settings) -> float:
     return 0.45
 
 
-def section_levels(part: Part, plane: str, step: float = 2.0, cap: int = 80) -> list[float]:
+def flat_faces(part: Part) -> list[tuple]:
+    """(normal, center) of each flat face, for section_levels."""
+    out = []
+    for f in part.faces():
+        if f.geom_type.name == "PLANE":
+            c = f.center()
+            n = f.normal_at(c)
+            out.append(((n.X, n.Y, n.Z), (c.X, c.Y, c.Z)))
+    return out
+
+
+def section_levels(part: Part, plane: str, step: float = 2.0, cap: int = 80, flats=None) -> list[float]:
     """Where to cut sections on `plane` so every feature is seen: the midpoint between each pair of
     neighbouring flat faces parallel to the plane (a 0.6 mm tall label gets its own cut), plus
-    cuts every `step` mm in between (curved and sloped parts); at most `cap` cuts."""
+    cuts every `step` mm in between (curved and sloped parts); at most `cap` cuts. flats: the
+    part's flat_faces, when already known."""
     axis = AXES[plane]
     bb = part.bounding_box()
     lo, hi = (bb.min.X, bb.min.Y, bb.min.Z)[axis], (bb.max.X, bb.max.Y, bb.max.Z)[axis]
     stops = {round(lo, 4), round(hi, 4)}
-    for f in part.faces():
-        if f.geom_type.name == "PLANE":
-            n = f.normal_at(f.center())
-            if abs((n.X, n.Y, n.Z)[axis]) > 0.999:
-                c = f.center()
-                stops.add(round((c.X, c.Y, c.Z)[axis], 4))
+    for n, c in flat_faces(part) if flats is None else flats:
+        if abs(n[axis]) > 0.999:
+            stops.add(round(c[axis], 4))
     stops = sorted(stops)
     while True:
         out = []
@@ -445,10 +455,11 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
     """Every spot thinner than `limit` in sections across the part (see section_levels), thinnest
     first, at most one per 2 mm. Each: {"min", "at": [x, y, z], "plane", "section_at"}."""
     spots = []
-    slicer = MeshSlicer(part) if len(part.faces()) > MESHY_FACES else None
+    slicer = MeshSlicer(part) if meshy(part) else None
+    flats = flat_faces(part)
     for plane in planes:
         plane = plane.upper()
-        for at in section_levels(part, plane, step):
+        for at in section_levels(part, plane, step, flats=flats):
             r = wall_thickness(part, plane, at, step=sample, limit=limit, exclude=_boxes_2d(ignore, plane, at), slicer=slicer)
             if r is not None and np.isfinite(r["min"]) and r["min"] < limit:
                 spots.append({"min": r["min"], "at": _to_3d(plane, at, r["at"]), "plane": plane, "section_at": at,
@@ -494,6 +505,40 @@ def gap(a: Part, b: Part) -> float:
 # Wall thickness
 
 
+def wire_edges(w) -> list:
+    """The edges of a wire in order along it. OCC's wire explorer walks them in a linear pass;
+    Wire.order_edges sorts by projecting every edge onto the wire, which takes seconds on the
+    thousand-edge outlines of sections through mesh-derived solids."""
+    from build123d import Edge
+    from OCP.BRepTools import BRepTools_WireExplorer
+
+    edges = w.edges()
+    ex, out = BRepTools_WireExplorer(w.wrapped), []
+    while ex.More():
+        out.append(Edge(ex.Current()))
+        ex.Next()
+    if len(out) == len(edges):
+        return out
+    try:  # the explorer skips edges of a wire that is not a simple chain
+        return w.order_edges()
+    except IndexError:  # a degenerate wire in a section (seen on tiny text slivers)
+        return edges
+
+
+def edge_points(e, step: float) -> np.ndarray:
+    """Points along an edge at most `step` apart, evenly spaced by arc length, in the edge's own
+    direction: (n, 3). Straight edges (every edge of a section through a mesh-derived solid) are
+    interpolated directly: Edge.length and Edge.positions integrate the curve for every point,
+    half a second on a thousand-edge section."""
+    if e.geom_type.name == "LINE":
+        p0, p1 = e.start_point(), e.end_point()
+        a, b = np.array([p0.X, p0.Y, p0.Z]), np.array([p1.X, p1.Y, p1.Z])
+        n = max(2, int(np.ceil(float(np.linalg.norm(b - a)) / step)) + 1)
+        return a + (b - a) * np.linspace(0, 1, n)[:, None]
+    n = max(2, int(np.ceil(e.length / step)) + 1)
+    return np.array([(p.X, p.Y, p.Z) for p in e.positions(list(np.linspace(0, 1, n)))])
+
+
 def _loops(face, plane: str, step: float) -> list[np.ndarray]:
     """Face boundary loops as 2D polylines with material on the LEFT of each segment."""
     axis = AXES[plane]
@@ -502,14 +547,8 @@ def _loops(face, plane: str, step: float) -> list[np.ndarray]:
     wires = [face.outer_wire(), *face.inner_wires()]
     for wi, w in enumerate(wires):
         pts = []
-        try:
-            edges = w.order_edges()
-        except IndexError:  # a degenerate wire in a section (seen on tiny text slivers)
-            edges = w.edges()
-        for e in edges:
-            n = max(2, int(np.ceil(e.length / step)) + 1)
-            ps = e.positions(list(np.linspace(0, 1, n)))
-            xy = [((p.X, p.Y, p.Z)[keep[0]], (p.X, p.Y, p.Z)[keep[1]]) for p in ps]
+        for e in wire_edges(w):
+            xy = [(p[keep[0]], p[keep[1]]) for p in edge_points(e, step).tolist()]
             if pts and np.hypot(xy[0][0] - pts[-1][0], xy[0][1] - pts[-1][1]) > np.hypot(xy[-1][0] - pts[-1][0], xy[-1][1] - pts[-1][1]):
                 xy.reverse()  # edge stored against the wire direction
             pts.extend(xy if not pts else xy[1:])
@@ -526,7 +565,7 @@ def _loops(face, plane: str, step: float) -> list[np.ndarray]:
 
 
 def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float | None = None, step: float = 0.1,
-                   limit: float | None = None, exclude=(), slicer=None) -> dict | None:
+                   limit: float | None = None, exclude=(), slicer=None, loops=None) -> dict | None:
     """Thinnest material in the cross-section of `part` on `plane` at `at`.
 
     near: (u, v) in the section's own 2D axes (XY -> (x, y), XZ -> (x, z), YZ -> (y, z)); with
@@ -536,10 +575,17 @@ def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float |
     limit: only walls thinner than this matter (much faster on big sections); with nothing
     thinner the result's "min" is inf. exclude: 2D boxes (u0, v0, u1, v1) left out. slicer: a
     MeshSlicer of the part, to cut its triangulation instead of the B-rep (many-faced solids).
+    loops: the section already cut, as _loops of each section face (Wall cuts it once for both
+    its facts and the measurement).
     Returns {"min": mm, "at": [u, v], "plane":..., ...} or None when the plane misses the region."""
     plane = plane.upper()
     best = None
-    faces = slicer.section(plane, at, step) if slicer is not None else (_loops(f, plane, step) for f in section_faces(part, plane, at))
+    if loops is not None:
+        faces = loops
+    elif slicer is not None:
+        faces = slicer.section(plane, at, step)
+    else:
+        faces = (_loops(f, plane, step) for f in section_faces(part, plane, at))
     for loops in faces:
         cand = _face_thinnest(loops, near, radius, limit, exclude)
         if cand is not None and (best is None or cand["min"] < best["min"]):
@@ -555,6 +601,18 @@ def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float |
 
 
 MESHY_FACES = 1500  # solids with more faces (most come from meshes: import_model) are sliced as triangles
+FACETED_FACES, FACETED_SHARE = 400, 0.95  # ... and so are solids this many faces, nearly all flat (a mesh's facets)
+
+
+def meshy(part: Part) -> bool:
+    """Cut sections of `part` from its triangulation (MeshSlicer) rather than the B-rep: thousands
+    of faces, or hundreds that are nearly all flat, as a solid from import_model is. Flat faces
+    triangulate exactly, so the outline is the same; an OCC section of a 1200-face solid takes
+    ~0.1 s, and ThinFeature cuts a hundred of them."""
+    faces = part.faces()
+    if len(faces) > MESHY_FACES:
+        return True
+    return len(faces) >= FACETED_FACES and sum(f.geom_type.name == "PLANE" for f in faces) >= FACETED_SHARE * len(faces)
 
 
 class MeshSlicer:
@@ -685,34 +743,51 @@ def _face_thinnest(loops, near, radius, limit, exclude) -> dict | None:
     # (< CORNER * t) on a face that does not face back at the ray (normals > 30 deg from
     # opposite) is the other side of a corner, not of a wall: ignore it. Otherwise every
     # 60 deg corner would read as a 0.0x mm wall right at its tip.
+    # Rays are cast in rounds of growing reach, each against only the segments within reach of
+    # the chunk: a ray whose nearest hit is within reach has found it, the others go on to the
+    # next round. The last round (reach >= limit, or every segment) is the plain cast, chunk by
+    # chunk as before, so the result is the same; on a section with thousands of segments (a
+    # mesh-derived solid) most rays end in the first round against a few dozen segments.
     tmin = np.full(len(o), np.inf)
     tdot = np.zeros(len(o))  # ray direction . normal of the boundary it hits: -1 = parallel walls
     traw = 0.0
-    for i in range(0, len(o), 512):
-        oo, rr = o[i : i + 512], r[i : i + 512]
-        if np.isfinite(lim):  # only segments that can be within `limit` of this chunk
-            near_seg = np.all(seg_hi >= oo.min(0) - lim, 1) & np.all(seg_lo <= oo.max(0) + lim, 1)
-            k = np.nonzero(near_seg)[0]
-        else:
-            k = slice(None)
-        sa, sd, sn, sl, sarc, sper = a[k], d[k], normal[k], loop_id[k], arc[k], perim[k]
-        oo, rr = oo[:, None, :], rr[:, None, :]
-        denom = rr[..., 0] * sd[None, :, 1] - rr[..., 1] * sd[None, :, 0]
-        w = sa[None] - oo
-        with np.errstate(divide="ignore", invalid="ignore"):
-            t = (w[..., 0] * sd[None, :, 1] - w[..., 1] * sd[None, :, 0]) / denom
-            s = (w[..., 0] * rr[..., 1] - w[..., 1] * rr[..., 0]) / denom
-        hit = (np.abs(denom) > 1e-12) & (t > 1e-6) & (s >= -1e-9) & (s <= 1 + 1e-9)
-        along = np.abs(o_arc[i : i + 512, None] - sarc[None, :])
-        along = np.minimum(along, sper[None, :] - along)
-        facing = (rr[..., 0] * sn[None, :, 0] + rr[..., 1] * sn[None, :, 1]) < -0.866
-        corner = (o_loop[i : i + 512, None] == sl[None, :]) & (along < CORNER * t) & ~facing
-        traw = max(traw, float(np.where(hit, t, 0).max(initial=0)))
-        t = np.where(hit & ~corner & (t <= lim), t, np.inf)
-        tmin[i : i + 512] = t.min(1, initial=np.inf)
-        if t.shape[1]:
-            j = t.argmin(1)
-            tdot[i : i + 512] = (rr[:, 0, 0] * sn[j, 0] + rr[:, 0, 1] * sn[j, 1])
+    span = float(np.max(seg_hi.max(0) - seg_lo.min(0))) if len(a) else 0.0
+    reach = min(REACH, lim)
+    pending = np.ones(len(o), bool)
+    while pending.any():
+        last = reach >= lim or reach >= span
+        margin = lim if last else reach
+        for i in range(0, len(o), CHUNK):
+            idx = i + np.nonzero(pending[i : i + CHUNK])[0]
+            if not len(idx):
+                continue
+            box = o[i : i + CHUNK] if last else o[idx]  # last round: the whole chunk, as a plain cast
+            if np.isfinite(margin):  # only segments that can be within reach of this chunk
+                k = np.nonzero(np.all(seg_hi >= box.min(0) - margin, 1) & np.all(seg_lo <= box.max(0) + margin, 1))[0]
+            else:
+                k = slice(None)
+            sa, sd, sn, sl, sarc, sper = a[k], d[k], normal[k], loop_id[k], arc[k], perim[k]
+            oo, rr = o[idx][:, None, :], r[idx][:, None, :]
+            denom = rr[..., 0] * sd[None, :, 1] - rr[..., 1] * sd[None, :, 0]
+            w = sa[None] - oo
+            with np.errstate(divide="ignore", invalid="ignore"):
+                t = (w[..., 0] * sd[None, :, 1] - w[..., 1] * sd[None, :, 0]) / denom
+                s = (w[..., 0] * rr[..., 1] - w[..., 1] * rr[..., 0]) / denom
+            hit = (np.abs(denom) > 1e-12) & (t > 1e-6) & (s >= -1e-9) & (s <= 1 + 1e-9)
+            along = np.abs(o_arc[idx, None] - sarc[None, :])
+            along = np.minimum(along, sper[None, :] - along)
+            facing = (rr[..., 0] * sn[None, :, 0] + rr[..., 1] * sn[None, :, 1]) < -0.866
+            corner = (o_loop[idx, None] == sl[None, :]) & (along < CORNER * t) & ~facing
+            traw = max(traw, float(np.where(hit, t, 0).max(initial=0)))
+            t = np.where(hit & ~corner & (t <= lim), t, np.inf)
+            tm = t.min(1, initial=np.inf)
+            done = last | (tm <= reach)
+            tmin[idx[done]] = tm[done]
+            pending[idx[done]] = False
+            if t.shape[1]:
+                j = t.argmin(1)
+                tdot[idx] = (rr[:, 0, 0] * sn[j, 0] + rr[:, 0, 1] * sn[j, 1])
+        reach = min(reach * 4, lim)
     k = int(np.argmin(tmin))
     if np.isfinite(tmin[k]):
         taper = bool(tdot[k] > -PARALLEL)
@@ -737,8 +812,9 @@ def _face_thinnest(loops, near, radius, limit, exclude) -> dict | None:
             for c0 in range(0, len(p), 1024):
                 pc = p[c0 : c0 + 1024]
                 qc = q
-                if np.isfinite(lim):
-                    qc = q[np.all((q >= pc.min(0) - lim) & (q <= pc.max(0) + lim), 1)]
+                m = min(lim, cand["min"])  # points farther than this cannot be the new closest
+                if np.isfinite(m):
+                    qc = q[np.all((q >= pc.min(0) - m) & (q <= pc.max(0) + m), 1)]
                     if not len(qc):
                         continue
                 dd = np.hypot(pc[:, None, 0] - qc[None, :, 0], pc[:, None, 1] - qc[None, :, 1])
@@ -852,13 +928,30 @@ class ThinFeature:
     step: float = 2.0  # mm between extra sections
     planes: tuple = ("XY", "XZ", "YZ")  # () turns the check off
 
+    def limit(self, settings) -> float:
+        warn = self.min if self.min is not None else settings.min_wall
+        return max(warn, self.fail_below if self.fail_below is not None else line_width(settings))
+
+    def thin_at(self, part: Part, spot: dict, settings, slicer=None) -> bool:
+        """Is `part` thinner than this check's limit within 1 mm of a spot another part reported
+        ({"at", "plane", "section_at"})? A remix's thin spot is the original's when the original
+        is thin there too; matching the two spot lists is not enough, because each section
+        reports only its single thinnest point and equal features (four identical clips) tie."""
+        plane = spot["plane"]
+        ax = AXES[plane]
+        uv = [spot["at"][i] for i in range(3) if i != ax]
+        r = wall_thickness(part, plane, spot["section_at"], near=uv, radius=1.0, step=0.125, limit=self.limit(settings),
+                           exclude=_boxes_2d(self.ignore, plane, spot["section_at"]), slicer=slicer)
+        return r is not None and bool(np.isfinite(r["min"]))
+
     def run(self, parts, assembly, settings) -> list[Finding]:
         lw = line_width(settings)
         warn = self.min if self.min is not None else settings.min_wall
         fail = self.fail_below if self.fail_below is not None else lw
         name = self.part or "part"
         spots = thin_features(_get(parts, self.part), max(warn, fail), self.planes, self.step, self.ignore)
-        data = {"spots": spots[:8], "line_width": lw, "warn_below": warn, "fail_below": fail}
+        data = {"spots": spots[:8], "line_width": lw, "warn_below": warn, "fail_below": fail,
+                "located": {"wall": [x["at"] for x in spots if not x["taper"]], "edge": [x["at"] for x in spots if x["taper"]]}}
         if not spots:
             return [Finding(OK, "thin", name, f"nothing thinner than {warn:g} mm ({warn / lw:.1f} lines)", data)]
         out = []
@@ -1041,18 +1134,22 @@ def _fmt(v) -> str:
     return "(" + ", ".join(f"{x:.4g}" for x in v) + ")"
 
 
-def _section_facts(part: Part, plane: str, at: float, near=None, radius=None, step: float = 0.1) -> dict | None:
+def _section_facts(part: Part, plane: str, at: float, near=None, radius=None, step: float = 0.1,
+                   faces=None, face_loops=None) -> dict | None:
     """What a section holds: its area and 2D bbox, how far `near` is from material (0 = inside
     it) and the bbox of the boundary within `radius` of `near` (the region a Wall measures).
-    None when the plane misses the part."""
+    None when the plane misses the part. faces, face_loops: the section already cut (its faces
+    and their _loops)."""
     from matplotlib.path import Path as MPath
 
-    faces = section_faces(part, plane.upper(), at)
+    if faces is None:
+        faces = section_faces(part, plane.upper(), at)
     if not faces:
         return None
+    if face_loops is None:
+        face_loops = [_loops(f, plane.upper(), step) for f in faces]
     pts, dist = [], np.inf
-    for f in faces:
-        loops = _loops(f, plane.upper(), step)
+    for loops in face_loops:
         if not loops:
             continue
         pts += list(loops)
@@ -1096,7 +1193,9 @@ class Wall:
         tgt = f"{name} ({self.label})" if self.label else name
         shape = _framed(self, parts, assembly)
         near = None if self.near is None else np.asarray(self.near, float)
-        facts = _section_facts(shape, self.plane, self.at, near, self.radius)
+        faces = section_faces(shape, self.plane.upper(), self.at)  # cut once, for the facts and the measurement
+        face_loops = [_loops(f, self.plane.upper(), 0.1) for f in faces]
+        facts = _section_facts(shape, self.plane, self.at, near, self.radius, faces=faces, face_loops=face_loops)
         if facts is None:
             bb = shape.bounding_box()
             ax = AXES[self.plane.upper()]
@@ -1113,7 +1212,7 @@ class Wall:
             return [Finding(FAIL, "wall", tgt, f"nothing within radius {self.radius:g} of the near point: {seen}, "
                             f"section bbox {_fmt(facts['bbox'][0])}..{_fmt(facts['bbox'][1])}, {where}. The check "
                             "measures nothing there: did the part move or turn over? (frame=\"assembly\" pins it)", facts)]
-        r = wall_thickness(shape, self.plane, self.at, self.near, self.radius)
+        r = wall_thickness(shape, self.plane, self.at, self.near, self.radius, loops=face_loops)
         if r is None:
             return [Finding(FAIL, "wall", tgt, f"no wall boundary within radius {self.radius:g} of the near point "
                             f"(it is inside solid material): {seen}, {where}. Move it next to the cut, or widen radius",

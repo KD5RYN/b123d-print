@@ -286,7 +286,7 @@ def do(job: dict) -> dict:
     if op == "check":
         res = {}
         for i, kk in enumerate(keys if key is None else [key]):
-            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0)]
+            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0, deadline=job.get("deadline"))]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
     if op == "metrics":

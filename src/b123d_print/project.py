@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+import time
 import traceback
 from dataclasses import dataclass, is_dataclass, replace
 from pathlib import Path
@@ -138,45 +139,263 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     return specs
 
 
-def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True) -> list[ck.Finding]:
+def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True,
+               deadline: float | None = None) -> list[ck.Finding]:
     """Build one variant and run every check. Never raises: errors become findings.
     nudge: also add the setup reminders (hole_comp never measured); callers pass it for the
-    first variant only, so a check run says it once."""
+    first variant only, so a check run says it once.
+    deadline: a time.time() by which to stop (the worker's soft limit, below the hard timeout
+    that kills it). A check still running then is interrupted; the result is every finding
+    finished so far plus a "timeout" FAIL naming the check that was running and those not run."""
     tag = key or "standard"
-    try:
-        d = dims(mod, key)
-        parts, orig, imports = built(mod, d)
-        asm = assembly(mod, d)
-    except Exception as e:
-        return [ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}", {"traceback": traceback.format_exc()})]
-    out = [import_finding(i) for i in imports]
-    for name, p in parts.items():
-        valid = bool(p.is_valid) and p.volume > 0
-        out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
-                              "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
-    named = {(k or "part"): v for k, v in parts.items()}
-    lookup = dict(named)
-    if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
-        lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
-    on_original: dict = {}  # the same checks on the original, for telling inherited findings from new ones
-    for spec in check_specs(mod, d, named, asm):
+    if deadline is not None and time.time() >= deadline:
+        return [ck.Finding(ck.FAIL, "timeout", tag, "not checked: the time limit was reached on an earlier variant")]
+    out: list[ck.Finding] = []
+    current = f"building variant {tag}"
+    with _Deadline(deadline) as dl:
         try:
-            found = spec.run(lookup, asm, settings)
-            if orig is not None and isinstance(spec, INHERITABLE) and getattr(spec, "other", None) is None:
-                twin = replace(spec, part=ORIGINAL)
-                k = repr(twin)
-                if k not in on_original:
-                    on_original[k] = twin.run({ORIGINAL: orig}, None, settings)
-                from .remix import mark_inherited
-
-                found = mark_inherited(found, on_original[k])
-            out.extend(found)
+            d = dims(mod, key)
+            parts, orig, imports = built(mod, d)
+            asm = assembly(mod, d)
+        except CheckTimeout:
+            return [_timeout_finding(tag, current, [], dl)]
         except Exception as e:
-            out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
-                                  {"traceback": traceback.format_exc()}))
+            return [ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}", {"traceback": traceback.format_exc()})]
+        out += [import_finding(i) for i in imports]
+        specs: list = []
+        try:
+            for name, p in parts.items():
+                current = f"validity of {name or 'part'}"
+                valid = bool(p.is_valid) and p.volume > 0
+                out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
+                                      "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
+            named = {(k or "part"): v for k, v in parts.items()}
+            lookup = dict(named)
+            if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
+                lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
+            current = "checks(d)"
+            specs = check_specs(mod, d, named, asm)
+            originals = OriginalFindings(mod, orig, settings) if orig is not None else None
+            while specs:
+                spec = specs[0]
+                current = spec_label(spec)
+                try:
+                    found = spec.run(lookup, asm, settings)
+                    if originals is not None and isinstance(spec, INHERITABLE) and getattr(spec, "other", None) is None:
+                        current = f"{spec_label(spec)} on the original"
+                        from .remix import mark_inherited
+
+                        found = mark_inherited(found, originals.get(replace(spec, part=ORIGINAL)),
+                                               originals.probe(spec) if isinstance(spec, ck.ThinFeature) else None)
+                    out.extend(found)
+                except CheckTimeout:
+                    raise
+                except Exception as e:
+                    out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
+                                          {"traceback": traceback.format_exc()}))
+                specs.pop(0)
+        except CheckTimeout:
+            out.append(_timeout_finding(tag, current, [spec_label(s) for s in specs[1:]], dl))
+            return out
     if nudge:
         out.extend(setup_findings(mod, out))
     return out
+
+
+def spec_label(spec) -> str:
+    """How a check is named in a timeout finding: Wall(part, label), ThinFeature(cover)."""
+    part = getattr(spec, "part", None)
+    bits = [part if isinstance(part, str) and part else ("part" if hasattr(spec, "part") else "")]
+    if getattr(spec, "label", ""):
+        bits.append(spec.label)
+    return f"{type(spec).__name__}({', '.join(b for b in bits if b)})"
+
+
+class CheckTimeout(BaseException):
+    """Raised in the main thread when run_checks' deadline passes (a BaseException, so a check's
+    own `except Exception` cannot swallow it)."""
+
+
+class _Deadline:
+    """Interrupts the main thread at `deadline` (time.time()): a timer thread raises SIGINT there
+    (_thread.interrupt_main, on every OS), and the handler installed meanwhile turns it into
+    CheckTimeout. Python checks for it between bytecodes, so a long OCC call finishes first
+    (seconds at most). A real Ctrl-C still raises KeyboardInterrupt. Without a deadline, or
+    outside the main thread, it does nothing."""
+
+    def __init__(self, deadline: float | None):
+        import threading
+
+        self.deadline, self.timer, self.prev = deadline, None, None
+        self.armed = self.fired = False
+        self.lock = threading.Lock()
+        self.started = time.time()
+
+    def __enter__(self):
+        import signal
+        import threading
+
+        if self.deadline is None or threading.current_thread() is not threading.main_thread():
+            self.deadline = None
+            return self
+        self.prev = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, self._handler)
+        self.armed = True
+        self.timer = threading.Timer(max(0.0, self.deadline - time.time()), self._fire)
+        self.timer.daemon = True
+        self.timer.start()
+        return self
+
+    def _fire(self):
+        import _thread
+
+        with self.lock:  # never after __exit__ disarmed it
+            if self.armed:
+                self.fired = True
+                _thread.interrupt_main()
+
+    def _handler(self, signum, frame):
+        if self.fired:
+            self.fired = False  # once: a second SIGINT is a real Ctrl-C
+            if self.armed:
+                raise CheckTimeout()
+            return  # fired just as the checks ended: nothing left to stop
+        raise KeyboardInterrupt
+
+    def __exit__(self, *exc):
+        import signal
+
+        if self.deadline is None:
+            return False
+        with self.lock:
+            self.armed = False
+        self.timer.cancel()
+        signal.signal(signal.SIGINT, self.prev if self.prev is not None else signal.default_int_handler)
+        return False
+
+
+def _timeout_finding(tag: str, current: str, not_run: list[str], dl: _Deadline) -> ck.Finding:
+    spent = time.time() - dl.started
+    rest = f"; not run: {', '.join(not_run)}" if not_run else ""
+    return ck.Finding(ck.FAIL, "timeout", tag,
+                      f"time limit reached while running {current} (after {spent:.0f} s of checks on this variant): "
+                      f"it was stopped{rest}. The findings above are complete. Raise the check time limit "
+                      "(B123D_PRINT_CHECK_TIMEOUT on the server, default 300 s) or run fewer checks",
+                      {"running": current, "not_run": not_run, "seconds": round(spent, 1)})
+
+
+CACHE_VERSION = 1  # bump when what is cached changes
+
+
+class OriginalFindings:
+    """The checks run on a remix's original, cached in the script's out/.cache/ (next to
+    import_model's conversions): the original does not change while the remix is worked on, so
+    every check after the first pays only for the remix. Keyed by the original's geometry
+    (rounded vertices, face count, volume: the same whether import_model converted the file or
+    read its cached conversion), the check's arguments, the settings and the b123d-print code."""
+
+    def __init__(self, mod: ModuleType, orig: Part, settings: Settings):
+        self.orig, self.settings = orig, settings
+        f = getattr(mod, "__file__", None)
+        self.dir = Path(f).resolve().parent / "out" / ".cache" if f else None
+        self.mem: dict = {}
+        self._base: str | None = None
+
+    def _key(self, twin) -> str:
+        import hashlib
+        import json
+
+        if self._base is None:
+            from dataclasses import asdict
+
+            s = {k: v for k, v in asdict(self.settings).items() if k != "root"}
+            self._base = json.dumps([CACHE_VERSION, shape_fingerprint(self.orig), repr(sorted(s.items())),
+                                     ck.line_width(self.settings), code_version()])
+        return hashlib.sha256(f"{self._base}|{twin!r}".encode()).hexdigest()[:32]
+
+    def probe(self, spec):
+        """spot -> whether the original is thin there too (ThinFeature.thin_at); not cached:
+        a few local sections, milliseconds on a mesh-derived original."""
+        if not hasattr(self, "_slicer"):
+            self._slicer = ck.MeshSlicer(self.orig) if ck.meshy(self.orig) else None
+        return lambda spot: spec.thin_at(self.orig, spot, self.settings, self._slicer)
+
+    def get(self, twin) -> list[ck.Finding]:
+        k = repr(twin)
+        if k in self.mem:
+            return self.mem[k]
+        path = self.dir / f"original-{self._key(twin)}.json" if self.dir is not None else None
+        found = _read_findings(path) if path is not None else None
+        if found is None:
+            found = twin.run({ORIGINAL: self.orig}, None, self.settings)
+            if path is not None:
+                _write_findings(path, found)
+        self.mem[k] = found
+        return found
+
+
+def shape_fingerprint(shape) -> str:
+    """A hash of a solid's geometry that survives a BREP round trip (unlike the BREP text)."""
+    import hashlib
+
+    import numpy as np
+
+    pts = [(v.X, v.Y, v.Z) for v in shape.vertices()]
+    a = np.round(np.array(pts, float).reshape(-1, 3), 4) + 0.0  # + 0.0: no -0.0
+    a = a[np.lexsort(a.T[::-1])] if len(a) else a
+    h = hashlib.sha256(a.tobytes())
+    h.update(f"|{len(shape.faces())}|{len(shape.edges())}|{shape.volume:.3f}".encode())
+    return h.hexdigest()[:32]
+
+
+def code_version() -> str:
+    """b123d-print's version plus a hash of the checks' code, so an edited checkout does not
+    reuse findings computed by older code."""
+    import hashlib
+    from importlib.metadata import PackageNotFoundError, version
+
+    from . import remix
+
+    try:
+        v = version("b123d-print")
+    except PackageNotFoundError:
+        v = "unknown"
+    h = hashlib.sha256()
+    for f in (ck.__file__, remix.__file__):
+        h.update(Path(f).read_bytes())
+    return f"{v}+{h.hexdigest()[:12]}"
+
+
+def _read_findings(path: Path) -> list[ck.Finding] | None:
+    import json
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return [ck.Finding(**f) for f in raw["findings"]]
+    except (OSError, ValueError, KeyError, TypeError):  # missing or broken: run the checks again
+        return None
+
+
+def _write_findings(path: Path, findings: list[ck.Finding]) -> None:
+    import json
+    import os
+
+    import numpy as np
+
+    def plain(x):
+        if isinstance(x, np.generic):
+            return x.item()
+        if isinstance(x, np.ndarray):
+            return x.tolist()
+        return str(x)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"findings": [f.__dict__ for f in findings]}, default=plain), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:  # a read-only folder: no cache
+        pass
 
 
 INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.Gap)  # automatic checks also run on the original

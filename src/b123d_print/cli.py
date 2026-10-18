@@ -280,7 +280,8 @@ def cmd_ssh(args) -> int:
     from . import ssh
 
     if args.cmd == "ssh-serve":
-        return ssh.serve(args.workspace, args.dest, args.timeout, os.environ.get("SSH_ORIGINAL_COMMAND"))
+        return ssh.serve(args.workspace, args.dest, args.timeout, os.environ.get("SSH_ORIGINAL_COMMAND"),
+                         check_timeout=args.check_timeout)
     if args.cmd == "setup-ssh":
         try:
             return ssh.setup(args.key, args.workspace, args.host, args.add,
@@ -381,6 +382,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workspace", required=True, help="the workspace this key is pinned to")
     p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
     p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
+    p.add_argument("--check-timeout", type=float, help="seconds per check run (default 300, or --timeout if longer)")
     p = sub.add_parser("pull", help="on the client: copy a part's exported files from an SSH server")
     p.add_argument("part")
     p.add_argument("--from", dest="source", required=True, metavar="USER@HOST", help="the server, as in your MCP config")

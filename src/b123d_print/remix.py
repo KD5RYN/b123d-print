@@ -838,9 +838,13 @@ INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "gap")
 MATCH_MM = 1.5  # an item of a finding counts as the original's when one of the original's is this close
 
 
-def _items(f) -> list[np.ndarray]:
-    """The located items of a finding (face centers, thin spots, holes), as points."""
+def _items(f, every: bool = False) -> list[np.ndarray]:
+    """The located items of a finding (face centers, thin spots, holes), as points. every: all of
+    them where the finding keeps more than it lists (ThinFeature lists the 8 thinnest spots; many
+    spots on one knife edge are equally thin, so which 8 is arbitrary)."""
     d = f.data or {}
+    if every and f.check == "thin" and isinstance(d.get("located"), dict):
+        return [np.asarray(p, float) for p in d["located"].get(_kind(f), []) if len(p) == 3]
     keys = {"overhang": ("faces",), "bridge": ("bridges",), "thin": ("spots",), "holes": ("round_top", "small"),
             "bed edge": ("faces",)}.get(f.check, ())
     pts = []
@@ -862,16 +866,18 @@ def _kind(f) -> str:
     return ""
 
 
-def mark_inherited(findings: list, original: list) -> list:
+def mark_inherited(findings: list, original: list, probe=None) -> list:
     """Label the findings the original already had: all of a finding's items (spots, faces, holes)
     within MATCH_MM of the original's -> one inherited finding (WARN at most: it is not the
-    remix's to fix); some of them -> the finding stays, saying which are new. Others are new."""
+    remix's to fix); some of them -> the finding stays, saying which are new. Others are new.
+    probe(spot) -> bool: whether the original is thin at a thin spot of the remix that matched
+    none of the original's listed spots (see ThinFeature.thin_at)."""
     from .checks import FAIL, OK, WARN, Finding
 
     orig = {}
     for f in original:
         if f.level != OK and f.check in INHERITABLE:
-            orig.setdefault((f.check, _kind(f)), []).extend(_items(f) or [None])
+            orig.setdefault((f.check, _kind(f)), []).extend(_items(f, every=True) or [None])
     out = []
     for f in findings:
         key = (f.check, _kind(f))
@@ -884,6 +890,9 @@ def mark_inherited(findings: list, original: list) -> list:
             inherited = [True]
         else:
             inherited = [bool(theirs) and min(float(np.linalg.norm(p - q)) for q in theirs) <= MATCH_MM for p in mine]
+            spots = f.data.get("spots") or []
+            if probe is not None and f.check == "thin" and len(spots) == len(mine):
+                inherited = [i or bool(probe(s)) for i, s in zip(inherited, spots)]
         if all(inherited):
             level = WARN if f.level == FAIL else f.level
             note = " (a FAIL on the original too)" if f.level == FAIL else ""

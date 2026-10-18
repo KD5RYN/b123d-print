@@ -73,13 +73,15 @@ def build(d):
   edges, where they are, and how to repair it (PrusaSlicer or Bambu Studio: right-click > Fix
   model; Meshmixer: Analysis > Inspector).
 - Meshes over **`max_triangles`** (a [setting](settings.md), default 50,000) are refused with
-  advice to simplify them first. Measured on a 56,000-triangle mesh: converting took 6 s,
-  a boolean 4 s, a render 5 s and the automatic checks about 26 s, which run on the original
-  too, so a check takes about a minute; twice that would not fit the 120 s build limit. A
-  slicer prints a 50,000-triangle model as well as a finer one.
+  advice to simplify them first. Measured on a generated 41,000-triangle remix
+  (`tools/bench_mesh_checks.py`, Apple M4): the first `check` takes about 45 s, converting the
+  mesh included; later ones about 25 s, with the conversion and the original's findings cached.
+  A slower CPU takes two to three times that, so twice the triangles would not fit the 300 s
+  check limit. A slicer prints a 50,000-triangle model as well as a finer one.
 - `scale=` takes a factor or the unit the file was drawn in (`"inch"`, `"cm"`, `"m"`).
 - The conversion is cached in the part's `out/.cache/`, keyed by the file's content, so build,
-  render, section and check do not repeat it.
+  render, section and check do not repeat it. The checks on the original (below) are cached
+  there too, so after the first `check` only the remix is checked.
 
 ## Inherited findings
 
@@ -92,6 +94,10 @@ a finding of the remix whose spots the original already had says so:
 [WARN] overhang part: inherited from the original: 11 face(s), 20 mm^2 steeper than 45 deg: ...
 [WARN] overhang part: 3 face(s) ... [2 of 3 listed spots inherited from the original; new in the remix: (-25, 0, 26)]
 ```
+
+A thin spot of the remix that is not among the original's listed spots is measured on the
+original itself: equal features (four identical clips) tie, and which of them a section reports
+is arbitrary, so comparing the two lists alone would call some inherited knife edges new.
 
 An inherited finding is reported but never fails the check (a FAIL on the original becomes a
 WARN, saying so): it is not the remix's to fix unless you ask. New findings are the remix's

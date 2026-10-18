@@ -69,7 +69,7 @@ async def _request_workspace(ctx, call_next):
 
 
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
-STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None,
+STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
@@ -115,12 +115,13 @@ async def _run(job: dict, out_dir: Path) -> dict:
     and under the shared build limit."""
     root = _root()  # resolve the client's workspace here, not in the worker thread
     queue = STATE["queue"]
+    timeout = STATE["check_timeout"] if job.get("op") == "check" else STATE["timeout"]
 
     def run() -> dict:
         if queue is None:
-            return sandbox.run_job(job, root, out_dir, STATE["timeout"])
+            return sandbox.run_job(job, root, out_dir, timeout)
         try:  # a separate worker (container) runs it: see jobqueue.py
-            return jobqueue.submit(queue, job, root, out_dir, STATE["timeout"])
+            return jobqueue.submit(queue, job, root, out_dir, timeout)
         except jobqueue.WorkerDown as e:
             return {"ok": False, "error": str(e)}
 
@@ -1161,7 +1162,11 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--workspace", default=env("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
     ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
-                    help="seconds per build (default 120)")
+                    help="seconds per build, render, section or export (default 120; $B123D_PRINT_TIMEOUT)")
+    ap.add_argument("--check-timeout", type=float, default=float(env("B123D_PRINT_CHECK_TIMEOUT", 0)) or None,
+                    help="seconds per check run, which builds the part and runs every check (on a remix, on the original "
+                         "too); near the limit it stops and returns the findings it has (default: 300, or --timeout if "
+                         "longer; $B123D_PRINT_CHECK_TIMEOUT)")
     ap.add_argument("--max-builds", type=int, default=int(env("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2),
                     help="build processes at once, across all clients and all server processes of this user (one per SSH session); "
                          "more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
@@ -1235,7 +1240,8 @@ def main(argv: list[str] | None = None) -> None:
         # containers: keep user settings (printer, calibration) with the mounted parts, not in a
         # home folder that disappears with the container
         os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
-    STATE.update(root=root, timeout=args.timeout, transport=args.transport, max_builds=max(1, args.max_builds))
+    STATE.update(root=root, timeout=args.timeout, check_timeout=args.check_timeout or max(300.0, args.timeout),
+                 transport=args.transport, max_builds=max(1, args.max_builds))
     if args.transport == "stdio":
         mcp.run("stdio")
         return
