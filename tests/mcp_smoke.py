@@ -82,9 +82,11 @@ async def flow(c, pw, expect) -> None:
         return pw is None or (pw / rel).exists()
 
     tools = {t.name for t in (await c.list_tools()).tools}
-    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export", "compare"}, f"tools: {sorted(tools)}")
+    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
+                     "export", "compare", "upload_reference", "describe_model", "before_after"}, f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
-    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp"}, f"prompts: {sorted(prompts)}")
+    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part"},
+           f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
     r = await c.read_resource("b123d-print://guide")
@@ -182,6 +184,45 @@ async def flow(c, pw, expect) -> None:
     res = await c.call_tool("render_preview", {"name": "nosuch"})
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
     await multipart_checks(c, expect)
+    await remix_checks(c, pw, expect)
+
+
+async def remix_checks(c, pw, expect) -> None:
+    """Remix: the example's reference comes along, describe_model, inherited findings, before_after, upload."""
+    res = await c.call_tool("new_part", {"name": "rb", "example": "remix_bracket"})
+    expect("Created" in text(res) and (pw is None or (pw / "parts/rb/ref/l_bracket.stl").is_file()),
+           "new_part from the remix example copies its reference mesh")
+    res = await c.call_tool("describe_model", {"part": "rb", "file": "l_bracket.stl", "size": "small"})
+    t = text(res)
+    ok = '"faces_after": 134' in t and '"d": 6.0' in t and images(res)
+    expect(ok, "describe_model: faces after merging, the faceted holes, a render" + ("" if ok else f"\n{t[:2000]}"))
+    res = await c.call_tool("describe_model", {"part": "rb", "file": "../../../etc/passwd"})
+    expect(res.is_error, "describe_model refuses a path out of the workspace")
+    res = await c.call_tool("check", {"name": "rb"})
+    t = text(res)
+    expect(t.startswith("PASSED") and "inherited from the original" in t and "[OK  ] import" in t,
+           "check labels the original's overhang as inherited" + ("" if t.startswith("PASSED") else f"\n{t[:2000]}"))
+    res = await c.call_tool("before_after", {"name": "rb", "size": "small"})
+    expect(len(images(res)) == 2 and "score" in text(res).lower(), "before_after returns the side-by-side and the deviation view")
+    stl = (Path(__file__).resolve().parents[1] / "src/b123d_print/examples/remix_bracket/ref/l_bracket.stl").read_bytes()
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "small.stl",
+                                                 "data_base64": base64.b64encode(stl).decode()})
+    expect("Stored parts/up/ref/small.stl" in text(res) and (pw is None or (pw / "parts/up/ref/small.stl").read_bytes() == stl),
+           "upload_reference stores a base64 file")
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "../x.stl", "data_base64": "AAAA"})
+    expect(res.is_error and "bad file name" in text(res), "upload_reference refuses a path in the file name")
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "big.stl"})
+    t = text(res)
+    link = re.search(r"'(https?://\S+/upload/\S+)'", t)
+    if link:  # over HTTP: a signed upload link, no token
+        async with create_mcp_http_client() as h:
+            r = await h.put(link.group(1), content=stl)
+            expect(r.status_code == 201 and (pw is None or (pw / "parts/up/ref/big.stl").read_bytes() == stl),
+                   f"the signed upload link stores the file without a token ({r.status_code})")
+            r = await h.put(link.group(1), content=stl)
+            expect(r.status_code == 409, f"... once: the same link does not overwrite ({r.status_code})")
+    else:
+        expect("b123d-print push" in t or "copy the file to" in t, "upload_reference says how to copy the file (SSH / local)")
 
 
 TWO = '''"""Base and lid, both in print orientation at the origin."""

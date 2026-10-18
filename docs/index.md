@@ -32,6 +32,9 @@ framework.
   with a token and a workspace per client.
 - **[`compare`](using/compare.md)** — measure a part against a reference STL, 3MF or STEP: size,
   volume and surface differences, a 0–100 score, pass/fail, and a deviation view.
+- **[Remix](using/remix.md)** — start from someone else's STL, 3MF or STEP: `import_model` makes
+  a mesh a solid (coplanar triangles merged), the checks tell the original's problems from the
+  ones the remix added, and a before/after view shows the change.
 - **The workflow, model-neutral** — [MCP prompts](using/tools.md#prompts) plus an
   [`AGENTS.md`](scripts/rules.md) any agent can read. The rules come from real prints; one exists
   because a part broke through a 0.05 mm skin that no render showed.

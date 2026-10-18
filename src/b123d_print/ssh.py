@@ -1,4 +1,4 @@
-"""MCP over SSH: the server end of an `authorized_keys` forced command, its setup, and `pull`.
+"""MCP over SSH: the server end of an `authorized_keys` forced command, its setup, `pull` and `push`.
 
 On the server, one line in ~/.ssh/authorized_keys per client machine (written by `setup-ssh`):
 
@@ -9,6 +9,8 @@ SSH_ORIGINAL_COMMAND. `ssh-serve` answers only:
 
     (nothing), mcp, b123d-print-mcp   the MCP server over stdio, in the key's workspace
     pull <part> [--formats f]         a tar stream of that part's out/ files (read-only)
+    push <part> <file> [--overwrite]  store stdin as the reference file <parts_dir>/<part>/ref/<file>
+                                      (STL/3MF/STEP only, size-capped; see refs.py)
     version                           version, workspace and sandbox, to check the setup
 
 Anything else (a shell, scp, sftp, port forwarding...) is refused. The workspace comes from the key
@@ -53,8 +55,16 @@ def _serve_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _push_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="push", add_help=False, exit_on_error=False)
+    ap.add_argument("part")
+    ap.add_argument("file")
+    ap.add_argument("--overwrite", action="store_true")
+    return ap
+
+
 def parse_request(original: str | None) -> tuple[str, dict]:
-    """What the client asked for (SSH_ORIGINAL_COMMAND) -> ("mcp" | "version" | "pull", args).
+    """What the client asked for (SSH_ORIGINAL_COMMAND) -> ("mcp" | "version" | "pull" | "push", args).
     Raises Refused for everything else."""
     try:
         words = shlex.split(original or "")
@@ -81,8 +91,24 @@ def parse_request(original: str | None) -> tuple[str, dict]:
         except ValueError as e:
             raise Refused(f"pull: {e}") from None
         return "pull", {"part": a.part, "formats": fmts}
+    if words[0] == "push":
+        from .refs import RefError, check_name
+
+        try:
+            a, extra = _push_parser().parse_known_args(words[1:])
+        except (argparse.ArgumentError, SystemExit):
+            raise Refused("usage: push <part> <file> [--overwrite]") from None
+        if extra:
+            raise Refused(f"push: unexpected {' '.join(extra)!r}")
+        if not PART_RE.match(a.part):
+            raise Refused(f"push: bad part name {a.part!r}")
+        try:
+            check_name(a.file)
+        except RefError as e:
+            raise Refused(f"push: {e}") from None
+        return "push", {"part": a.part, "file": a.file, "overwrite": a.overwrite}
     raise Refused(f"{words[0]!r} is not allowed on this key: it only runs the b123d-print MCP server, "
-                  "`pull <part>` and `version`")
+                  "`pull <part>`, `push <part> <file>` and `version`")
 
 
 def out_files(workspace: Path, part: str, formats=FORMATS) -> list[Path]:
@@ -118,7 +144,7 @@ def write_tar(files: list[Path], stream) -> None:
 
 
 def serve(workspace: str, dest: str | None, timeout: float | None, original: str | None,
-          stdout=None, stderr=None) -> int:
+          stdout=None, stderr=None, stdin=None) -> int:
     """The forced command's whole job. Returns the exit code (the MCP server never returns)."""
     stdout = stdout or sys.stdout.buffer
     stderr = stderr or sys.stderr
@@ -142,6 +168,20 @@ def serve(workspace: str, dest: str | None, timeout: float | None, original: str
         from importlib.metadata import version
 
         stdout.write(f"b123d-print {version('b123d-print')}\nworkspace: {ws}\nsandbox: {sandbox.describe()}\n".encode())
+        stdout.flush()
+        return 0
+    if what == "push":
+        from .refs import MAX_BYTES, RefError, store
+
+        data = (stdin or sys.stdin.buffer).read(MAX_BYTES + 1)
+        try:
+            if len(data) > MAX_BYTES:
+                raise RefError(f"over the {MAX_BYTES // 1_000_000} MB limit for reference files")
+            p = store(ws, load_settings(ws).parts_dir, args["part"], args["file"], data, args["overwrite"])
+        except (RefError, OSError) as e:
+            print(f"b123d-print: refused: push: {e}", file=stderr)
+            return 1
+        stdout.write(f"stored {p.relative_to(ws.resolve()).as_posix()} ({len(data)} bytes)\n".encode())
         stdout.flush()
         return 0
     files = out_files(ws, args["part"], args["formats"])
@@ -188,6 +228,31 @@ def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: s
     if proc.returncode != 0 or not got:
         raise RuntimeError(err or f"ssh exited with code {proc.returncode}" + (f" ({rest[:200]!r})" if rest else ""))
     return got
+
+
+def push(file: Path, part: str, dest: str, name: str | None = None, overwrite: bool = False, ssh: str = "ssh") -> str:
+    """Run `ssh <dest> push <part> <name>` with the file on stdin. Returns the server's answer;
+    raises RuntimeError (with the server's refusal) on failure."""
+    from .refs import MAX_BYTES, RefError, check_name
+
+    if not PART_RE.match(part):
+        raise RuntimeError(f"bad part name {part!r}")
+    name = name or file.name
+    try:
+        check_name(name)
+    except RefError as e:
+        raise RuntimeError(str(e)) from None
+    if not file.is_file():
+        raise RuntimeError(f"no file {file}")
+    if file.stat().st_size > MAX_BYTES:
+        raise RuntimeError(f"{file.name}: over the {MAX_BYTES // 1_000_000} MB limit for reference files")
+    remote = ["push", part, name] + (["--overwrite"] if overwrite else [])
+    cmd = shlex.split(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
+    with open(file, "rb") as f:
+        proc = subprocess.run(cmd, stdin=f, capture_output=True)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.decode(errors="replace").strip() or f"ssh exited with code {proc.returncode}")
+    return proc.stdout.decode(errors="replace").strip()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -281,6 +346,9 @@ it accepts the host key and should print the version and workspace):
 
   Exported files, copied to the client:
     b123d-print pull <part> --from {dest}
+
+  A model to remix (STL/3MF/STEP), copied to the server:
+    b123d-print push <file> --part <part> --to {dest}
 
 If the key is not your default one, add `-i ~/.ssh/<key>` before {dest} (or use a Host entry in ~/.ssh/config)."""
 

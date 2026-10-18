@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (0.3.0)
+
+**Remixing an existing model**
+- `import_model("ref/bracket.stl")` loads an STL, 3MF or STEP as a solid to change. Meshes are
+  welded, small gaps closed, triangles oriented, and coplanar triangles merged into planar
+  faces (curves stay faceted); units are checked (`scale="inch"`), meshes over `max_triangles`
+  (new setting, default 50,000) are refused with advice to simplify, the conversion is cached.
+- Reference files go to `parts/<part>/ref/`: `b123d-print push` over SSH, the `upload_reference`
+  tool (base64, or a signed upload link for `curl -fT`) over HTTP.
+- New tools `describe_model` and `before_after`, prompt `remix_part`, command `b123d-print to-step`.
+- The checks also run on the original: findings it already had are labeled *inherited from the
+  original* and never fail the check. Exports of a remix add before/after and deviation images.
+- New example `remix_bracket`.
+
+**Faster**
+- Tessellation reads triangles by index (rendering and the overhang check on a 9k-face solid:
+  20 s -> 1 s each); the thin check slices the triangle mesh on solids with many faces.
+
 ## 0.2.0 — 2026-10-17
 
 The part-script convention is unchanged from 0.1.0; existing scripts keep working.

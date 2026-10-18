@@ -24,6 +24,7 @@ pip_clearance = 0.3  # between parts printed in place
 min_wall = 0.8       # Wall checks fail below this unless they set their own limit
 max_overhang = 45    # degrees from vertical
 max_bridge = 10      # mm; longer bridges warn
+max_triangles = 50000  # import_model refuses bigger meshes
 formats = ["step", "stl", "3mf", "png"]
 ```
 
@@ -43,6 +44,7 @@ An unknown key is an error, so typos don't pass silently.
 | `min_wall` | `0.8` | Wall checks fail below this (mm) unless a check sets its own `min`; the thin check warns below it |
 | `max_overhang` | `45` | degrees from vertical; steeper downward faces are reported |
 | `max_bridge` | `10` | mm; longer bridges warn |
+| `max_triangles` | `50000` | [`import_model`](remix.md) refuses meshes with more triangles (simplify them first); measured: a 56k-triangle original takes about a minute to check |
 | `printer` | `""` (generic) | optional [printer profile](printer-profiles.md) |
 | `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
 | `formats` | all four | what export writes: `step`, `stl`, `3mf`, `png` ([formats](formats.md)) |
@@ -72,6 +74,7 @@ replaces the default the same way.
 | `B123D_PRINT_MIN_WALL` | overrides `min_wall` |
 | `B123D_PRINT_MAX_OVERHANG` | overrides `max_overhang` |
 | `B123D_PRINT_MAX_BRIDGE` | overrides `max_bridge` |
+| `B123D_PRINT_MAX_TRIANGLES` | overrides `max_triangles` |
 | `B123D_PRINT_FORMATS` | overrides `formats`, e.g. `step,3mf` |
 | `B123D_PRINT_PRINTER` | overrides `printer` |
 | `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
