@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.1 — unreleased
+## 0.3.1 — 2026-10-18
 
 **Bringing parts home from a remote server.** Over HTTP and SSH the server is a workbench, not
 storage; clients now get the whole part back in one step, in the same layout a local install
