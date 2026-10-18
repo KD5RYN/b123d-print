@@ -214,6 +214,27 @@ def test_error_text_hides_server_paths(http):
     assert str(root) not in t and 'File "parts/box/box.py"' in t
 
 
+@pytest.mark.parametrize("windows", [False, True])
+def test_hide_paths(windows):
+    if windows:  # Windows-style paths, checked on every OS
+        srv, ws = r"C:\Users\Runner\srv", r"C:\Users\Runner\srv\workspaces\alice"
+        text = (r'File "C:\Users\Runner\srv/workspaces/alice/parts/box/box.py", line 3' "\n"
+                r'File "c:\users\runner\SRV\workspaces\alice\parts\box\box.py"' "\n"
+                r'File "\\?\C:\Users\Runner\srv\x.py"' "\n"
+                r"use a path relative to C:\Users\Runner\srv\workspaces\alice" "\n"
+                r"C:\Users\Runner\srvother\y.py")
+        want = ('File "parts/box/box.py", line 3\n'
+                r'File "parts\box\box.py"' "\n"
+                'File "x.py"\nuse a path relative to .\n'
+                r"C:\Users\Runner\srvother\y.py")
+    else:
+        srv, ws = "/work", "/work/workspaces/alice"
+        text = ('File "/work/workspaces/alice/parts/box/box.py", line 3\nFile "/work/x.py"\n'
+                "relative to /work/workspaces/alice\n/workshop/y.py /WORK/z.py")
+        want = 'File "parts/box/box.py", line 3\nFile "x.py"\nrelative to .\n/workshop/y.py /WORK/z.py'
+    assert handoff.hide_paths(text, [srv, ws], windows=windows) == want
+
+
 def test_part_zip_resource_is_scoped(http):
     from mcp.server.mcpserver.exceptions import ResourceError
 

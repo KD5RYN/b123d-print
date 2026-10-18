@@ -158,6 +158,25 @@ def safe_rel(rel: str) -> bool:
     return all(s and s not in (".", "..") and not s.startswith(".") and ":" not in s for s in parts)
 
 
+def hide_paths(text: str, roots, windows: bool | None = None) -> str:
+    """`text` with each of `roots` (folders) taken out: "<root>/parts/x.py" -> "parts/x.py", a bare
+    "<root>" -> ".". A root matches with either separator anywhere in it; on Windows also in any
+    letter case and with the extended-length prefix. Longer roots first, so a workspace goes before the server
+    root it is in."""
+    windows = sys.platform == "win32" if windows is None else windows
+    pats = []
+    for root in sorted({str(r) for r in roots if str(r)}, key=len, reverse=True):
+        parts = [p for p in re.split(r"[\\/]+", root) if p]
+        if not parts:
+            continue
+        lead = r"[\\/]{2}" if re.match(r"^[\\/]{2}", root) else (r"[\\/]" if root[0] in "/\\" else "")
+        pats.append((r"(?:\\\\\?\\)?" if windows else "") + lead + r"[\\/]+".join(map(re.escape, parts)))
+    if not pats:
+        return text
+    rx = re.compile(r"(?:" + "|".join(pats) + r")(?:([\\/]+)|(?![\w.-]))", re.I if windows else 0)
+    return rx.sub(lambda m: "" if m.group(1) else ".", text)
+
+
 def summary(files: list[tuple[str, Path]]) -> str:
     n_out = sum(1 for r, _ in files if r.startswith("out/"))
     n_ref = sum(1 for r, _ in files if r.startswith("ref/"))

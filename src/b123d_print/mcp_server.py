@@ -218,10 +218,7 @@ def _scrub(text: str) -> str:
     """Remote: the server's own folders never show in a result (workspace-relative paths only)."""
     if not _remote():
         return text
-    roots = {str(_root()), str(_root().resolve()), str(STATE["root"]), str(STATE["root"].resolve())}
-    for root in sorted(roots, key=len, reverse=True):  # a workspace before the server root it is in
-        text = text.replace(root + os.sep, "").replace(root + "/", "").replace(root, ".")
-    return text
+    return handoff.hide_paths(text, [_root(), _root().resolve(), STATE["root"], STATE["root"].resolve()])
 
 
 def _token_name() -> str | None:
