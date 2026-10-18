@@ -29,7 +29,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import jobqueue, links, sandbox, tokens
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats
+from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
 from .project import find_parts
 
 MAX_SCRIPT_BYTES = 256_000
@@ -360,7 +360,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
-    rel = p.relative_to(_root())
+    rel = p.relative_to(_root()).as_posix()
     if show_code:
         return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
     src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
@@ -387,7 +387,7 @@ def write_part(name: str, code: str) -> str:
     except SyntaxError as e:
         return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
     p.write_text(code, encoding="utf-8")
-    return f"Saved {p.relative_to(_root())} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+    return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
 
 
 @mcp.tool()
@@ -489,7 +489,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         for f in v["files"]:
             info = _file_info(Path(f)) if (_http() or embed) else None
             if not info:
-                out.append(f"  {Path(f).relative_to(_root())}")
+                out.append(f"  {Path(f).relative_to(_root()).as_posix()}")
                 continue
             if "url" in info:
                 out.append(f"  {info['path']}  {info['url']}")
@@ -1080,6 +1080,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    safe_console()
     env = os.environ.get
     args = build_parser().parse_args(argv)
     # also the limit across server processes (one per SSH session); set before any early exit
@@ -1146,12 +1147,14 @@ def main(argv: list[str] | None = None) -> None:
     auth = f"tokens {', '.join(store.names())}" if store else "NONE"
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  auth {auth}  "
           f"max builds {STATE['max_builds']}  builds {'in worker via ' + str(queue) if queue else 'here'}", file=sys.stderr)
-    if store:  # SIGHUP: re-read the tokens file now (it is also re-read whenever it changes)
+    if store and hasattr(signal, "SIGHUP"):  # SIGHUP (not on Windows): re-read the tokens file now (it is also re-read whenever it changes)
         signal.signal(signal.SIGHUP, lambda *_: store.request_reload())
     # uvicorn handles SIGTERM/SIGINT: stop accepting, let running calls finish for up to
     # --shutdown-grace seconds, then cancel them; any build still running is killed here
     # uvicorn re-raises the signal after its shutdown; make SIGTERM a normal exit so the cleanup runs
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    if hasattr(signal, "SIGBREAK"):  # Windows has no SIGTERM to send: Ctrl+Break is the graceful stop
+        signal.signal(signal.SIGBREAK, lambda *_: sys.exit(0))
     try:
         # access_log off: TokenAuth logs every request with the token's name instead
         uvicorn.run(http_app(args.host, store, args.allowed_hosts), host=args.host, port=args.port,

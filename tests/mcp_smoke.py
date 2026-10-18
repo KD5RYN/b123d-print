@@ -23,6 +23,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import time
@@ -427,7 +428,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
     async with http_client(with_workspace(url, a), token) as ca, http_client(with_workspace(url, b), token) as cb:
         await ca.call_tool("new_part", {"name": "only_in_a"})
         res = await cb.call_tool("list_parts", {})
-        expect('"only_in_a"' not in text(res) and f"workspaces/{b}" in json.loads(text(res))["workspace"],
+        expect('"only_in_a"' not in text(res) and f"workspaces/{b}" in Path(json.loads(text(res))["workspace"]).as_posix(),
                "workspaces are separate (b does not see a's part)")
         await cb.call_tool("new_part", {"name": "only_in_b"})
         await ca.call_tool("write_part", {"name": "only_in_a", "code": BOX})
@@ -486,7 +487,10 @@ async def shutdown_check(server, url: str, token: str, ws: Path, expect) -> None
                 break
         expect(await asyncio.to_thread(beating, beat), "a build is running before shutdown")
         t0 = time.monotonic()
-        server.terminate()
+        if sys.platform == "win32":  # no SIGTERM there (terminate() is TerminateProcess): Ctrl+Break to its group
+            server.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            server.terminate()
         code = await asyncio.to_thread(server.wait, 30)
         took = time.monotonic() - t0
         try:
@@ -526,7 +530,7 @@ async def named_token_checks(url: str, cmd, env, scoped: str, single: str, log: 
     expect(await post_status(url, scoped) == 403, "a token with only a pattern cannot use the shared root workspace")
     async with http_client(url, single) as c:  # no ?workspace=
         ws = json.loads(text(await c.call_tool("list_parts", {})))["workspace"]
-        expect(ws.endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
+        expect(Path(ws).as_posix().endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
     r = mcp_cli(cmd, env, "token", "revoke", "scoped")
     expect(r.returncode == 0, "token revoke")
     expect(await post_status(url, scoped, "scoped-a") == 401, "a revoked token is refused at once, no restart")
@@ -605,7 +609,8 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
             log = ws.parent / f"{ws.name}-server.log"
             server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port),
                                              "--shutdown-grace", "3", *extra],
-                                      env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"))
+                                      env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"),
+                                      creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
             url = f"http://127.0.0.1:{port}/mcp"
             for _ in range(300):  # first start can be slow (imports, bytecode)
                 try:

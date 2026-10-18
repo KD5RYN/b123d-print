@@ -11,7 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from . import checks as ck
-from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, user_config_path
+from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, safe_console, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -350,6 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    safe_console()
     args = build_parser().parse_args(argv)
 
     if args.cmd == "init":

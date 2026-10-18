@@ -8,7 +8,8 @@ too: the mesh files it parses may have been written by a part script.
 | --- | --- |
 | macOS | `sandbox-exec`: no network, no child processes, writes only to the part's `out/` and a scratch folder, home folder unreadable except the workspace |
 | Linux with [bubblewrap](https://github.com/containers/bubblewrap) | no network, read-only system, same writable folders, home hidden |
-| Linux without bubblewrap, Windows | separate process + audit hook only — **install bubblewrap, or use Docker** |
+| Linux without bubblewrap | separate process + audit hook only — **install bubblewrap, or use Docker** |
+| Windows | **no OS sandbox**: a separate process in a Job Object (CPU-time limit; on a timeout the whole job, with anything the script started, is killed) + the audit hook. A script can read any file your account can. For isolation run the server in [WSL2](https://learn.microsoft.com/windows/wsl/install) with bubblewrap, or in [Docker](../getting-started/docker.md) |
 | [Docker](../getting-started/docker.md) | the container (`--network none`, only the mounted folder) |
 | [Docker over HTTP](../getting-started/http.md#compose) | a separate `worker` container with `network_mode: none` runs the part scripts; the HTTP container, which has a network, runs none |
 

@@ -31,7 +31,10 @@ def ws(tmp_path, monkeypatch):
     for name, data in (("box.3mf", b"3mf-bytes"), ("box.stl", b"stl-bytes"), ("box.png", b"png"), (".hidden.stl", b"no")):
         (out / name).write_bytes(data)
     (tmp_path / "outside.stl").write_bytes(b"outside")
-    os.symlink(tmp_path / "outside.stl", out / "link.stl")
+    try:
+        os.symlink(tmp_path / "outside.stl", out / "link.stl")
+    except OSError:  # Windows without Developer Mode or admin: no symlinks to refuse, either
+        pass
     (out / "sub").mkdir()
     (out / "sub" / "deep.stl").write_bytes(b"deep")
     return w
@@ -97,6 +100,7 @@ def test_workspace_is_pinned_by_the_key(ws, tmp_path):
 # --- setup-ssh -----------------------------------------------------------------------------------
 
 
+@pytest.mark.posix(reason="checks how sshd's /bin/sh splits the forced command; SSH mode's server side is POSIX only")
 def test_key_line_round_trip(tmp_path):
     ws = tmp_path / "my parts" / 'odd"name'
     line = ssh.key_line(KEY, ws, "me@cad", prog=["/opt/b123d print/bin/b123d-print"])
@@ -132,7 +136,8 @@ def test_add_line_is_idempotent(tmp_path):
     assert ssh.add_line(ak, l1, blob) == "unchanged"
     assert ssh.add_line(ak, l2, blob) == "replaced"
     assert ak.read_text(encoding="utf-8").splitlines() == [KEY2, l2]
-    assert (ak.stat().st_mode & 0o777) == 0o600
+    if sys.platform != "win32":  # no POSIX modes on Windows (the file inherits the folder's ACL)
+        assert (ak.stat().st_mode & 0o777) == 0o600
 
 
 def test_add_line_refuses_a_key_with_other_access(tmp_path):
@@ -200,11 +205,10 @@ def test_pull_rejects_a_malicious_tar(tmp_path):
         tf.addfile(info, io.BytesIO(b"x"))
     blob = tmp_path / "evil.tar"
     blob.write_bytes(evil.getvalue())
-    fake = tmp_path / "evilssh.sh"
-    fake.write_text(f"#!/bin/sh\ncat {blob}\n", encoding="utf-8")
-    fake.chmod(0o755)
+    fake = tmp_path / "evilssh.py"
+    fake.write_text(f"import sys\nsys.stdout.buffer.write(open({str(blob)!r}, 'rb').read())\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="unexpected entry"):
-        ssh.pull("box", "me@cad", tmp_path / "dest", ssh=str(fake))
+        ssh.pull("box", "me@cad", tmp_path / "dest", ssh=f'"{sys.executable}" "{fake}"')
     assert not (tmp_path / "escape.txt").exists()
 
 

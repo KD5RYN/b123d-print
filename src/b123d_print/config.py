@@ -17,6 +17,7 @@ config. It defaults to 0: measure it with examples/hole_coupon before trusting a
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
@@ -246,3 +247,11 @@ def set_user_setting(key: str, value: str | None, path: Path | None = None) -> P
 def clearance(script_file: str | Path | None = None) -> float:
     """Default mating clearance: `CLEARANCE: float = clearance(__file__)`."""
     return load_settings(script_file).clearance
+
+
+def safe_console() -> None:
+    """Print, don't crash, on a console that is not UTF-8 (Windows pipes default to cp1252): a
+    character it cannot show (in a part name, a path) comes out as "?"."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
+            stream.reconfigure(errors="replace")

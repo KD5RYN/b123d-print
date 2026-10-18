@@ -216,7 +216,7 @@ def test_every_page_in_nav():
     """mkdocs --strict also catches this; here it fails fast without building the site."""
     nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8").split("\nnav:", 1)[1]
     in_nav = set(re.findall(r":\s*([\w/-]+\.md)\s*$", nav, re.M))
-    on_disk = {str(p.relative_to(DOCS)) for p in DOCS.rglob("*.md")}
+    on_disk = {p.relative_to(DOCS).as_posix() for p in DOCS.rglob("*.md")}
     assert in_nav == on_disk
 
 

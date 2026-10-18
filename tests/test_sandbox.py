@@ -1,0 +1,59 @@
+"""The worker launcher: a timed-out build dies together with everything it started."""
+
+import os
+import sys
+import time
+
+from b123d_print import sandbox
+
+# a part script that starts a child process (the audit hook is off for this test) and never ends
+RUNAWAY = """
+import subprocess, sys, time
+from pathlib import Path
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+Path(PID_FILE).write_text(str(child.pid))
+while True:
+    time.sleep(0.1)
+"""
+
+
+def alive(pid: int) -> bool:
+    if sys.platform == "win32":  # os.kill(pid, 0) would terminate it on Windows
+        import ctypes
+
+        k = ctypes.WinDLL("kernel32")
+        k.OpenProcess.restype = ctypes.c_void_p
+        h = k.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        if not h:
+            return False
+        try:
+            return k.WaitForSingleObject(ctypes.c_void_p(h), 0) != 0  # 0: signaled = exited
+        finally:
+            k.CloseHandle(ctypes.c_void_p(h))
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:  # our own child would be a zombie until reaped; the grandchild is reaped by init
+        return os.waitpid(pid, os.WNOHANG) == (0, 0)
+    except ChildProcessError:
+        return True
+
+
+def test_timeout_kills_the_worker_and_its_children(tmp_path, monkeypatch):
+    monkeypatch.setenv("B123D_PRINT_SANDBOX", "none")  # the OS sandboxes refuse to start a child at all
+    out = tmp_path / "parts" / "spin" / "out"
+    pid_file = out / "child.pid"
+    script = tmp_path / "parts" / "spin" / "spin.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(f"PID_FILE = {str(pid_file)!r}\n" + RUNAWAY, encoding="utf-8")
+    t0 = time.monotonic()
+    res = sandbox.run_job({"op": "build", "script": str(script), "guard": False}, tmp_path, out, timeout=15)
+    assert not res["ok"] and "timed out" in res["error"], res
+    assert time.monotonic() - t0 < 40
+    pid = int(pid_file.read_text())
+    for _ in range(50):
+        if not alive(pid):
+            break
+        time.sleep(0.1)
+    assert not alive(pid), f"the worker's child {pid} outlived the timeout"

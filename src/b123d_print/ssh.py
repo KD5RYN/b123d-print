@@ -198,6 +198,14 @@ def serve(workspace: str, dest: str | None, timeout: float | None, original: str
 # client end: pull
 
 
+def split_command(s: str) -> list[str]:
+    """Split an --ssh command line. POSIX rules everywhere but Windows, where a backslash is a path
+    separator, not an escape (ssh -i C:\\Users\\me\\.ssh\\key); quotes group words on both."""
+    if sys.platform != "win32":
+        return shlex.split(s)
+    return [w[1:-1] if len(w) > 1 and w[0] == w[-1] and w[0] in "\"'" else w for w in shlex.split(s, posix=False)]
+
+
 def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: str = "ssh") -> list[Path]:
     """Run `ssh <dest> pull <part>` and unpack the files into out_dir. Raises RuntimeError on failure."""
     if not PART_RE.match(part):
@@ -206,7 +214,7 @@ def pull(part: str, dest: str, out_dir: Path, formats: str | None = None, ssh: s
         parse_formats(formats)  # fail here, not on the server
     remote = ["pull", part] + (["--formats", formats] if formats else [])
     # ssh joins the remote words with spaces and the server splits them again: quote each
-    cmd = shlex.split(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
+    cmd = split_command(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
     out_dir.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     got = []
@@ -247,7 +255,7 @@ def push(file: Path, part: str, dest: str, name: str | None = None, overwrite: b
     if file.stat().st_size > MAX_BYTES:
         raise RuntimeError(f"{file.name}: over the {MAX_BYTES // 1_000_000} MB limit for reference files")
     remote = ["push", part, name] + (["--overwrite"] if overwrite else [])
-    cmd = shlex.split(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
+    cmd = split_command(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
     with open(file, "rb") as f:
         proc = subprocess.run(cmd, stdin=f, capture_output=True)
     if proc.returncode != 0:

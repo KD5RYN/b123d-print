@@ -20,4 +20,9 @@ env.pop("SSH_ORIGINAL_COMMAND", None)
 if words:
     env["SSH_ORIGINAL_COMMAND"] = " ".join(words)  # ssh joins the words with spaces, unquoted
 env["SSH_CONNECTION"] = "127.0.0.1 50000 127.0.0.1 22"
+if sys.platform == "win32":  # no /bin/sh: the forced command is POSIX-quoted (shlex.quote), so split it the same way
+    import shlex
+    import subprocess
+
+    sys.exit(subprocess.run(shlex.split(os.environ["B123D_PRINT_FAKE_SSH_FORCED"]), env=env).returncode)
 os.execve("/bin/sh", ["/bin/sh", "-c", os.environ["B123D_PRINT_FAKE_SSH_FORCED"]], env)

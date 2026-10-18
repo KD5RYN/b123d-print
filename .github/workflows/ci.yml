@@ -7,6 +7,7 @@ on:
 
 env:
   LANG: C  # plain-ASCII locale, so missing encoding="utf-8" shows up here and not on users' machines
+  # (on Windows the same job is done by the runner's cp1252 code page for pipes and files)
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -51,6 +52,8 @@ jobs:
           - {os: ubuntu-latest, mode: ssh-sim, flag: "--ssh", what: "the SSH forced command (sshd simulated)"}
           - {os: macos-latest, mode: stdio, flag: "", what: "stdio, macOS sandbox"}
           - {os: macos-latest, mode: http, flag: "--http", what: "HTTP, macOS sandbox"}
+          - {os: windows-latest, mode: stdio, flag: "", what: "stdio, Windows (Job Object + audit hook)"}
+          - {os: windows-latest, mode: http, flag: "--http", what: "HTTP, Windows (Ctrl+Break shutdown)"}
     name: e2e (${{ matrix.os }}, ${{ matrix.mode }})
     runs-on: ${{ matrix.os }}
     steps:
@@ -67,7 +70,7 @@ jobs:
       - name: MCP end to end (${{ matrix.what }})
         run: uv run python tests/mcp_smoke.py ${{ matrix.flag }}
         env:
-          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || 'sandbox-exec' }}
+          B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || runner.os == 'macOS' && 'sandbox-exec' || 'Job Object' }}
 
   ssh:
     # a real sshd (as the runner user, on localhost) and a key line written by setup-ssh

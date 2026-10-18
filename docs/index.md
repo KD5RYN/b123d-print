@@ -101,7 +101,16 @@ framework.
 
 ## Platforms and status
 
-**0.x — early.** The part-script convention may still change. CI tests macOS and Ubuntu, the
-built package via `uvx`, and the Docker image on every push. Windows is untested: the MCP
-server should run there without the OS sandbox; [Docker](getting-started/docker.md) is the safe
-route.
+**0.x — early.** The part-script convention may still change. CI tests macOS, Ubuntu and
+Windows, the built package via `uvx`, and the Docker image on every push.
+
+| Platform | Local (stdio) | OS sandbox for part scripts | SSH mode | HTTP mode |
+| --- | --- | --- | --- | --- |
+| macOS | yes | `sandbox-exec` | server and client | server and client |
+| Linux | yes | bubblewrap (install it) | server and client | server and client |
+| Windows 10/11 | yes, natively | **none**: process isolation + audit hook ([Sandbox](using/sandbox.md)) | client only | client; the server runs too, without an OS sandbox |
+
+On Windows, run the server in [WSL2](https://learn.microsoft.com/windows/wsl/install) (with
+bubblewrap) or [Docker](getting-started/docker.md) when the part scripts come from a model you
+don't watch, or from other people. As a client of an SSH or HTTP server elsewhere, Windows needs
+nothing extra: `b123d-print pull` uses the OpenSSH client built into Windows (`ssh.exe`).

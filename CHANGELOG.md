@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.1 — unreleased
+
+**Native Windows support for local use.** The MCP server and the CLI run on Windows 10/11 with
+`uvx`, like on macOS and Linux; CI now tests Windows too (unit tests, MCP end to end over stdio
+and HTTP).
+- Part scripts run in a separate process inside a Job Object: a CPU-time limit, and on a timeout
+  (or when the server stops) the worker and anything it started are killed together. There is
+  **no OS sandbox** on Windows: process isolation and the audit hook only. Use WSL2 (with
+  bubblewrap) or Docker when you need isolation; `list_parts` says which you have.
+- The build limit shared by all server processes works on Windows too (`msvcrt` file locks).
+- The audit hook also blocks `_winapi.CreateProcess` and registry writes, and compares paths
+  case-insensitively on Windows.
+- HTTP mode stops gracefully on Ctrl-Break (Windows has no SIGTERM); SIGHUP reload is POSIX only.
+- Windows as an SSH client: `--ssh` keeps backslashes in paths (`ssh -i C:\Users\...`), and
+  `pull`/`push` work with the built-in `ssh.exe`. SSH mode's server side stays macOS/Linux.
+- CLI output no longer fails on a console that is not UTF-8 (characters it cannot show become `?`).
+
 ## 0.2.0 — 2026-10-17
 
 The part-script convention is unchanged from 0.1.0; existing scripts keep working.

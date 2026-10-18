@@ -37,7 +37,7 @@ from types import ModuleType
 from build123d import Part
 
 from . import checks as ck
-from .config import Settings, hole_comp_source, load_settings, parse_formats
+from .config import Settings, hole_comp_source, load_settings, parse_formats, safe_console
 from .render import export_files, render, report, section_view
 
 
@@ -265,6 +265,7 @@ def before_after(orig: Part, parts: dict, out: Path, stem: str, size: str = "nor
 
 def run(script_file: str, argv: list[str] | None = None) -> None:
     """`__main__` entry for part scripts: export every variant (or --variant), then run checks."""
+    safe_console()
     script = Path(script_file).resolve()
     mod = sys.modules.get("__main__")
     if mod is None or Path(getattr(mod, "__file__", "")).resolve() != script:

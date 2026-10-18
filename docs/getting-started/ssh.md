@@ -7,6 +7,11 @@ already have, so there are no certificates, tokens or open ports to set up.
 
 For how SSH compares with local and HTTP mode, see [Which mode?](../advanced/index.md#which-mode).
 
+The **server** must be macOS or Linux (the forced command needs a POSIX `sshd`; on Windows, run
+the server in WSL2 or use [HTTP](http.md)). The **laptop** can be anything with an OpenSSH
+client, Windows 10/11 included: its built-in `ssh.exe` works for the MCP connection, `pull` and
+`push`.
+
 ## Set it up
 
 **1. On the server**, install b123d-print with [uv](https://docs.astral.sh/uv/getting-started/installation/)
@@ -107,7 +112,8 @@ b123d-print pull bracket --formats 3mf --from you@server
 `pull` runs on the laptop (install b123d-print there too, or use
 `uvx --from b123d-print b123d-print pull ...`) and uses the same SSH key. `-o <folder>` picks
 where the files go (default: the current folder); `--ssh 'ssh -i ~/.ssh/b123d_print -p 2222'`
-passes options to ssh.
+passes options to ssh. On Windows, backslashes in `--ssh` are path separators and quotes group
+words: `--ssh 'ssh -i C:\Users\you\.ssh\b123d_print'`.
 
 The other way, a model to [remix](../using/remix.md) goes to the server with `push`:
 

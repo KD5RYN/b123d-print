@@ -14,5 +14,5 @@ strongest isolation.
 | [HTTP](../getting-started/http.md) | many agents at once, eval runs, a shared service | a named token per tool, TLS from a reverse proxy | download links |
 
 [Docker](../getting-started/docker.md) runs the server in a container, either locally over
-stdio (the strongest isolation, and the safe route on Windows) or as the HTTP service with
+stdio (the strongest isolation, and the way to get one on Windows) or as the HTTP service with
 Compose.
