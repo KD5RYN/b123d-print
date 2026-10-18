@@ -360,7 +360,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
-    rel = p.relative_to(_root())
+    rel = p.relative_to(_root()).as_posix()
     if show_code:
         return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
     src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
@@ -387,7 +387,7 @@ def write_part(name: str, code: str) -> str:
     except SyntaxError as e:
         return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
     p.write_text(code, encoding="utf-8")
-    return f"Saved {p.relative_to(_root())} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+    return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
 
 
 @mcp.tool()
@@ -489,7 +489,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         for f in v["files"]:
             info = _file_info(Path(f)) if (_http() or embed) else None
             if not info:
-                out.append(f"  {Path(f).relative_to(_root())}")
+                out.append(f"  {Path(f).relative_to(_root()).as_posix()}")
                 continue
             if "url" in info:
                 out.append(f"  {info['path']}  {info['url']}")

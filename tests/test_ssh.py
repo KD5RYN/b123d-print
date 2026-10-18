@@ -100,6 +100,7 @@ def test_workspace_is_pinned_by_the_key(ws, tmp_path):
 # --- setup-ssh -----------------------------------------------------------------------------------
 
 
+@pytest.mark.posix(reason="checks how sshd's /bin/sh splits the forced command; SSH mode's server side is POSIX only")
 def test_key_line_round_trip(tmp_path):
     ws = tmp_path / "my parts" / 'odd"name'
     line = ssh.key_line(KEY, ws, "me@cad", prog=["/opt/b123d print/bin/b123d-print"])

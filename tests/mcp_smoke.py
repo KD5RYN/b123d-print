@@ -428,7 +428,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
     async with http_client(with_workspace(url, a), token) as ca, http_client(with_workspace(url, b), token) as cb:
         await ca.call_tool("new_part", {"name": "only_in_a"})
         res = await cb.call_tool("list_parts", {})
-        expect('"only_in_a"' not in text(res) and f"workspaces/{b}" in json.loads(text(res))["workspace"],
+        expect('"only_in_a"' not in text(res) and f"workspaces/{b}" in Path(json.loads(text(res))["workspace"]).as_posix(),
                "workspaces are separate (b does not see a's part)")
         await cb.call_tool("new_part", {"name": "only_in_b"})
         await ca.call_tool("write_part", {"name": "only_in_a", "code": BOX})
@@ -530,7 +530,7 @@ async def named_token_checks(url: str, cmd, env, scoped: str, single: str, log: 
     expect(await post_status(url, scoped) == 403, "a token with only a pattern cannot use the shared root workspace")
     async with http_client(url, single) as c:  # no ?workspace=
         ws = json.loads(text(await c.call_tool("list_parts", {})))["workspace"]
-        expect(ws.endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
+        expect(Path(ws).as_posix().endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
     r = mcp_cli(cmd, env, "token", "revoke", "scoped")
     expect(r.returncode == 0, "token revoke")
     expect(await post_status(url, scoped, "scoped-a") == 401, "a revoked token is refused at once, no restart")
