@@ -151,7 +151,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
             "LANG": "C.UTF-8",
         }
         for var in ("B123D_PRINT_HOLE_COMP", "B123D_PRINT_CLEARANCE", "B123D_PRINT_MIN_WALL", "B123D_PRINT_MAX_OVERHANG",
-                    "B123D_PRINT_FORMATS", "XDG_CONFIG_HOME"):
+                    "B123D_PRINT_FORMATS", "B123D_PRINT_MAX_TRIANGLES", "XDG_CONFIG_HOME"):
             if var in os.environ:
                 env[var] = os.environ[var]
         # settings: the worker resolves the user config from the real home, so pass it explicitly

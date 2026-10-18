@@ -24,6 +24,11 @@ bearer token decides who may run them at all, and `--max-builds` how many run at
 [SSH](../getting-started/ssh.md) the key's `authorized_keys` line decides, and the same limit
 holds across every connection.
 
+Reference files for a [remix](remix.md) are parsed in the sandbox too (`describe_model`, and
+`import_model` in a script): a file from the internet is untrusted input. Getting one onto the
+server (`push` over SSH, the signed upload link over HTTP) writes only into
+`parts/<part>/ref/`, only STL, 3MF and STEP up to 50 MB, never through a symlink.
+
 The [CLI](../getting-started/cli.md) does **not** sandbox: it runs your own scripts like any
 Python.
 

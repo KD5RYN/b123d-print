@@ -50,6 +50,11 @@ asks for them in `checks(d)`, which can also change or narrow the automatic ones
 [Checks API](../scripts/checks-api.md). The rules behind each check, with their sources, are in
 [Design rules](../BEST_PRACTICES.md).
 
+For a [remix](remix.md) (a script that loads a model with `import_model`) the automatic checks
+also run on the original, and findings the original already had are labeled **inherited from
+the original**: reported, never failing the check, not the remix's to fix. An **import** line
+says what was loaded and warns when its units look wrong.
+
 !!! warning "Why wall checks matter"
     `is_valid` and hole-diameter checks do not catch a 0.05 mm skin. A real print broke there.
     Wherever a cut goes deeper than the wall it starts in, add a `Wall` check just past the wall.

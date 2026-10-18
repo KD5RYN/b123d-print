@@ -15,6 +15,7 @@ Use the **b123d-print MCP server** tools if your client has them (`new_part`, `w
   export to `parts/<name>/out/` and run the checks
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
 - `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
+- `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
 
 ## The part script
 
@@ -138,6 +139,32 @@ as a starting point, say so in the report, and never turn it into a default or a
   each print in their strongest orientation. Join with a dovetail and dowels or alignment pins
   (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds
   every common filament; acetone welds ABS/ASA; PETG takes only CA or epoxy. [J1, J2, J4, J5]
+
+## Remixing an existing model
+
+When the user gives you someone else's model (STL, 3MF or STEP) to change:
+
+1. **Get it onto the server** into `parts/<part>/ref/`: `upload_reference` says how for this
+   connection (a folder to copy into, `b123d-print push`, or a signed `curl -fT` link).
+2. **Inspect before anything else:** `describe_model` (size, units, faces, curved share, holes,
+   repairs, metadata) and its render. A size that suggests inches or cm: ask, then
+   `import_model(..., scale="inch")`.
+3. **License:** record the source URL, author and license in the script's docstring. -ND allows
+   no remixes: stop and tell the user. -NC: no commercial use. BY: the author must be credited
+   when it is shared. If the file does not say, ask.
+4. **Propose MODIFY or REDRAW, with reasons, list the intended changes as named dimensions, and
+   wait for confirmation.** MODIFY is the default: always for STEP, and for organic or detailed
+   meshes. Offer REDRAW for a simple prismatic mesh whose proportions change.
+5. **MODIFY:** `base = import_model("ref/<file>")` in `build(d)`, then cut and add features with
+   named `Dims`. Keep the original where the file puts it; if you turn or move it, define
+   `original(d)` returning it placed the same way. Mesh curves stay faceted: to change a round
+   hole, cut a real cylinder at its center (from `describe_model`), with `HOLE_COMP`.
+6. **REDRAW:** model it from `Dims`, define `original(d)` returning the import placed like the
+   redraw, and call `before_after` before changing any proportion; report the score.
+7. **Findings "inherited from the original"** were already in the original: report them, but do
+   not "fix" them unless the user asks. Fix every new FAIL. Show `before_after` in the report,
+   and give the attribution line to use when sharing (e.g. "Remix of <title> by <author>,
+   <license>, <URL>").
 
 ## Output formats
 

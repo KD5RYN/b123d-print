@@ -157,6 +157,12 @@ Over HTTP the files the server writes stay on the server. The tools hand them to
 Only the files in `parts/<part>/out/` are served: not the part scripts and nothing outside the
 workspace. Agents never need a shell on the server.
 
+The other way, a model to [remix](../using/remix.md): `upload_reference` returns a signed
+**upload link**, and `curl -fT bracket.stl '<link>'` on your machine stores the file as
+`parts/<part>/ref/bracket.stl`. Like a download link it needs no token, works for that one file
+only and expires; it takes STL, 3MF and STEP up to 50 MB and does not replace an existing file
+unless the tool was asked to (`overwrite=true`).
+
 **Behind a reverse proxy**, set `--public-url https://cad.example.com` (or
 `B123D_PRINT_PUBLIC_URL`) so the links point at the proxy. Without it the server uses the
 request's `Host` header, and it trusts `X-Forwarded-Host` / `X-Forwarded-Proto` only for hosts

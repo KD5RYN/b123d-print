@@ -49,6 +49,7 @@ if __name__ == "__main__":
 | `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw); the overlap check uses it |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md) |
+| `original(d)` | no | for a [remix](../using/remix.md): the original model placed as the remix is; default: what `build(d)` loaded with `import_model`. The automatic checks also run on it, so its findings are labeled inherited, and `before_after` and export compare the remix with it |
 
 A script with only a module-level `part = ...` (no `Dims`) also works, without variants.
 
@@ -59,6 +60,12 @@ A script with only a module-level `part = ...` (no `Dims`) also works, without v
 | `hole_comp(__file__)` | `HOLE_COMP: float = hole_comp(__file__)`; add it to hole diameters when cutting ([Hole compensation](../using/hole-compensation.md)) |
 | `clearance(__file__)` | `CLEARANCE: float = clearance(__file__)`; the default mating gap (0.2 mm) |
 | `printer(__file__)` | the active [printer profile](../using/printer-profiles.md), or `None` in generic mode |
+
+## Starting from an existing model
+
+| Helper | Use |
+| --- | --- |
+| `import_model(path, scale?, max_triangles?, merge?, script?)` | an STL, 3MF or STEP as a solid to change: `base = import_model("ref/bracket.stl")`; paths are relative to the script's folder (`ref/`) or the workspace (`refs/`). See [Remixing a part](../using/remix.md) |
 
 Never hard-code a hole compensation from somewhere else; keep hole fields at the size you want
 printed.

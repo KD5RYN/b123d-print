@@ -15,4 +15,5 @@ parts_dir = "parts"
 # min_wall = 0.8      # mm; Wall checks fail below this unless they set their own minimum
 # max_overhang = 45   # deg from vertical
 # max_bridge = 10     # mm; longer bridges warn
+# max_triangles = 50000  # import_model refuses meshes with more triangles (simplify them first)
 # formats = ["step", "stl", "3mf", "png"]   # what export writes; e.g. ["3mf", "png"]
