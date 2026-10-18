@@ -47,10 +47,12 @@ nav:
   - Getting started:
       - Quick start: getting-started/quick-start.md
       - Connect your MCP client: getting-started/mcp-clients.md
-      - Remote over SSH (recommended): getting-started/ssh.md
+      - CLI and Python: getting-started/cli.md
+  - "Advanced: another machine":
+      - Which mode?: advanced/index.md
+      - Remote over SSH (home server): getting-started/ssh.md
       - Over the network (HTTP): getting-started/http.md
       - Docker: getting-started/docker.md
-      - CLI and Python: getting-started/cli.md
   - Using it:
       - How a session goes: using/workflow.md
       - MCP tools and prompts: using/tools.md
