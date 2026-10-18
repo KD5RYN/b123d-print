@@ -17,6 +17,11 @@ and HTTP).
   `pull`/`push` work with the built-in `ssh.exe`. SSH mode's server side stays macOS/Linux.
 - CLI output no longer fails on a console that is not UTF-8 (characters it cannot show become `?`).
 
+**Fixed:** HTTP mode behind a reverse proxy (Caddy) sometimes cut a reply off ("peer closed
+connection without sending complete message body"): replies sent without reading the request body
+(a 401/403, a refused upload link) now first read and discard it, up to 8 MiB; beyond that the reply
+closes the connection.
+
 ## 0.2.0 — 2026-10-17
 
 The part-script convention is unchanged from 0.1.0; existing scripts keep working.
