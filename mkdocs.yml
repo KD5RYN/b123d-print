@@ -1,5 +1,5 @@
 site_name: b123d-print
-site_description: Design, check and export 3D-printable parts with build123d, from any LLM via MCP
+site_description: "Vibe CAD for 3D printing: describe a part, your AI assistant designs, checks and exports it (build123d, MCP)"
 site_url: https://kd5ryn.github.io/b123d-print/
 repo_url: https://github.com/KD5RYN/b123d-print
 repo_name: KD5RYN/b123d-print

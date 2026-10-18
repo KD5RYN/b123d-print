@@ -1,10 +1,30 @@
 # b123d-print
 
-Design 3D-printable parts with an AI assistant — any assistant. Describe a part (photos,
-caliper readings) and the assistant designs it, looks at it from every side, checks it for
-printing problems and saves files for your slicer (3MF, STL) or other CAD (STEP). Under the
-hood every part is a short [build123d](https://github.com/gumyr/build123d) Python script, so
-every dimension stays editable.
+**Vibe CAD for 3D printing.** Tell your AI assistant what you need, in plain words, with a
+photo and a few caliper readings. It designs the part, looks at it from every side, checks it
+for printing problems and hands you a file for your slicer. No CAD skills needed, and it works
+with any assistant that supports MCP: Claude, Gemini CLI, Cursor, VS Code Copilot, Codex and
+more.
+
+## What you can make
+
+Ask the way you would ask a friend who owns calipers and a CAD program. These were designed
+this way, and printed:
+
+- *"A box for this IR blaster board: the LED pointing out the top, a screw-on lid, two tabs to
+  mount it on the wall."* A two-part case, checked against a stand-in of the board so it fits.
+- *"An outdoor case for this motion sensor. It should slide off a wall plate and keep the rain
+  out."* Dovetail rails, a click-in detent, a drain slot, and a cover that prints without
+  supports.
+- *"An adapter plate: 2-gang box behind, 1-gang smart switch in front."* Counterbored screw
+  holes, and a wall check added after the first print broke through a 0.05 mm skin no render
+  showed.
+
+And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
+part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
+screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
+[build123d](https://github.com/gumyr/build123d) script, so each change is exact, and you get
+STEP files to keep editing in other CAD if you want.
 
 | | |
 | --- | --- |
