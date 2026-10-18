@@ -130,9 +130,13 @@ def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True
         valid = bool(p.is_valid) and p.volume > 0
         out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
                               "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
-    for spec in check_specs(mod, d, {(k or "part"): v for k, v in parts.items()}, asm):
+    named = {(k or "part"): v for k, v in parts.items()}
+    lookup = dict(named)
+    if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
+        lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
+    for spec in check_specs(mod, d, named, asm):
         try:
-            out.extend(spec.run({(k or "part"): v for k, v in parts.items()}, asm, settings))
+            out.extend(spec.run(lookup, asm, settings))
         except Exception as e:
             out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
                                   {"traceback": traceback.format_exc()}))

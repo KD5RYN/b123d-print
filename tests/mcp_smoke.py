@@ -253,7 +253,7 @@ async def multipart_checks(c, expect) -> None:
     expect("default formats" not in text(res), "no formats note when formats= is given")
     res = await c.call_tool("export", {"name": "two"})
     n = len([x for x in text(res).splitlines() if x.strip().startswith("parts/")])
-    expect(f"Exported {n} file(s)" in text(res) and " MB in all" in text(res) and "default formats" in text(res)
+    expect(f"Exported {n} file(s)" in text(res) and re.search(r" [0-9.]+ (B|KB|MB) in all", text(res)) and "default formats" in text(res)
            and "3MF for Bambu" in text(res), f"bare export: {n} files counted, with the note to narrow formats")
     res = await c.call_tool("export", {"name": "two", "parts": "nope"})
     expect(res.is_error or "no part(s) ['nope']" in text(res), "export parts= with an unknown part is refused")
