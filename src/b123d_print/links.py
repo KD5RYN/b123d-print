@@ -6,6 +6,10 @@ workspace name ("_" for the shared root workspace), <path> is relative to that w
 token, so curl, a browser or another agent can fetch it, but it opens exactly that one file until
 it expires. The server only serves regular files under <workspace>/<parts_dir>/<part>/out/.
 
+Zip links (`download_part`) are  <base>/zip/<workspace>/<expires>.<signature>/<part>.zip[?formats=..&variant=..]
+with the purpose "zip" and the filter in the signature: one opens a zip of that one part (script,
+out/, ref/; see handoff.py), filtered as signed, until it expires.
+
 Upload links (`upload_reference`) are the same with /upload/ and a signature over a purpose
 ("put" or "put-overwrite") as well: a PUT to one stores one reference file in
 <parts_dir>/<part>/ref/ (refs.store), until it expires.
@@ -26,7 +30,7 @@ from urllib.parse import quote
 ROOT_WS = "_"  # stands for the shared root workspace (no valid workspace name starts with "_")
 
 TYPES = {".3mf": "model/3mf", ".stl": "model/stl", ".step": "model/step", ".stp": "model/step",
-         ".png": "image/png", ".json": "application/json"}
+         ".png": "image/png", ".json": "application/json", ".zip": "application/zip"}
 
 
 def derive_secret(token: str | None, explicit: str | None = None) -> bytes:
@@ -53,6 +57,25 @@ def sign(secret: bytes, workspace: str, path: str, ttl: float, now: float | None
     route = "upload" if purpose else "files"
     url = f"/{route}/{workspace}/{expires}.{_sig(secret, workspace, path, expires, purpose)}/{quote(path)}"
     return url, expires
+
+
+def zip_query(variant: str | None = None, formats: str | None = None) -> str:
+    """The canonical filter part of a zip link (and of what its signature covers)."""
+    from urllib.parse import urlencode
+
+    return urlencode([(k, v) for k, v in (("formats", formats), ("variant", variant)) if v])
+
+
+def sign_zip(secret: bytes, workspace: str, part: str, query: str, ttl: float, now: float | None = None) -> tuple[str, int]:
+    """URL path ("/zip/...") of a zip of `part` filtered by `query` (zip_query), and its expiry."""
+    expires = int((now if now is not None else time.time()) + ttl)
+    sig = _sig(secret, workspace, f"{part}.zip?{query}", expires, "zip")
+    return f"/zip/{workspace}/{expires}.{sig}/{quote(part)}.zip" + (f"?{query}" if query else ""), expires
+
+
+def verify_zip(secret: bytes, workspace: str, token: str, part: str, query: str, now: float | None = None) -> None:
+    """Like verify(), for a zip link: 404 if not signed for exactly this part and filter, 410 once expired."""
+    verify(secret, workspace, token, f"{part}.zip?{query}", now, purpose="zip")
 
 
 class LinkError(Exception):

@@ -294,7 +294,7 @@ def cmd_ssh(args) -> int:
             sys.exit(f"push: {e}")
         return 0
     try:
-        got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh)
+        got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh, args.variant)
     except (RuntimeError, ValueError) as e:
         sys.exit(f"pull: {e}")
     print("\n".join(str(p) for p in got))
@@ -381,11 +381,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workspace", required=True, help="the workspace this key is pinned to")
     p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
     p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
-    p = sub.add_parser("pull", help="on the client: copy a part's exported files from an SSH server")
+    p = sub.add_parser("pull", help="on the client: copy a part (script, out/, ref/) from an SSH server into "
+                                    "parts/<part>/ of the project folder")
     p.add_argument("part")
     p.add_argument("--from", dest="source", required=True, metavar="USER@HOST", help="the server, as in your MCP config")
-    p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
-    p.add_argument("-o", "--out", default=".", help="folder to write the files to (default: the current folder)")
+    p.add_argument("--formats", help=f"only these out/ files, comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
+    p.add_argument("--variant", help="only this variant's out/ files ('standard' for the default one)")
+    p.add_argument("-o", "--out", default=".", help="the project folder; the part goes to <it>/parts/<part>/ (default: the current folder)")
     p.add_argument("--ssh", default="ssh", help="ssh command and options, e.g. 'ssh -i ~/.ssh/b123d_print -p 2222' (default: ssh)")
     p = sub.add_parser("push", help="on the client: copy a model to remix (STL/3MF/STEP) to an SSH server, into "
                                     "parts/<part>/ref/")

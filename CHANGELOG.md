@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.1 — unreleased
+
+**Bringing parts home from a remote server.** Over HTTP and SSH the server is a workbench, not
+storage; clients now get the whole part back in one step, in the same layout a local install
+writes into the project folder (`parts/<name>/<name>.py`, `out/`, `ref/`).
+- `download_part(name, variant?, formats?, embed?)` (MCP tool): over HTTP one signed, expiring
+  link (no token) to a zip of the whole part, `curl -fLo <name>.zip '<link>'` and unzip it in the
+  project folder; also a `b123d-print://download/{workspace}/{part}` resource. Over SSH it gives
+  the `b123d-print pull` command; locally it says the files are already there.
+- `b123d-print pull` now copies the whole part (script, `out/`, `ref/`) into `parts/<part>/` of
+  the project folder (`-o`, default the current folder) instead of only the `out/` files into
+  `-o`; new `--variant`. Needs a 0.3.1 server (`ssh-serve` gains `pull --tree`); 0.3.0 clients
+  still get what they got before.
+- "MCP tools and links only, the server copy is temporary, never ssh/scp": in the descriptions of
+  the tools that write files, in their results over HTTP and SSH (and in `check` once it passes),
+  in the server's instructions, `AGENTS.md`, the Claude Code skill and the prompts, which end
+  remote work with a required step: `download_part`, unzip, check the files are there, report.
+- Over HTTP and SSH, results show workspace-relative paths only (also in error tracebacks and
+  `list_parts`, which now names the workspace), never the server's own folders.
+
+**Workspace retention (HTTP).** A named workspace nobody has used for 30 days is removed, checked
+at startup and hourly and logged by name; never while a request or build for it is in flight.
+`--retention-days` / `B123D_PRINT_RETENTION_DAYS` (`0` = never); in `deploy/compose.yaml` and the
+new `deploy/.env.example`. The shared root workspace and SSH and local folders are never removed.
+
 ## 0.3.0 — 2026-10-18
 
 **Design review.** After the print checks pass, the assistant can review a part for its purpose

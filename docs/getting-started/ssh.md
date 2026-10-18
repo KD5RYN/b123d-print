@@ -80,7 +80,7 @@ terminals and every kind of forwarding. `ssh-serve` then answers only four reque
 | The client runs | It gets |
 | --- | --- |
 | `ssh you@server` (what the MCP client does) | the MCP server, in that workspace |
-| `ssh you@server pull <part> [--formats ...]` | that part's exported files (what `b123d-print pull` uses), read-only |
+| `ssh you@server pull <part> --tree [--formats ...] [--variant ...]` | the whole part, script, `out/` and `ref/` (what `b123d-print pull` uses), read-only; without `--tree` only its `out/` files (what 0.3.0 clients ask for) |
 | `ssh you@server push <part> <file> [--overwrite]` | stores what it sends as `parts/<part>/ref/<file>`, a model to [remix](../using/remix.md) (what `b123d-print push` uses): STL, 3MF or STEP only, up to 50 MB, nowhere else |
 | `ssh you@server version` | the version, workspace and sandbox |
 
@@ -102,16 +102,22 @@ only the first line for a key). `ssh-keygen -t ed25519 -f ~/.ssh/b123d_print` ma
 
 ## Get the files
 
-The files the server writes stay on the server. `export` ends with the command that copies them
-to the laptop, for example:
+The files the server writes stay on the server, a working copy that is not yours: bring the
+part home. `download_part` (and `export`) end with the command that copies it to the laptop, for
+example:
 
 ```bash
-b123d-print pull bracket --formats 3mf --from you@server
+b123d-print pull bracket --from you@server
 ```
+
+Run it in the project folder: it writes the same layout a local install does,
+`parts/bracket/bracket.py`, `parts/bracket/out/...` and `parts/bracket/ref/...`. `--formats 3mf`
+and `--variant <key>` narrow the `out/` files. The key allows nothing but this, the MCP server,
+`push` and `version`: no shell, ssh session or scp, and the results tell the agent so.
 
 `pull` runs on the laptop (install b123d-print there too, or use
 `uvx --from b123d-print b123d-print pull ...`) and uses the same SSH key. `-o <folder>` picks
-where the files go (default: the current folder); `--ssh 'ssh -i ~/.ssh/b123d_print -p 2222'`
+the project folder (default: the current folder); `--ssh 'ssh -i ~/.ssh/b123d_print -p 2222'`
 passes options to ssh. On Windows, backslashes in `--ssh` are path separators and quotes group
 words: `--ssh 'ssh -i C:\Users\you\.ssh\b123d_print'`.
 
@@ -123,6 +129,12 @@ b123d-print push bracket.stl --part bracket --to you@server
 
 `export(..., embed=true)` instead puts each file up to 2 MB (8 MB in all) into the tool result,
 over SSH as well as locally; it costs a lot of context, so it is off by default.
+
+SSH workspaces are folders you chose on the server (`setup-ssh --workspace`), so the server never
+removes them on its own ([retention](http.md#workspace-retention) is for HTTP workspaces); clean
+them up yourself when you no longer need them.
+
+A server older than 0.3.1 does not know `pull --tree`: `pull` then says to upgrade it.
 
 ## Several machines at once
 

@@ -175,11 +175,29 @@ config, or `formats="3mf,png"` on one export. If the user has not said what they
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
 
-**Remote server:** the files stay on the server. Over HTTP, download them from the links
-`export` returns (a plain HTTPS GET with no token, e.g. `curl -fO <url>`; they expire, so export
-again for fresh ones) or read the `b123d-print://files/` resources it links. Over SSH, run the
-`b123d-print pull ...` command `export` gives, on the client. Never open a shell on the server
-to fetch them.
+## Remote server: bring the part home (required last step)
+
+Locally (stdio) everything is already in the project folder:
+
+    parts/<name>/<name>.py      the script (the parametric source)
+    parts/<name>/out/...        exports, renders, section views
+    parts/<name>/ref/...        reference models (remixes)
+
+Over **HTTP or SSH** that same layout lives on the server, and the server is a workbench, not
+storage: its copy is a **temporary working copy, deleted after some days unused** (the results
+say how many). Use **only the MCP tools and the links they return**: the server gives **no
+shell, ssh or scp access**, so never try them. Before reporting, always:
+
+1. `download_part("<name>")`. Over HTTP it returns one link (no token, it expires): run
+   `curl -fLo <name>.zip '<link>'` and unzip it **in the project folder** (`unzip -o <name>.zip`;
+   Windows: `tar -xf <name>.zip`); it creates `parts/<name>/...` as above. Over SSH it returns
+   the `b123d-print pull <name> --from ...` command: run it in the project folder.
+2. Check the files exist on the user's machine (e.g. list `parts/<name>/out/`).
+3. Then report, saying where the files are.
+
+If the client cannot run commands, give the user the link (or the command) and say the part is
+not on their machine yet. `variant=` and `formats=` narrow the `out/` files; per-file links from
+`export` and the `b123d-print://files/` resources still work for single files.
 
 ## Printer profile (optional)
 
@@ -224,7 +242,9 @@ Do all of this every time you change geometry, before telling the user the part 
    (a wall measured in the orientation it prints in). After changing a part's print orientation,
    re-check every `frame="print"` coordinate.
 7. **Report:** overall size (X × Y × Z), key feature dimensions, validity, the clearances and
-   hole compensation applied, check results, print orientation and any supports needed.
+   hole compensation applied, check results, print orientation and any supports needed. On a
+   remote server, bring the part home first (`download_part`, see
+   [Remote server](#remote-server-bring-the-part-home-required-last-step)) and say where it is.
 
 ## Design review (after the print checks pass)
 

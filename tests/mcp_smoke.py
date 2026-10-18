@@ -76,15 +76,17 @@ def images(res):
     return [c for c in res.content if getattr(c, "type", "") == "image"]
 
 
-async def flow(c, pw, expect) -> None:
-    """The whole tool tour. pw: the server's workspace folder as seen from here (None: remote, skip file checks)."""
+async def flow(c, pw, expect, mode: str = "stdio") -> None:
+    """The whole tool tour. pw: the server's workspace folder as seen from here (None: remote, skip file checks).
+    mode: stdio, http or ssh (what download_part should answer)."""
 
     def on_disk(rel):  # True when the file exists, or when we cannot look (remote server)
         return pw is None or (pw / rel).exists()
 
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
-                     "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics"},
+                     "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
+                     "download_part"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review"},
@@ -117,6 +119,8 @@ async def flow(c, pw, expect) -> None:
         (SAVE / "section.png").write_bytes(base64.b64decode(im[0].data))
     res = await c.call_tool("check", {"name": "box", "variant": "standard"})
     expect(text(res).startswith("PASSED") and "min wall" in text(res), "check passes on the standard box")
+    expect(("Not on your machine yet: download_part('box')" in text(res)) == (mode != "stdio"),
+           "a passing check says the part is not home yet (remote only)")
     res = await c.call_tool("check", {"name": "box", "variant": "thin"})
     expect(text(res).startswith("FAILED") and "[FAIL] wall" in text(res), "check catches the thin wall in the 'thin' variant")
     res = await c.call_tool("export", {"name": "box"})
@@ -134,6 +138,8 @@ async def flow(c, pw, expect) -> None:
            f"export embed=True puts the file into the result ({len(emb)} embedded)")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
+    await c.call_tool("export", {"name": "box", "formats": "3mf,png"})
+    await handoff_checks(c, pw, expect, mode)
 
     # compare parses the files in the sandbox, like a build
     res = await c.call_tool("compare", {"reference": "parts/box/out/box.3mf", "candidate": "parts/box/out/box.3mf", "image": True})
@@ -196,6 +202,73 @@ async def flow(c, pw, expect) -> None:
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
     await multipart_checks(c, expect)
     await remix_checks(c, pw, expect)
+
+
+async def handoff_checks(c, pw, expect, mode: str) -> None:
+    """download_part: over HTTP one link to a zip in the local layout (unzipped and compared byte for
+    byte), over SSH the pull command (ssh_checks runs it), locally 'already in the project folder'."""
+    import io
+    import zipfile
+
+    res = await c.call_tool("download_part", {"name": "box"})
+    t = text(res)
+    if mode == "stdio":
+        expect("already in the project folder" in t and "curl" not in t, "download_part over stdio: the files are already here")
+        return
+    expect("deleted after" in t or "not your copy" in t, "download_part says the server copy is temporary")
+    expect("Do not use ssh/scp" in t and "parts/box/box.py" in t, "download_part names the local layout and rules out ssh/scp")
+    if mode == "ssh":
+        expect("b123d-print pull box --from" in t, "download_part over SSH gives the pull command")
+        return
+    m = re.search(r"curl -fLo box\.zip '(\S+)'", t)
+    expect(m and "/zip/" in m.group(1), "download_part over HTTP gives one curl command for a zip")
+    if not m:
+        return
+    async with create_mcp_http_client() as h:  # no Authorization header
+        r = await h.get(m.group(1))
+    expect(r.status_code == 200 and r.headers.get("content-type", "").startswith("application/zip"),
+           f"the zip link downloads without a token ({r.status_code})")
+    home = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-home-"))
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        names = zf.namelist()
+        expect(all(n.startswith("parts/box/") and ".." not in n for n in names), "the zip holds only parts/box/...")
+        zf.extractall(home)
+    script = (home / "parts/box/box.py").read_bytes() if (home / "parts/box/box.py").exists() else b""
+    expect(script.decode() == text(await c.call_tool("read_part", {"name": "box"})), "unzipped: parts/box/box.py is the script")
+    expect((home / "parts/box/out/box.3mf").is_file() and any(n.endswith(".png") for n in names),
+           f"unzipped: parts/box/out/ has the exports ({len(names)} files)")
+    if pw is not None:
+        same = all((home / n).read_bytes() == (pw / n).read_bytes() for n in names)
+        expect(same, "every unzipped file is byte-identical to the server's")
+    shutil.rmtree(home, ignore_errors=True)
+    rl = next((x for x in res.content if getattr(x, "type", "") == "resource_link"), None)
+    data = (await c.read_resource(rl.uri)).contents[0] if rl else None
+    expect(data is not None and zipfile.ZipFile(io.BytesIO(base64.b64decode(data.blob))).namelist() == names,
+           "download_part's resource link reads the same zip over MCP")
+    res = await c.call_tool("download_part", {"name": "box", "variant": "nope"})
+    expect(res.is_error and "no variant 'nope'" in text(res), "download_part refuses an unknown variant, listing them")
+
+
+class Recorder:
+    """Passes everything to the MCP client and keeps the text of every tool result."""
+
+    def __init__(self, c):
+        self._c, self.texts = c, []
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+    async def call_tool(self, *a, **kw):
+        res = await self._c.call_tool(*a, **kw)
+        self.texts.append(text(res))
+        return res
+
+
+def no_server_paths(rec: Recorder, root: Path, expect) -> None:
+    roots = {str(root), str(root.resolve())}
+    bad = [t for t in rec.texts if any(r in t for r in roots)]
+    expect(not bad, f"no result shows the server's own folders ({len(rec.texts)} results)"
+           + (f"\n{bad[0][:800]}" if bad else ""))
 
 
 async def remix_checks(c, pw, expect) -> None:
@@ -438,7 +511,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
     async with http_client(with_workspace(url, a), token) as ca, http_client(with_workspace(url, b), token) as cb:
         await ca.call_tool("new_part", {"name": "only_in_a"})
         res = await cb.call_tool("list_parts", {})
-        expect('"only_in_a"' not in text(res) and f"workspaces/{b}" in Path(json.loads(text(res))["workspace"]).as_posix(),
+        expect('"only_in_a"' not in text(res) and json.loads(text(res))["workspace"] == b,
                "workspaces are separate (b does not see a's part)")
         await cb.call_tool("new_part", {"name": "only_in_b"})
         await ca.call_tool("write_part", {"name": "only_in_a", "code": BOX})
@@ -540,7 +613,7 @@ async def named_token_checks(url: str, cmd, env, scoped: str, single: str, log: 
     expect(await post_status(url, scoped) == 403, "a token with only a pattern cannot use the shared root workspace")
     async with http_client(url, single) as c:  # no ?workspace=
         ws = json.loads(text(await c.call_tool("list_parts", {})))["workspace"]
-        expect(Path(ws).as_posix().endswith("workspaces/only-one"), f"a token with one workspace uses it when none is given ({ws})")
+        expect(ws == "only-one", f"a token with one workspace uses it when none is given ({ws})")
     r = mcp_cli(cmd, env, "token", "revoke", "scoped")
     expect(r.returncode == 0, "token revoke")
     expect(await post_status(url, scoped, "scoped-a") == 401, "a revoked token is refused at once, no restart")
@@ -573,11 +646,12 @@ async def ssh_checks(c, ssh_cmd: list[str], dest: str, pw: Path | None, expect) 
     expect(f"b123d-print pull box --formats 3mf,stl --from {dest}" in text(res), "export over SSH gives the exact pull command")
     got = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-pull-"))
     r = subprocess.run([sys.executable, "-m", "b123d_print.cli", "pull", "box", "--from", dest, "--formats", "3mf,stl",
-                        "-o", str(got), "--ssh", " ".join(ssh_cmd)], capture_output=True, text=True, timeout=120)
-    names = sorted(p.name for p in got.iterdir())
-    same = pw is None or all((got / n).read_bytes() == (pw / "parts/box/out" / n).read_bytes() for n in names)
-    expect(r.returncode == 0 and names == ["box.3mf", "box.stl"] and same,
-           f"b123d-print pull copies the files byte for byte ({names}{'' if r.returncode == 0 else ': ' + r.stderr[-500:]})")
+                        "--variant", "standard", "-o", str(got), "--ssh", " ".join(ssh_cmd)],
+                       capture_output=True, text=True, timeout=120)
+    names = sorted(p.relative_to(got).as_posix() for p in got.rglob("*") if p.is_file())
+    same = pw is None or all((got / n).read_bytes() == (pw / n).read_bytes() for n in names)
+    expect(r.returncode == 0 and names == ["parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"] and same,
+           f"b123d-print pull copies the part into parts/box/ byte for byte ({names}{'' if r.returncode == 0 else ': ' + r.stderr[-500:]})")
     shutil.rmtree(got, ignore_errors=True)
     r = subprocess.run(ssh_cmd + [dest, "version"], capture_output=True, text=True, timeout=60)
     expect(r.returncode == 0 and "workspace:" in r.stdout, "ssh <dest> version answers")
@@ -640,7 +714,10 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
                 sys.exit("B123D_PRINT_SMOKE_URL needs B123D_PRINT_SMOKE_TOKEN")
             await http_checks(url, token, expect, pw.parent.parent if pw else None)
             async with http_client(with_workspace(url, name), token) as c:
-                await flow(c, pw, expect)
+                rec = Recorder(c)
+                await flow(rec, pw, expect, "http")
+                if pw is not None:
+                    no_server_paths(rec, ws, expect)
                 if split or os.environ.get("B123D_PRINT_SMOKE_SPLIT"):
                     bw = json.loads(text(await c.call_tool("list_parts", {}))).get("build_worker", "")
                     expect(bw.startswith("separate"), f"builds run in the separate worker ({bw})")
@@ -678,7 +755,10 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
             ssh_cmd = [sys.executable, str(Path(__file__).with_name("fake_ssh.py"))]
         print(f"     ssh: {' '.join(ssh_cmd)} {dest}")
         async with Client(StdioServerParameters(command=ssh_cmd[0], args=ssh_cmd[1:] + [dest], env=env)) as c:
-            await flow(c, pw, expect)
+            rec = Recorder(c)
+            await flow(rec, pw, expect, "ssh")
+            if pw is not None:
+                no_server_paths(rec, pw, expect)
             await ssh_checks(c, ssh_cmd, dest, pw, expect)
     else:
         params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"], env=env)
