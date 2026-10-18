@@ -30,6 +30,35 @@ PALETTE = ["#4c8cd9", "#e0a030", "#2a9d4b", "#cc4444", "#7a3fb0", "#888888"]
 AXES = {"XY": 2, "XZ": 1, "YZ": 0}  # plane -> index of the axis normal to it
 
 
+def tessellate(shape, tol: float, angular: float = 0.1) -> tuple[np.ndarray, np.ndarray]:
+    """Shape.tessellate as numpy arrays (verts (N, 3), tris (M, 3)), outward winding. Reads each
+    face's triangles by index: iterating OCP's triangle array costs ~2 ms per face, which made a
+    20k-face solid from a mesh (import_model) take a minute to tessellate."""
+    from OCP.BRep import BRep_Tool
+    from OCP.TopAbs import TopAbs_REVERSED
+    from OCP.TopLoc import TopLoc_Location
+
+    shape.mesh(tol, angular)
+    verts, tris, offset = [], [], 0
+    for face in shape.faces():
+        loc = TopLoc_Location()
+        poly = BRep_Tool.Triangulation_s(face.wrapped, loc)
+        if poly is None:
+            continue
+        trsf = loc.Transformation()
+        n = poly.NbNodes()
+        for i in range(1, n + 1):
+            p = poly.Node(i).Transformed(trsf)
+            verts.append((p.X(), p.Y(), p.Z()))
+        rev = face.wrapped.Orientation() == TopAbs_REVERSED
+        for i in range(1, poly.NbTriangles() + 1):
+            t = poly.Triangle(i)
+            a, b, c = t.Value(1) + offset - 1, t.Value(2) + offset - 1, t.Value(3) + offset - 1
+            tris.append((a, c, b) if rev else (a, b, c))
+        offset += n
+    return np.array(verts, dtype=np.float64).reshape(-1, 3), np.array(tris, dtype=np.int64).reshape(-1, 3)
+
+
 def report(part: Part) -> dict:
     """Bounding box (mm), volume (mm^3) and validity."""
     bb = part.bounding_box()
@@ -99,11 +128,10 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02, size: str = "
         if hasattr(part, "triangles"):  # a compare.Mesh (e.g. a reference STL)
             faces = part.triangles
         else:
-            verts, tris = part.tessellate(tol, 0.2)
-            if not tris:
+            v, tris = tessellate(part, tol, 0.2)
+            if not len(tris):
                 continue
-            v = np.array([[p.X, p.Y, p.Z] for p in verts])
-            faces = v[np.array(tris)]
+            faces = v[tris]
         n = np.cross(faces[:, 1] - faces[:, 0], faces[:, 2] - faces[:, 0])
         n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
         shade = 0.35 + 0.65 * np.abs(n @ light)  # two-sided

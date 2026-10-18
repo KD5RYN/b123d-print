@@ -153,8 +153,10 @@ def load_mesh(path: str | Path, tolerance: float = 0.01) -> Mesh:
 
 def mesh_from_shape(shape, tolerance: float = 0.01, source: str = "") -> Mesh:
     """Tessellate a build123d shape."""
-    verts, tris = shape.tessellate(tolerance, 0.1)
-    return Mesh(np.array([[v.X, v.Y, v.Z] for v in verts]), np.array(tris), source)
+    from .render import tessellate
+
+    verts, tris = tessellate(shape, tolerance, 0.1)
+    return Mesh(verts, tris, source)
 
 
 def _load_stl(path: Path) -> Mesh:

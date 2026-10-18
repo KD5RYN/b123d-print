@@ -70,12 +70,13 @@ restrict,command="/home/you/.local/bin/b123d-print ssh-serve --workspace /home/y
 ```
 
 sshd runs that command whatever the client asks for (a *forced command*), and `restrict` turns off
-terminals and every kind of forwarding. `ssh-serve` then answers only three requests:
+terminals and every kind of forwarding. `ssh-serve` then answers only four requests:
 
 | The client runs | It gets |
 | --- | --- |
 | `ssh you@server` (what the MCP client does) | the MCP server, in that workspace |
 | `ssh you@server pull <part> [--formats ...]` | that part's exported files (what `b123d-print pull` uses), read-only |
+| `ssh you@server push <part> <file> [--overwrite]` | stores what it sends as `parts/<part>/ref/<file>`, a model to [remix](../using/remix.md) (what `b123d-print push` uses): STL, 3MF or STEP only, up to 50 MB, nowhere else |
 | `ssh you@server version` | the version, workspace and sandbox |
 
 Anything else (a shell, `scp`, `sftp`, `rsync`, other options for the server) is refused. The
@@ -107,6 +108,12 @@ b123d-print pull bracket --formats 3mf --from you@server
 `uvx --from b123d-print b123d-print pull ...`) and uses the same SSH key. `-o <folder>` picks
 where the files go (default: the current folder); `--ssh 'ssh -i ~/.ssh/b123d_print -p 2222'`
 passes options to ssh.
+
+The other way, a model to [remix](../using/remix.md) goes to the server with `push`:
+
+```bash
+b123d-print push bracket.stl --part bracket --to you@server
+```
 
 `export(..., embed=true)` instead puts each file up to 2 MB (8 MB in all) into the tool result,
 over SSH as well as locally; it costs a lot of context, so it is off by default.

@@ -36,6 +36,7 @@ class Settings:
     min_wall: float = 0.8  # mm; wall checks fail below this unless a check sets its own minimum
     max_overhang: float = 45.0  # deg from vertical; steeper downward faces are flagged
     max_bridge: float = 10.0  # mm; longer bridges (flat ceilings between two walls) warn
+    max_triangles: int = 50_000  # import_model refuses meshes with more triangles (simplify them first)
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
@@ -53,6 +54,7 @@ _ENV = {
     "min_wall": "B123D_PRINT_MIN_WALL",
     "max_overhang": "B123D_PRINT_MAX_OVERHANG",
     "max_bridge": "B123D_PRINT_MAX_BRIDGE",
+    "max_triangles": "B123D_PRINT_MAX_TRIANGLES",
 }
 NUMBERS = tuple(_ENV)  # the numeric settings
 # measured per printer + material (calibration.toml): a calibration for the active printer beats

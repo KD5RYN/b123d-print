@@ -82,9 +82,11 @@ async def flow(c, pw, expect) -> None:
         return pw is None or (pw / rel).exists()
 
     tools = {t.name for t in (await c.list_tools()).tools}
-    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check", "export", "compare"}, f"tools: {sorted(tools)}")
+    expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
+                     "export", "compare", "upload_reference", "describe_model", "before_after"}, f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
-    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp"}, f"prompts: {sorted(prompts)}")
+    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part"},
+           f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
     r = await c.read_resource("b123d-print://guide")
@@ -182,6 +184,45 @@ async def flow(c, pw, expect) -> None:
     res = await c.call_tool("render_preview", {"name": "nosuch"})
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
     await multipart_checks(c, expect)
+    await remix_checks(c, pw, expect)
+
+
+async def remix_checks(c, pw, expect) -> None:
+    """Remix: the example's reference comes along, describe_model, inherited findings, before_after, upload."""
+    res = await c.call_tool("new_part", {"name": "rb", "example": "remix_bracket"})
+    expect("Created" in text(res) and (pw is None or (pw / "parts/rb/ref/l_bracket.stl").is_file()),
+           "new_part from the remix example copies its reference mesh")
+    res = await c.call_tool("describe_model", {"part": "rb", "file": "l_bracket.stl", "size": "small"})
+    t = text(res)
+    ok = '"faces_after": 134' in t and '"d": 6.0' in t and images(res)
+    expect(ok, "describe_model: faces after merging, the faceted holes, a render" + ("" if ok else f"\n{t[:2000]}"))
+    res = await c.call_tool("describe_model", {"part": "rb", "file": "../../../etc/passwd"})
+    expect(res.is_error, "describe_model refuses a path out of the workspace")
+    res = await c.call_tool("check", {"name": "rb"})
+    t = text(res)
+    expect(t.startswith("PASSED") and "inherited from the original" in t and "[OK  ] import" in t,
+           "check labels the original's overhang as inherited" + ("" if t.startswith("PASSED") else f"\n{t[:2000]}"))
+    res = await c.call_tool("before_after", {"name": "rb", "size": "small"})
+    expect(len(images(res)) == 2 and "score" in text(res).lower(), "before_after returns the side-by-side and the deviation view")
+    stl = (Path(__file__).resolve().parents[1] / "src/b123d_print/examples/remix_bracket/ref/l_bracket.stl").read_bytes()
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "small.stl",
+                                                 "data_base64": base64.b64encode(stl).decode()})
+    expect("Stored parts/up/ref/small.stl" in text(res) and (pw is None or (pw / "parts/up/ref/small.stl").read_bytes() == stl),
+           "upload_reference stores a base64 file")
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "../x.stl", "data_base64": "AAAA"})
+    expect(res.is_error and "bad file name" in text(res), "upload_reference refuses a path in the file name")
+    res = await c.call_tool("upload_reference", {"part": "up", "filename": "big.stl"})
+    t = text(res)
+    link = re.search(r"'(https?://\S+/upload/\S+)'", t)
+    if link:  # over HTTP: a signed upload link, no token
+        async with create_mcp_http_client() as h:
+            r = await h.put(link.group(1), content=stl)
+            expect(r.status_code == 201 and (pw is None or (pw / "parts/up/ref/big.stl").read_bytes() == stl),
+                   f"the signed upload link stores the file without a token ({r.status_code})")
+            r = await h.put(link.group(1), content=stl)
+            expect(r.status_code == 409, f"... once: the same link does not overwrite ({r.status_code})")
+    else:
+        expect("b123d-print push" in t or "copy the file to" in t, "upload_reference says how to copy the file (SSH / local)")
 
 
 TWO = '''"""Base and lid, both in print orientation at the origin."""
@@ -253,7 +294,7 @@ async def multipart_checks(c, expect) -> None:
     expect("default formats" not in text(res), "no formats note when formats= is given")
     res = await c.call_tool("export", {"name": "two"})
     n = len([x for x in text(res).splitlines() if x.strip().startswith("parts/")])
-    expect(f"Exported {n} file(s)" in text(res) and " MB in all" in text(res) and "default formats" in text(res)
+    expect(f"Exported {n} file(s)" in text(res) and re.search(r" [0-9.]+ (B|KB|MB) in all", text(res)) and "default formats" in text(res)
            and "3MF for Bambu" in text(res), f"bare export: {n} files counted, with the note to narrow formats")
     res = await c.call_tool("export", {"name": "two", "parts": "nope"})
     expect(res.is_error or "no part(s) ['nope']" in text(res), "export parts= with an unknown part is refused")
@@ -334,7 +375,10 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
 
         tf = Path(os.environ.get("B123D_PRINT_TOKENS_FILE", "/nonexistent"))
         file_secret = tk.read(tf)[1] if tf.is_file() else None
-        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or not os.environ.get("B123D_PRINT_TOKENS_FILE"):
+        legacy_only = not os.environ.get("B123D_PRINT_TOKENS_FILE") and not os.environ.get("B123D_PRINT_SMOKE_URL")
+        if not (os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or legacy_only):
+            print("     (expired-link check skipped: the server's link key is not known here)")
+        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or legacy_only:
             secret = links.derive_secret(token, os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret)
             old, _ = links.sign(secret, ws_, path, -60)
             r = await h.get(head + old)
@@ -367,7 +411,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         expect(r.status_code == 401, f"no token -> 401 (got {r.status_code})")
         r = await h.post(base, json=init, headers={**hdr, "Authorization": "Bearer wrong-token-0123456789"})
         expect(r.status_code == 401, f"wrong token -> 401 (got {r.status_code})")
-        r = await h.post(base, json=init, headers={**hdr, "Authorization": f"Bearer {token}"})
+        r = await h.post(with_workspace(base, "smoke-check"), json=init, headers={**hdr, "Authorization": f"Bearer {token}"})
         expect(r.status_code == 200, f"right token -> 200 (got {r.status_code})")
         r = await h.get(base.rsplit("/", 1)[0] + "/health")
         expect(r.status_code == 200 and r.json().get("status") == "ok", "/health answers without a token")
@@ -400,9 +444,12 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")
         await link_checks(ca, cb, a, b, token, wsroot, expect)
-    async with http_client(with_workspace(url, "..%2Fetc"), token) as c:
-        res = await c.call_tool("list_parts", {})
-        expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
+    if await post_status(url, token, "..%2Fetc") == 403:  # a named token's workspace patterns refuse it first
+        expect(True, "bad workspace name is refused (403: outside the token's workspaces)")
+    else:
+        async with http_client(with_workspace(url, "..%2Fetc"), token) as c:
+            res = await c.call_tool("list_parts", {})
+            expect(res.is_error and "bad workspace name" in text(res), "bad workspace name is refused")
 
 
 # a build that never ends and keeps writing a heartbeat (a PID would be meaningless from here:

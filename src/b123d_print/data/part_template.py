@@ -36,7 +36,8 @@ VARIANTS = {{"": {{}}}}
 
 
 def build(d: Dims) -> Part:
-    """The printable part, in print orientation (bottom on Z=0). Return a dict for several."""
+    """The printable part, in print orientation (bottom on Z=0). A single Part is named "part" in
+    checks() (the script's own name works too); return {{"base": ..., "lid": ...}} to name several."""
     part = Box(d.WIDTH, d.DEPTH, d.HEIGHT, align=BED)
     part = chamfer(part.edges().group_by(Axis.Z)[0], length=d.BED_CHAMFER)
     return part

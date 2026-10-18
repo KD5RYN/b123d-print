@@ -25,6 +25,13 @@ this way, and printed:
   holes, and a wall check added after the first print broke through a 0.05 mm skin no render
   showed.
 
+Or [remix](https://kd5ryn.github.io/b123d-print/using/remix/) a model you downloaded (STL, 3MF or STEP) and change it:
+
+- *"Here's an L bracket STL I downloaded: turn its two mounting holes into slots and add
+  gussets."* The original is loaded as a solid and changed, the checks tell the original's
+  flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
+  not printed yet.)
+
 And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
 part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
 screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
@@ -37,6 +44,8 @@ STEP files to keep editing in other CAD if you want.
 | *Two-part box for an IR transceiver board, with the board stand-ins* | *Section through the LED: lid cone, board, clearances* |
 | ![Outdoor motion sensor case, arch cover](docs/images/tuya_motion_sensor_outdoor_case_arch_assembly.png) | ![Wall plate section through the counterbores](docs/images/plate_2gang_to_1gang_xy2.45.png) |
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
+| ![Remix: the downloaded L bracket and the version with slots and gussets](docs/images/remix_bracket_before_after.png) | ![Remix: the original colored where the remix differs](docs/images/remix_bracket_vs_original.png) |
+| *Remix: a downloaded bracket, before and after* | *Where the remix differs: red cut, grey added* |
 
 **Documentation: https://kd5ryn.github.io/b123d-print/**
 
@@ -109,6 +118,10 @@ It is not a general CAD framework.
 - **`compare`** — measure a part against a reference STL, 3MF or STEP: size, volume and surface
   differences, a 0–100 score, pass/fail, and a deviation view
   ([comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/)).
+- **Remix** — start from someone else's STL, 3MF or STEP: `import_model` makes a mesh a solid
+  (coplanar triangles merged), the checks tell the original's problems from the ones the remix
+  added, and a before/after view shows the change
+  ([remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/)).
 - **The workflow, model-neutral** — MCP prompts plus an [`AGENTS.md`](AGENTS.md) any agent can
   read. The rules come from real prints; one exists because a part broke through a 0.05 mm skin
   that no render showed.
@@ -130,7 +143,7 @@ or on Windows, [Docker](https://kd5ryn.github.io/b123d-print/getting-started/doc
 | --- | --- |
 | **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Advanced** | [Which mode?](https://kd5ryn.github.io/b123d-print/advanced/) · [Remote over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) |
-| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) |
+| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) |
 | **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |
 | **More** | [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |
 

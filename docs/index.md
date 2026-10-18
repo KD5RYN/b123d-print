@@ -20,6 +20,13 @@ this way, and printed:
   holes, and a wall check added after the first print broke through a 0.05 mm skin no render
   showed.
 
+Or [remix](using/remix.md) a model you downloaded (STL, 3MF or STEP) and change it:
+
+- *"Here's an L bracket STL I downloaded: turn its two mounting holes into slots and add
+  gussets."* The original is loaded as a solid and changed, the checks tell the original's
+  flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
+  not printed yet.)
+
 And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
 part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
 screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
@@ -32,6 +39,8 @@ STEP files to keep editing in other CAD if you want.
 | *Two-part box for an IR transceiver board, with the board stand-ins* | *Section through the LED: lid cone, board, clearances* |
 | ![Outdoor motion sensor case, arch cover](images/tuya_motion_sensor_outdoor_case_arch_assembly.png) | ![Wall plate section through the counterbores](images/plate_2gang_to_1gang_xy2.45.png) |
 | *Outdoor sensor case: dovetail back plate + support-free cover* | *Wall plate: section just past the face, where the wall check looks* |
+| ![Remix: the downloaded L bracket and the version with slots and gussets](images/remix_bracket_before_after.png) | ![Remix: the original colored where the remix differs](images/remix_bracket_vs_original.png) |
+| *Remix: a downloaded bracket, before and after* | *Where the remix differs: red cut, grey added* |
 
 ## Get started in 2 minutes
 
@@ -71,6 +80,9 @@ framework.
   no network.
 - **[`compare`](using/compare.md)** — measure a part against a reference STL, 3MF or STEP: size,
   volume and surface differences, a 0–100 score, pass/fail, and a deviation view.
+- **[Remix](using/remix.md)** — start from someone else's STL, 3MF or STEP: `import_model` makes
+  a mesh a solid (coplanar triangles merged), the checks tell the original's problems from the
+  ones the remix added, and a before/after view shows the change.
 - **The workflow, model-neutral** — [MCP prompts](using/tools.md#prompts) plus an
   [`AGENTS.md`](scripts/rules.md) any agent can read. The rules come from real prints; one exists
   because a part broke through a 0.05 mm skin that no render showed.

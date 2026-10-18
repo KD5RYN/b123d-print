@@ -25,7 +25,7 @@ from itertools import combinations
 import numpy as np
 from build123d import Part
 
-from .render import AXES, section_faces
+from .render import AXES, section_faces, tessellate
 
 FAIL, WARN, OK = "fail", "warn", "ok"
 CORNER = 4.0  # see wall_thickness
@@ -79,11 +79,10 @@ def _bbox_overlap(a: Part, b: Part) -> bool:
 def _down_tris(face, tol: float = 0.05):
     """Tessellated face: (triangles (n,3,3), unit normals pointing out of the material, areas,
     angle from vertical of each downward normal in degrees: 0 = wall, 90 = ceiling)."""
-    verts, tris = face.tessellate(tol, 0.1)
-    if not tris:
+    v, tris = tessellate(face, tol, 0.1)
+    if not len(tris):
         return None
-    v = np.array([[p.X, p.Y, p.Z] for p in verts])
-    tri = v[np.array(tris)]
+    tri = v[tris]
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     area = np.linalg.norm(n, axis=1) / 2
     keep = area > 1e-9
@@ -446,10 +445,11 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
     """Every spot thinner than `limit` in sections across the part (see section_levels), thinnest
     first, at most one per 2 mm. Each: {"min", "at": [x, y, z], "plane", "section_at"}."""
     spots = []
+    slicer = MeshSlicer(part) if len(part.faces()) > MESHY_FACES else None
     for plane in planes:
         plane = plane.upper()
         for at in section_levels(part, plane, step):
-            r = wall_thickness(part, plane, at, step=sample, limit=limit, exclude=_boxes_2d(ignore, plane, at))
+            r = wall_thickness(part, plane, at, step=sample, limit=limit, exclude=_boxes_2d(ignore, plane, at), slicer=slicer)
             if r is not None and np.isfinite(r["min"]) and r["min"] < limit:
                 spots.append({"min": r["min"], "at": _to_3d(plane, at, r["at"]), "plane": plane, "section_at": at,
                               "taper": bool(r.get("taper", False))})
@@ -471,7 +471,7 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
                 continue
             ax = AXES[other]
             uv = [s["at"][i] for i in range(3) if i != ax]
-            r = wall_thickness(part, other, s["at"][ax], near=uv, radius=1.0, step=sample / 2, limit=limit)
+            r = wall_thickness(part, other, s["at"][ax], near=uv, radius=1.0, step=sample / 2, limit=limit, slicer=slicer)
             if r is not None and np.isfinite(r["min"]) and r["min"] < limit:
                 if r.get("taper"):
                     confirmed = False
@@ -526,7 +526,7 @@ def _loops(face, plane: str, step: float) -> list[np.ndarray]:
 
 
 def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float | None = None, step: float = 0.1,
-                   limit: float | None = None, exclude=()) -> dict | None:
+                   limit: float | None = None, exclude=(), slicer=None) -> dict | None:
     """Thinnest material in the cross-section of `part` on `plane` at `at`.
 
     near: (u, v) in the section's own 2D axes (XY -> (x, y), XZ -> (x, z), YZ -> (y, z)); with
@@ -534,12 +534,14 @@ def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float |
     Thickness at each boundary point is the distance along the inward normal to the next
     boundary; also the closest approach between different boundary loops (hole to outside).
     limit: only walls thinner than this matter (much faster on big sections); with nothing
-    thinner the result's "min" is inf. exclude: 2D boxes (u0, v0, u1, v1) left out.
+    thinner the result's "min" is inf. exclude: 2D boxes (u0, v0, u1, v1) left out. slicer: a
+    MeshSlicer of the part, to cut its triangulation instead of the B-rep (many-faced solids).
     Returns {"min": mm, "at": [u, v], "plane":..., ...} or None when the plane misses the region."""
     plane = plane.upper()
     best = None
-    for face in section_faces(part, plane, at):
-        cand = _face_thinnest(_loops(face, plane, step), near, radius, limit, exclude)
+    faces = slicer.section(plane, at, step) if slicer is not None else (_loops(f, plane, step) for f in section_faces(part, plane, at))
+    for loops in faces:
+        cand = _face_thinnest(loops, near, radius, limit, exclude)
         if cand is not None and (best is None or cand["min"] < best["min"]):
             best = cand
     if best is None or (limit is None and not np.isfinite(best["min"])):
@@ -550,6 +552,96 @@ def wall_thickness(part: Part, plane: str, at: float, near=None, radius: float |
     best["plane"] = plane
     best["section_at"] = at
     return best
+
+
+MESHY_FACES = 1500  # solids with more faces (most come from meshes: import_model) are sliced as triangles
+
+
+class MeshSlicer:
+    """Cross-sections of a solid cut from its triangulation, for solids with thousands of faces
+    (one OCC section of a 10k-face solid takes ~0.4 s; this takes milliseconds). section() gives
+    what _loops gives per section face: 2D loops, outer CCW then its holes CW (material on the left)."""
+
+    def __init__(self, part: Part, tol: float = 0.01):
+        v, t = tessellate(part, tol, 0.1)
+        from .remix import _weld
+
+        v, t = _weld(v, t, 1e-4)  # each face has its own copy of the nodes on its edges
+        self.v, self.t = v, t[(t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])]
+
+    def section(self, plane: str, at: float, step: float) -> list[list[np.ndarray]]:
+        from matplotlib.path import Path as MPath
+
+        ax = AXES[plane.upper()]
+        keep = [i for i in range(3) if i != ax]
+        d = self.v[:, ax] - at
+        d = np.where(np.abs(d) < 1e-9, 1e-9, d)  # nothing exactly on the plane
+        s = d[self.t] > 0
+        cross = s.any(1) & ~s.all(1)
+        if not cross.any():
+            return []
+        tri = self.t[cross]
+        nv = len(self.v)
+        segs = []
+        for a, b, c in tri.tolist():
+            hit = [(p, q) for p, q in ((a, b), (b, c), (c, a)) if (d[p] > 0) != (d[q] > 0)]
+            segs.append((min(hit[0]) * nv + max(hit[0]), min(hit[1]) * nv + max(hit[1])))  # oriented below
+        pt = {}
+
+        def point(k):
+            p = pt.get(k)
+            if p is None:
+                i, j = divmod(k, nv)
+                w = d[i] / (d[i] - d[j])
+                p = pt[k] = (self.v[i] + w * (self.v[j] - self.v[i]))[keep]
+            return p
+
+        # chain: each crossing edge is shared by two crossing triangles -> undirected adjacency
+        adj: dict = {}
+        for k0, k1 in segs:
+            adj.setdefault(k0, []).append(k1)
+            adj.setdefault(k1, []).append(k0)
+        loops, seen = [], set()
+        for start in adj:
+            if start in seen:
+                continue
+            lp, prev, cur = [], None, start
+            while cur not in seen:
+                seen.add(cur)
+                lp.append(point(cur))
+                nb = [x for x in adj[cur] if x != prev and x not in seen]
+                if not nb:
+                    break
+                prev, cur = cur, nb[0]
+            if len(lp) >= 3 and start in adj[cur] and all(len(adj[k]) == 2 for k in (start, cur)):
+                loops.append(_resample(np.array(lp), step))
+        # nesting: even depth = outer (CCW), odd = hole (CW) of the smallest outer around it
+        paths = [MPath(lp) for lp in loops]
+        depth = [sum(paths[j].contains_point(loops[i][0]) for j in range(len(loops)) if j != i) for i in range(len(loops))]
+        area = [0.5 * float(np.sum(lp[:, 0] * np.roll(lp[:, 1], -1) - np.roll(lp[:, 0], -1) * lp[:, 1])) for lp in loops]
+        faces: dict[int, list] = {}
+        for i, lp in enumerate(loops):
+            outer = depth[i] % 2 == 0
+            if (area[i] < 0) == outer:
+                loops[i] = lp[::-1]
+        for i in range(len(loops)):
+            if depth[i] % 2 == 0:
+                faces[i] = [loops[i]]
+        for i in range(len(loops)):
+            if depth[i] % 2 == 1:
+                hosts = [j for j in faces if depth[j] == depth[i] - 1 and paths[j].contains_point(loops[i][0])]
+                if hosts:
+                    faces[min(hosts, key=lambda j: abs(area[j]))].append(loops[i])
+        return list(faces.values())
+
+
+def _resample(p: np.ndarray, step: float) -> np.ndarray:
+    """A closed polyline with points at most `step` apart."""
+    q = np.roll(p, -1, axis=0)
+    n = np.maximum(1, np.ceil(np.linalg.norm(q - p, axis=1) / step).astype(int))
+    if n.max() == 1:
+        return p
+    return np.concatenate([p[i] + (q[i] - p[i]) * (np.arange(n[i])[:, None] / n[i]) for i in range(len(p))])
 
 
 def _inside(p: np.ndarray, boxes) -> np.ndarray:

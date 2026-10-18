@@ -37,8 +37,9 @@ MAX_SCRIPT_BYTES = 256_000
 INSTRUCTIONS = """\
 Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> export. Read the resource b123d-print://guide (or the prompt
-design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
+check -> fix and repeat -> export. To remix an existing STL/3MF/STEP: upload_reference ->
+describe_model -> import_model in the script (prompt remix_part). Read the resource
+b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
 before reporting. render_preview and section return PNG images. When this server is remote, the
@@ -337,18 +338,35 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     return json.dumps(_printer_summary(load_settings(_root())), indent=1)
 
 
+def _human_size(n: int) -> str:
+    """Bytes as B / KB / MB, so a 34 KB export does not read as "0.0 MB"."""
+    if n < 1000:
+        return f"{n} B"
+    if n < 1_000_000:
+        return f"{n / 1000:.0f} KB"
+    return f"{n / 1e6:.1f} MB"
+
+
 @mcp.tool()
-def new_part(name: str, description: str = "", example: str | None = None) -> str:
+def new_part(name: str, description: str = "", example: str | None = None, show_code: bool = False) -> str:
     """Create parts/<name>/<name>.py from the template (Dims dataclass, build(d), VARIANTS,
-    views, checks) and return its code. name: lower_snake_case. example: copy a bundled example
-    instead (see list_parts), e.g. 'hole_coupon' to calibrate hole compensation."""
+    views, checks). name: lower_snake_case. example: copy a bundled example instead (see
+    list_parts), e.g. 'hole_coupon' to calibrate hole compensation. Returns a short confirmation;
+    the template is the b123d-print://template resource (or read_part), show_code=True returns
+    the new file's code here. Usually the next step is write_part with the whole script."""
     if not (_root() / "b123d-print.toml").exists():
         init_workspace(_root())
     try:
         p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
-    return f"Created {p.relative_to(_root())}. Edit it with write_part. Current code:\n\n{p.read_text(encoding="utf-8")}"
+    rel = p.relative_to(_root())
+    if show_code:
+        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
+    src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
+    return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
+            "shows the current code. A single part returned by build() is named 'part' in checks "
+            f"(or '{name}'); return {{'name': part}} to name several.")
 
 
 @mcp.tool()
@@ -460,7 +478,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
     files = [Path(f) for v in res["variants"] for f in v["files"]]
     total = sum(f.stat().st_size for f in files)
-    out.append(f"Exported {len(files)} file(s), {total / 1e6:.1f} MB in all.")
+    out.append(f"Exported {len(files)} file(s), {_human_size(total)} in all.")
     if not formats and not formats_configured(_root()):
         out.append("These are the default formats (STEP, STL, 3MF and PNG). Narrow them: 3MF for Bambu/Orca/Prusa "
                    "slicers, STEP to edit in other CAD; pass formats= (e.g. formats='3mf') or set `formats` in the config.")
@@ -546,6 +564,125 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
 
 
 # ---------------------------------------------------------------------------------------------
+# Remixing (start from someone else's STL / 3MF / STEP)
+
+
+def _ref_file(part: str, file: str) -> Path:
+    """A reference file: a name in parts/<part>/ref/, or a workspace-relative path (refs/x.stl)."""
+    from . import refs
+
+    if not NAME_RE.match(part or ""):
+        raise ToolError(f"bad part name {part!r}: lower_snake_case, starting with a letter")
+    if "/" not in file and "\\" not in file:
+        try:
+            refs.check_name(file)
+        except refs.RefError as e:
+            raise ToolError(str(e)) from None
+        p = refs.ref_dir(_root(), load_settings(_root()).parts_dir, part) / file
+        if p.is_symlink() or not p.is_file():
+            have = refs.listing(_root(), load_settings(_root()).parts_dir, part)
+            raise ToolError(f"no reference file {file!r} for part {part!r}; it has {have or 'none'} "
+                            "(upload_reference puts one there)")
+        return p
+    return _workspace_file(file)
+
+
+@mcp.tool()
+def upload_reference(part: str, filename: str, data_base64: str = "", overwrite: bool = False) -> str:
+    """Get an original model (STL, 3MF or STEP) onto the server, into parts/<part>/ref/<filename>,
+    to remix it (the part folder may not exist yet). With data_base64 (the whole file, base64) it
+    is stored now, up to 50 MB; that is only practical for small files, since the model has to
+    write out every byte. Without it, the result says how the USER copies the file: over HTTP a
+    signed upload link for `curl -fT <file> '<link>'` (no token needed, expires), over SSH the
+    `b123d-print push` command, locally the folder to copy it into. Then describe_model."""
+    import base64
+    import binascii
+
+    from . import refs
+
+    root, parts_dir = _root(), load_settings(_root()).parts_dir
+    try:
+        refs.check_name(filename)
+        target = refs.ref_dir(root, parts_dir, part) / filename
+    except refs.RefError as e:
+        raise ToolError(str(e)) from None
+    rel = target.relative_to(root).as_posix()
+    if data_base64:
+        if len(data_base64) > refs.MAX_BYTES * 4 // 3 + 8:
+            raise ToolError(f"too large: reference files are limited to {refs.MAX_BYTES // 1_000_000} MB")
+        try:
+            data = base64.b64decode(data_base64, validate=True)
+        except (binascii.Error, ValueError):
+            raise ToolError("data_base64 is not valid base64") from None
+        try:
+            refs.store(root, parts_dir, part, filename, data, overwrite)
+        except refs.RefError as e:
+            raise ToolError(str(e)) from None
+        return f"Stored {rel} ({len(data):,} bytes). Next: describe_model('{part}', '{filename}')."
+    if os.path.lexists(target) and not overwrite:
+        return f"{rel} is already there. Next: describe_model('{part}', '{filename}') (overwrite=True to replace it)."
+    if _http():
+        url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"],
+                                  purpose="put-overwrite" if overwrite else "put")
+        return (f"Ask the user to upload the file from their machine (no token needed; up to "
+                f"{refs.MAX_BYTES // 1_000_000} MB; the link expires "
+                f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))}):\n"
+                f"  curl -fT <path/to/{filename}> '{_base_url()}{url}'\n"
+                f"Then describe_model('{part}', '{filename}').")
+    if STATE["ssh_dest"]:
+        return (f"Ask the user to run this on their machine (the same SSH key as this MCP connection):\n"
+                f"  b123d-print push <path/to/{filename}> --part {part} --to {STATE['ssh_dest']}"
+                f"{' --overwrite' if overwrite else ''}\n"
+                f"Then describe_model('{part}', '{filename}').")
+    return (f"This server runs locally: copy the file to {target} (create the folder if needed; you may do it "
+            f"yourself if you can write files). Then describe_model('{part}', '{filename}').")
+
+
+@mcp.tool(structured_output=False)
+async def describe_model(part: str, file: str, scale: str = "", image: bool = True, size: str = "normal",
+                         inline: bool = True) -> list:
+    """Inspect an original model before remixing it: format, units (and whether they look wrong),
+    size, volume, triangles and faces before/after merging coplanar triangles, how much is curved
+    (faceted), round holes (diameter, axis, center), repairs needed, the designer/license metadata
+    the file carries, and a suggestion: MODIFY it or REDRAW it. part: the part it is for. file: a
+    name in parts/<part>/ref/ (or a workspace path such as 'refs/x.stl'). scale: '' (as the file
+    says), a factor, or the unit the file was drawn in ('inch', 'cm'). image: also a 6-view render
+    (saved as parts/<part>/out/<file>_original.png)."""
+    _image_options(size)
+    path = _ref_file(part, file)
+    sc: object = 1.0
+    if scale:
+        from .remix import UNITS
+
+        try:
+            sc = scale if scale in UNITS else float(scale)
+        except ValueError:
+            raise ToolError(f"scale: a number or one of {sorted(UNITS)}") from None
+    out = _parts_dir() / part / "out"
+    res = await _run({"op": "describe", "file": str(path), "scale": sc, "image": image, "size": size}, out)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    text = json.dumps(res["summary"], indent=1, default=str)
+    return _with_image(text, res["image"], inline) if res.get("image") else [text]
+
+
+@mcp.tool(structured_output=False)
+async def before_after(name: str, variant: str | None = None, size: str = "normal", inline: bool = True) -> list:
+    """For a remix: the original and the remix side by side, and the original colored by how far
+    the remix is from it (compare's deviation view: green = unchanged, red = changed), with
+    compare's score and metrics. The original is what build() loads with import_model, or what
+    the script's original(d) returns. export writes the same two images when it writes PNGs."""
+    _image_options(size)
+    res = await _job(name, "before_after", variant=variant, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    a, b = res["files"]
+    head = f"{name} [{res['variant']}]: {_show(a)}, {_show(b)}\n\n{res['text']}"
+    first = _with_image(head, a, inline)
+    return first + _with_image("", b, inline)[1 if inline else 0:]
+
+
+# ---------------------------------------------------------------------------------------------
 # Resources and prompts (the workflow, model-neutral)
 
 
@@ -618,6 +755,45 @@ geometry, add a variant to VARIANTS instead of copying the script if the old ver
 If the change needs a dimension I have not given, ask. After write_part: build_part,
 render_preview, a section through what changed, and check (add a Wall check if the change cuts
 deeper than a wall). Report what changed in numbers.
+
+The full rules:
+
+{_rules()}"""
+
+
+@mcp.prompt()
+def remix_part(name: str, source: str = "", change: str = "") -> str:
+    """Remix someone else's model (STL, 3MF or STEP): inspect it, choose MODIFY or REDRAW, confirm
+    the changes, then build, check (inherited vs new findings) and export."""
+    return f"""I want to remix an existing model as the part '{name}'.
+Source (file, URL, author, license): {source or '(I will tell you)'}
+What to change: {change or '(I will tell you)'}
+
+Work in these steps:
+1. Get the file: if parts/{name}/ref/ has no model yet, call upload_reference('{name}', '<file name>')
+   and give me what it says (a curl link, a `b123d-print push` command or a folder to copy into).
+2. Inspect before anything else: describe_model('{name}', '<file>') (size, units, faces, curved
+   share, holes, repairs, metadata, suggestion). If its units look wrong (a 3 mm "bracket"), ask me
+   before scaling. Note the license: -ND forbids remixes (stop and tell me), -NC means no
+   commercial use, BY means the author must be credited; ask me for the source URL, author and
+   license if the file does not say.
+3. Propose the path, with reasons: MODIFY (the default: load the original with import_model and
+   change it; always for STEP and for organic or detailed meshes) or REDRAW (model it again
+   parametrically; offer it for a simple prismatic mesh whose proportions change). List each
+   intended change as a named UPPER_CASE dimension with its value and source, then STOP and wait
+   for my confirmation.
+4. new_part('{name}'), then write_part. Record the source URL, author and license in the docstring.
+   MODIFY: `base = import_model("ref/<file>")` in build(d) (keep it in the file's position; if you
+   must turn or move it, add `original(d)` returning the base placed the same way), then add and
+   cut features with named Dims. Curves in a mesh stay faceted: to change a round hole, cut a real
+   cylinder at its center. REDRAW: model it from Dims, define `original(d)` returning
+   import_model("ref/<file>") placed like the redraw, and call before_after BEFORE changing any
+   proportion: the unchanged redraw should match the original (report the score), then change it.
+5. Verify: build_part, render_preview, section through what changed, check. Findings marked
+   "inherited from the original" were already in the original: report them, do not "fix" them
+   unless I ask. Fix every new FAIL. before_after shows the change and its score.
+6. Report as usual, plus: what changed in numbers, inherited vs new findings, the license and the
+   attribution line to use when sharing it (e.g. "Remix of <title> by <author>, <license>, <URL>").
 
 The full rules:
 
@@ -700,6 +876,48 @@ async def download(request):
                         headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
 
 
+@mcp.custom_route("/upload/{workspace}/{token}/{path:path}", methods=["PUT"])
+async def upload(request):
+    """A signed upload link (upload_reference): needs no bearer token, stores one reference file in
+    <parts_dir>/<part>/ref/ until it expires; capped at refs.MAX_BYTES."""
+    from starlette.responses import PlainTextResponse
+
+    from . import refs
+
+    ws, token, path = (request.path_params[k] for k in ("workspace", "token", "path"))
+    try:
+        links.check_path(path)
+        try:
+            links.verify(STATE["link_secret"], ws, token, path, purpose="put-overwrite")
+            overwrite = True
+        except links.LinkError as e:
+            if e.status == 410:
+                raise
+            links.verify(STATE["link_secret"], ws, token, path, purpose="put")
+            overwrite = False
+        root = _ws_dir(ws)
+        if root is None:
+            raise links.LinkError(404, "not found")
+        parts_dir = load_settings(root).parts_dir
+        part, filename = links.upload_target(parts_dir, path)
+    except links.LinkError as e:
+        return PlainTextResponse(str(e) + "\n", status_code=e.status)
+    size = int(request.headers.get("content-length") or 0)
+    if size > refs.MAX_BYTES:
+        return PlainTextResponse(f"too large: the limit is {refs.MAX_BYTES // 1_000_000} MB\n", status_code=413)
+    chunks, n = [], 0
+    async for chunk in request.stream():
+        n += len(chunk)
+        if n > refs.MAX_BYTES:
+            return PlainTextResponse(f"too large: the limit is {refs.MAX_BYTES // 1_000_000} MB\n", status_code=413)
+        chunks.append(chunk)
+    try:
+        p = refs.store(root, parts_dir, part, filename, b"".join(chunks), overwrite)
+    except refs.RefError as e:
+        return PlainTextResponse(f"refused: {e}\n", status_code=409 if "already exists" in str(e) else 400)
+    return PlainTextResponse(f"stored {p.relative_to(root).as_posix()} ({n} bytes)\n", status_code=201)
+
+
 async def _deny(send, status: int, error: str, description: str) -> None:
     body = json.dumps({"error": error, "error_description": description}).encode()
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
@@ -711,16 +929,16 @@ async def _deny(send, status: int, error: str, description: str) -> None:
 
 def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
     path = scope["path"]
-    if path.startswith("/files/"):  # never log the signature: a log line must not be a working link
+    if path.startswith(("/files/", "/upload/")):  # never log the signature: a log line must not be a working link
         parts = path.split("/", 4)
-        path = f"/files/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
+        path = f"/{parts[1]}/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
     client = (scope.get("client") or ("-",))[0]
     ws = f" ws={workspace}" if workspace is not None else ""
     print(f"b123d-print-mcp: {client} {who} {scope['method']} {path}{ws} -> {status}", file=sys.stderr, flush=True)
 
 
 class TokenAuth:
-    """ASGI wrapper: every HTTP request except /health and the signed /files/ links (which carry
+    """ASGI wrapper: every HTTP request except /health and the signed /files/ and /upload/ links (which carry
     their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
     may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
     token's single workspace if it has exactly one, else the shared root workspace. Every request
@@ -746,7 +964,7 @@ class TokenAuth:
         path = scope["path"]
         if path == "/health":
             return await self.app(scope, receive, send)
-        if path.startswith("/files/"):
+        if path.startswith(("/files/", "/upload/")):
             await self.app(scope, receive, send_logged)
             return _log(scope, "link", status["code"])
         if self.store is None:  # --insecure-no-auth
@@ -848,7 +1066,10 @@ def build_parser() -> argparse.ArgumentParser:
     add = tsub.add_parser("add", help="create a token, print it once, store only its SHA-256")
     add.add_argument("name", help="who uses it, e.g. grok-chromebook")
     add.add_argument("--workspace", action="append",
-                     help="workspace name or pattern it may use, e.g. 'grok-*' (repeatable; default: every workspace)")
+                     help="workspace name or pattern it may use, e.g. 'grok-*' or '*' for all (repeatable; "
+                          "default: one workspace named like the token)")
+    add.add_argument("--url", help="the server's address for the printed client config, e.g. https://cad.example.com "
+                                   "(default: $B123D_PRINT_PUBLIC_URL)")
     tsub.add_parser("list", help="the tokens, their workspaces and when they were made (never the tokens)")
     rv = tsub.add_parser("revoke", help="delete a token; the server stops accepting it at once")
     rv.add_argument("name")

@@ -1,4 +1,5 @@
-"""Worker process: runs ONE operation on a part script (or compares two mesh files) and writes a JSON result.
+"""Worker process: runs ONE operation on a part script (or compares two mesh files, or describes a
+reference model) and writes a JSON result.
 
 Started by b123d_print.sandbox inside an OS sandbox where one is available. Part scripts are
 model-written code, so before the script is imported this process installs an audit hook that
@@ -32,6 +33,8 @@ from b123d_print import checks as ck  # noqa: E402
 from b123d_print.config import load_settings, parse_formats  # noqa: E402
 from b123d_print.project import (  # noqa: E402
     assembly,
+    before_after,
+    built,
     dims,
     export_variant,
     load,
@@ -39,6 +42,8 @@ from b123d_print.project import (  # noqa: E402
     run_checks,
     variants,
 )
+from b123d_print import remix  # noqa: E402
+import scipy.sparse.csgraph  # noqa: E402,F401  (import_model's mesh repair, loaded before the guard)
 from b123d_print.render import render, report, section_view, side_by_side  # noqa: E402
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 
@@ -202,9 +207,23 @@ def do_compare(job: dict) -> dict:
     return res
 
 
+def do_describe(job: dict) -> dict:
+    """Describe a reference model (an untrusted file for the parsers) and render it."""
+    summary, part = remix.describe(job["file"], job.get("scale", 1.0))
+    res = {"summary": summary}
+    if job.get("image"):
+        out = Path(job["out_dir"])
+        stem = Path(job["file"]).stem
+        res["image"] = str(render(part, out / f"{stem}_original{'_small' if job.get('size') == 'small' else ''}.png",
+                                  f"original: {Path(job['file']).name}", size=job.get("size", "normal")))
+    return res
+
+
 def do(job: dict) -> dict:
     if job["op"] == "compare":
         return do_compare(job)
+    if job["op"] == "describe":
+        return do_describe(job)
     script = Path(job["script"])
     mod = load(script)
     keys = list(variants(mod))
@@ -254,6 +273,12 @@ def do(job: dict) -> dict:
             res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0)]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
+    if op == "before_after":
+        parts, orig, _ = built(mod, d)
+        if orig is None:
+            raise ValueError("this part is not a remix: build() loads nothing with import_model and the script has no original(d)")
+        r = before_after(orig, {(n or "part"): p for n, p in parts.items()}, out, tag, size)
+        return {"variant": k or "standard", **r}
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
         src = _OnlyParts(mod, [n.strip() for n in job["parts"].split(",") if n.strip()]) if job.get("parts") else mod

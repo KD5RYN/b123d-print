@@ -27,7 +27,8 @@ def checks(d):
 The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `Gap`, `Fit`) run for every
 part; list one for a part to replace its automatic copy with your arguments.
 
-`part` is a name from `build()` (a script that returns a single part uses `""`).
+`part` is a name from `build()`. A script whose `build()` returns a single `Part` names it
+`"part"` (`""` and the script's own name work too); return `{"name": part, ...}` to choose names.
 
 ## `Wall`
 

@@ -5,6 +5,22 @@ Bundled with the package, in
 Start a part from one with `new_part("my_part", example="<example>")` over MCP or
 `b123d-print new my_part --from <example>`; `b123d-print examples` lists them.
 
+## `remix_bracket`
+
+![The original L bracket and the remix side by side](../images/remix_bracket_before_after.png)
+
+A [remix](../using/remix.md): an L bracket that exists only as an STL (`ref/l_bracket.stl`, made
+for this example, CC0) is loaded with `import_model` and changed: its two mounting holes become
+slots, and two gussets stiffen the corner. The faceted 6 mm hole in the upright is the
+original's, so its overhang is reported as *inherited from the original*. `new_part(...,
+example="remix_bracket")` copies the reference file too.
+
+![The original colored where the remix differs](../images/remix_bracket_vs_original.png)
+
+*The deviation view: red where the slots were cut, grey where the gussets were added.*
+
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/remix_bracket/remix_bracket.py)
+
 ## `esp_ir_blaster`
 
 ![ESP IR blaster box, assembly with board stand-ins](../images/esp_ir_blaster_assembly.png)

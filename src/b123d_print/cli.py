@@ -1,5 +1,5 @@
-"""`b123d-print` command line: init, new, build, check, compare, config, list, and MCP over SSH
-(setup-ssh, ssh-serve, pull)."""
+"""`b123d-print` command line: init, new, build, check, compare, to-step, config, list, and MCP over
+SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
 
@@ -54,9 +54,15 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
     p = root / parts_dir / name / f"{name}.py"
     if p.exists():
         raise FileExistsError(f"{p} already exists")
-    p.parent.mkdir(parents=True)
+    p.parent.mkdir(parents=True, exist_ok=True)  # it may exist already: a reference file was uploaded first
     if example:
-        p.write_text(files("b123d_print").joinpath("examples", example, f"{example}.py").read_text(encoding="utf-8"))
+        src = files("b123d_print").joinpath("examples", example)
+        p.write_text(src.joinpath(f"{example}.py").read_text(encoding="utf-8"), encoding="utf-8")
+        if src.joinpath("ref").is_dir():  # a remix example's original model
+            (p.parent / "ref").mkdir(exist_ok=True)
+            for f in src.joinpath("ref").iterdir():
+                if f.is_file() and not (p.parent / "ref" / f.name).exists():
+                    (p.parent / "ref" / f.name).write_bytes(f.read_bytes())
         return p
     title = name.replace("_", " ").capitalize()
     p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8")
@@ -193,6 +199,37 @@ def cmd_compare(args) -> int:
     return 0 if r.passed else 1
 
 
+def cmd_to_step(args) -> int:
+    from build123d import export_step
+
+    from . import remix
+
+    src = Path(args.input)
+    try:
+        part, info = remix.load(src, remix.UNITS[args.scale] if args.scale in remix.UNITS else float(args.scale),
+                                args.max_triangles, merge=not args.no_merge)
+    except (OSError, ValueError) as e:
+        sys.exit(f"to-step: {e}")
+    out = Path(args.output) if args.output else src.with_suffix(".step")
+    if out.resolve() == src.resolve():
+        sys.exit("to-step: the output would overwrite the input; pass -o")
+    export_step(part, out)
+    print(f"{src.name}: {info.units}; {info.triangles if info.triangles is not None else '-'} triangles -> "
+          f"{info.faces_after} faces ({info.planar_faces} planar)")
+    print(f"  faces before merging: {info.faces_before}, after: {info.faces_after}")
+    print(f"  {' x '.join(f'{x:.2f}' for x in info.size)} mm, volume {info.volume:.1f} mm^3, {info.solids} solid(s), "
+          f"{info.seconds:g} s")
+    if info.faceted.get("faces"):
+        print(f"  curves stay faceted: {info.faceted['faces']} faces ({info.faceted['area_share']:.0%} of the surface) "
+              "are facets of curved surfaces (no curve fitting)")
+    else:
+        print("  no curved (faceted) surfaces")
+    for line in info.repairs + info.warnings:
+        print(f"  {line}")
+    print(f"-> {out}")
+    return 0
+
+
 def cmd_ssh(args) -> int:
     import os
 
@@ -206,6 +243,12 @@ def cmd_ssh(args) -> int:
                              Path(args.authorized_keys).expanduser() if args.authorized_keys else None)
         except (OSError, ValueError) as e:
             sys.exit(f"setup-ssh: {e}")
+    if args.cmd == "push":
+        try:
+            print(ssh.push(Path(args.file), args.part, args.dest, args.name, args.overwrite, args.ssh))
+        except RuntimeError as e:
+            sys.exit(f"push: {e}")
+        return 0
     try:
         got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh)
     except (RuntimeError, ValueError) as e:
@@ -267,6 +310,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-icp", action="store_true", help="skip the ICP refinement after the axis search")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--image", help="also write a deviation view (PNG) here")
+    p = sub.add_parser("to-step", help="convert an STL/3MF mesh to a STEP solid (coplanar triangles merged into faces; "
+                                       "curves stay faceted) and report what changed")
+    p.add_argument("input", help="the .stl or .3mf (or .step, to check it)")
+    p.add_argument("-o", "--output", help="the .step to write (default: next to the input)")
+    p.add_argument("--scale", default="1", help="a factor or the unit the file is in: inch, cm, m, ... (default 1: mm)")
+    p.add_argument("--max-triangles", type=int, help="refuse bigger meshes (default: the max_triangles setting)")
+    p.add_argument("--no-merge", action="store_true", help="keep one face per triangle")
     p = sub.add_parser("setup-ssh", help="on the server: the authorized_keys line that gives one client key the MCP server "
                                          "in one workspace, and the client config to match")
     p.add_argument("--key", required=True, help="the client's public key file (.pub), or - for stdin")
@@ -285,6 +335,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
     p.add_argument("-o", "--out", default=".", help="folder to write the files to (default: the current folder)")
     p.add_argument("--ssh", default="ssh", help="ssh command and options, e.g. 'ssh -i ~/.ssh/b123d_print -p 2222' (default: ssh)")
+    p = sub.add_parser("push", help="on the client: copy a model to remix (STL/3MF/STEP) to an SSH server, into "
+                                    "parts/<part>/ref/")
+    p.add_argument("file")
+    p.add_argument("--part", required=True, help="the part it is for (the folder is created if needed)")
+    p.add_argument("--to", dest="dest", required=True, metavar="USER@HOST", help="the server, as in your MCP config")
+    p.add_argument("--name", help="file name on the server (default: the file's own name)")
+    p.add_argument("--overwrite", action="store_true", help="replace a reference file of the same name")
+    p.add_argument("--ssh", default="ssh", help="ssh command and options (default: ssh)")
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
@@ -315,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_printer(args)
         except (KeyError, ValueError) as e:
             sys.exit(str(e).strip('"'))
-    if args.cmd in ("setup-ssh", "ssh-serve", "pull"):
+    if args.cmd in ("setup-ssh", "ssh-serve", "pull", "push"):
         return cmd_ssh(args)
     if args.cmd == "examples":
         print("\n".join(examples()))
@@ -327,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         for p in find_parts(root, parts_dir):
             print(p.relative_to(root))
         return 0
-    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare}[args.cmd](args)
+    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step}[args.cmd](args)
 
 
 if __name__ == "__main__":

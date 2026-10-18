@@ -14,6 +14,8 @@ and optionally:
     def views(d) -> list[View]                      # section views saved on export
     def checks(d) -> list[Wall | Overhang | Gap | ...]  # automatic per part: Overhang, ThinFeature,
                                                     # Holes, BedEdge, Gap, Fit
+    def original(d) -> Part                         # remixes: the original as placed in the remix
+                                                    # (default: what build() loaded with import_model)
 
     if __name__ == "__main__":
         from b123d_print import run
@@ -87,6 +89,28 @@ def printables(mod: ModuleType, d) -> dict[str, Part]:
     return dict(r) if isinstance(r, dict) else {"": r}
 
 
+def built(mod: ModuleType, d) -> tuple[dict[str, Part], Part | None, list]:
+    """printables() plus the remix's original: what `original(d)` returns, else what build() loaded
+    with import_model (None for a part that is not a remix), and the import records."""
+    from . import remix
+
+    remix.reset_imports()
+    parts = printables(mod, d)
+    imports = list(remix.IMPORTED)
+    f = getattr(mod, "original", None)
+    if f is not None:
+        orig = f(d) if d is not None else f()
+        imports += remix.IMPORTED[len(imports):]
+    elif imports:
+        from build123d import Compound
+
+        orig = imports[0][0] if len(imports) == 1 else Part(Compound([s for p, _ in imports for s in p.solids()]).wrapped)
+    else:
+        orig = None
+    remix.reset_imports()
+    return parts, orig, [info for _, info in imports]
+
+
 def assembly(mod: ModuleType, d) -> list[tuple[Part, str, str]] | None:
     f = getattr(mod, "assembly", None)
     return f(d) if f else None
@@ -121,24 +145,52 @@ def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True
     tag = key or "standard"
     try:
         d = dims(mod, key)
-        parts = printables(mod, d)
+        parts, orig, imports = built(mod, d)
         asm = assembly(mod, d)
     except Exception as e:
         return [ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}", {"traceback": traceback.format_exc()})]
-    out = []
+    out = [import_finding(i) for i in imports]
     for name, p in parts.items():
         valid = bool(p.is_valid) and p.volume > 0
         out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
                               "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
-    for spec in check_specs(mod, d, {(k or "part"): v for k, v in parts.items()}, asm):
+    named = {(k or "part"): v for k, v in parts.items()}
+    lookup = dict(named)
+    if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
+        lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
+    on_original: dict = {}  # the same checks on the original, for telling inherited findings from new ones
+    for spec in check_specs(mod, d, named, asm):
         try:
-            out.extend(spec.run({(k or "part"): v for k, v in parts.items()}, asm, settings))
+            found = spec.run(lookup, asm, settings)
+            if orig is not None and isinstance(spec, INHERITABLE) and getattr(spec, "other", None) is None:
+                twin = replace(spec, part=ORIGINAL)
+                k = repr(twin)
+                if k not in on_original:
+                    on_original[k] = twin.run({ORIGINAL: orig}, None, settings)
+                from .remix import mark_inherited
+
+                found = mark_inherited(found, on_original[k])
+            out.extend(found)
         except Exception as e:
             out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
                                   {"traceback": traceback.format_exc()}))
     if nudge:
         out.extend(setup_findings(mod, out))
     return out
+
+
+INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.Gap)  # automatic checks also run on the original
+ORIGINAL = "original"
+
+
+def import_finding(info) -> ck.Finding:
+    """What import_model did with a reference file: a WARN when its units look wrong."""
+    msg = info.summary()
+    extra = info.repairs + info.notes + info.warnings
+    if extra:
+        msg += ". " + ". ".join(extra)
+    return ck.Finding(ck.WARN if info.warnings else ck.OK, "import", Path(info.file).name, msg,
+                      {k: v for k, v in info.__dict__.items() if k != "metadata"} | {"metadata": info.metadata})
 
 
 def setup_findings(mod: ModuleType, findings: list[ck.Finding]) -> list[ck.Finding]:
@@ -162,7 +214,7 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     out = out or script.parent / "out"
     out.mkdir(parents=True, exist_ok=True)
     d = dims(mod, key)
-    parts = printables(mod, d)
+    parts, orig, _ = built(mod, d)
     asm = assembly(mod, d)
     summary = {"variant": key or "standard", "parts": {}, "files": []}
     for pname, p in parts.items():
@@ -175,6 +227,10 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     if asm:
         f = render(asm, out / f"{out_name(script.stem, key, 'assembly')}.png", f"{out_name(script.stem, key, '')} assembly")
         summary["files"].append(str(f))
+    if orig is not None:
+        r = before_after(orig, parts, out, out_name(script.stem, key, ""))
+        summary["files"] += r["files"]
+        summary["original"] = {"score": r["score"], "text": r["text"]}
     vf = getattr(mod, "views", None)
     for i, v in enumerate(vf(d) if vf else []):
         if v.parts:
@@ -186,6 +242,25 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
                          f"{title}{', ' + v.title if v.title else ''}")
         summary["files"].append(str(f))
     return summary
+
+
+def before_after(orig: Part, parts: dict, out: Path, stem: str, size: str = "normal") -> dict:
+    """A remix next to its original (<stem>_before_after.png) and the original colored by how far
+    the remix is from it (<stem>_vs_original.png, compare's deviation view), with compare's score."""
+    from build123d import Compound
+
+    from . import compare as cmp
+    from .render import side_by_side
+
+    remix_part = next(iter(parts.values())) if len(parts) == 1 else Part(Compound(
+        [s for p in parts.values() for s in p.solids()]).wrapped)
+    small = "_small" if size == "small" else ""
+    a = render(side_by_side([(orig, "original"), (remix_part, "remix")]), out / f"{stem}_before_after{small}.png",
+               f"{stem}: original (left) and remix (right)", size=size)
+    r = cmp.compare(orig, remix_part)
+    b = cmp.render_comparison(orig, remix_part, r, out / f"{stem}_vs_original{small}.png",
+                              f"{stem}: original, red where the remix differs (score {r.score:.1f})", size=size)
+    return {"files": [str(a), str(b)], "score": r.score, "text": r.text(), "metrics": r.metrics}
 
 
 def run(script_file: str, argv: list[str] | None = None) -> None:

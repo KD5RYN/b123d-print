@@ -63,6 +63,7 @@ nav:
       - The checks: using/checks.md
       - Sandbox: using/sandbox.md
       - Comparing parts: using/compare.md
+      - Remixing a part: using/remix.md
   - Writing part scripts:
       - The part script: scripts/convention.md
       - Checks API: scripts/checks-api.md
