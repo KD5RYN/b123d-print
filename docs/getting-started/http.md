@@ -159,7 +159,7 @@ exit code when something is wrong:
 
 ### Stopping
 
-On SIGTERM (`docker stop`, `systemctl stop`) or Ctrl-C the server stops accepting requests and
+On SIGTERM (`docker stop`, `systemctl stop`), Ctrl-C, or on Windows Ctrl-Break, the server stops accepting requests and
 gives calls that are running `--shutdown-grace` seconds (default 30) to finish. Builds still
 running after that are killed, and the server exits with code 0. Give the service manager a
 longer stop timeout than that: `stop_grace_period` in Compose, `docker stop -t`,

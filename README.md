@@ -133,8 +133,8 @@ It is not a general CAD framework.
 
 Not needed for most people. To keep the parts on a home server and design from a laptop, use
 [SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/); for many agents sharing one server (eval runs, a team),
-[HTTP](https://kd5ryn.github.io/b123d-print/getting-started/http/) with a named token per tool; for the strongest isolation,
-or on Windows, [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/).
+[HTTP](https://kd5ryn.github.io/b123d-print/getting-started/http/) with a named token per tool; for the strongest isolation
+(also on Windows), [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/).
 [Which mode?](https://kd5ryn.github.io/b123d-print/advanced/) compares them.
 
 ## Documentation
@@ -149,9 +149,11 @@ or on Windows, [Docker](https://kd5ryn.github.io/b123d-print/getting-started/doc
 
 ## Status
 
-**0.x — early.** The part-script convention may still change. CI tests macOS and Ubuntu, the
-built package via `uvx`, and the Docker image on every push. Windows is untested; Docker is the
-safe route there.
+**0.x — early.** The part-script convention may still change. CI tests macOS, Ubuntu and
+Windows, the built package via `uvx`, and the Docker image on every push. On Windows the server
+runs natively for local use, but without an OS sandbox (process isolation and an audit hook
+only); use WSL2 or Docker for isolation. SSH mode's server side is macOS and Linux only; Windows
+works as an SSH or HTTP client. [Platforms and status](https://kd5ryn.github.io/b123d-print/#platforms-and-status).
 
 ## Credits and license
 

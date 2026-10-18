@@ -50,7 +50,7 @@ The full `--help` output is in the [Reference](../reference.md#b123d-print-mcp).
 
 Settings → Developer → Edit Config (`claude_desktop_config.json`): the block in
 [Quick start](quick-start.md). Always pass `--workspace`. If the server fails with "uvx not
-found", use the full path from `which uvx` as `command` (desktop apps don't see your shell's
+found", use the full path from `which uvx` (Windows: `where.exe uvx`) as `command` (desktop apps don't see your shell's
 `PATH`).
 
 ## Claude Code

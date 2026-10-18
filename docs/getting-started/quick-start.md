@@ -31,7 +31,13 @@ tell you the steps instead.
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-    (Windows and other ways: the [uv install page](https://docs.astral.sh/uv/getting-started/installation/).)
+    On Windows, in PowerShell (installs for your account only, no admin):
+
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+
+    (Other ways: the [uv install page](https://docs.astral.sh/uv/getting-started/installation/).)
 
 2. **Add the server to your assistant.**
 
@@ -56,7 +62,11 @@ tell you the steps instead.
         }
         ```
 
-        If it then says "uvx not found", put the full path from `which uvx` as `command`.
+        On Windows the folder is written with doubled backslashes:
+        `"C:\\Users\\you\\parts"`.
+
+        If it then says "uvx not found", put the full path from `which uvx` (Windows:
+        `where.exe uvx`) as `command`.
 
     Cursor, VS Code, Gemini CLI, Codex and others: [Connect your MCP client](mcp-clients.md).
 
