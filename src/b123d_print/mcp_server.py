@@ -8,7 +8,8 @@ Over HTTP every request needs `Authorization: Bearer <token>`, and each client p
 workspace with `/mcp?workspace=<name>` (or the header `X-B123D-Workspace`), which is the folder
 <workspace>/workspaces/<name>; without one, clients share <workspace> itself. Files the server
 writes come back as signed download links (GET /files/..., no token, they expire) and as
-b123d-print://files/ resources.
+b123d-print://files/ resources; download_part gives one signed link (GET /zip/...) to a zip of a
+whole part. A named workspace nobody uses for --retention-days (default 30) is removed.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import jobqueue, links, sandbox, tokens
+from . import handoff, jobqueue, links, sandbox, tokens
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
 from .project import find_parts
@@ -42,36 +43,74 @@ describe_model -> import_model in the script (prompt remix_part). Read the resou
 b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
-before reporting. render_preview and section return PNG images. When this server is remote, the
-files it writes stay on it. Over HTTP: download them from the links that export returns (plain
-HTTPS GET, no token, they expire; e.g. curl -fO <url>) or read the b123d-print://files/ resources.
-Over SSH: export gives the exact `b123d-print pull ...` command that copies them to the client.
-Never try to open a shell on the server for them."""
+before reporting. render_preview and section return PNG images.
+When this server is remote (HTTP or SSH), it is a workbench, not storage: what it writes is a
+temporary working copy, deleted after some days unused. Use ONLY these MCP tools and the links they
+return; the server gives no shell, ssh or scp access. Last step, before reporting: download_part
+(name) and bring the part home into the project folder in the same layout as a local install
+(parts/<name>/<name>.py, parts/<name>/out/, parts/<name>/ref/): over HTTP `curl -fLo <name>.zip
+'<link>'` and unzip it in the project folder; over SSH the `b123d-print pull` command it gives.
+Then check the files are there on the user's machine. Locally (stdio) the files are already in
+the project folder."""
 
-WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+REMOTE_DOC = """
+    Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
+    when unused; bring the part home with download_part (one zip in the parts/<name>/ layout).
+    Never use ssh, scp or a shell on the server: there is none."""
+
+WORKSPACE_RE = handoff.WORKSPACE_RE
 _WORKSPACE: contextvars.ContextVar[str | None] = contextvars.ContextVar("b123d_print_workspace", default=None)
 _REQUEST: contextvars.ContextVar = contextvars.ContextVar("b123d_print_request", default=None)
 
 
 async def _request_workspace(ctx, call_next):
-    """HTTP: the workspace this request asked for (?workspace=<name> or X-B123D-Workspace)."""
+    """HTTP: the workspace this request asked for (?workspace=<name> or X-B123D-Workspace). The
+    request counts as a use of that workspace: retention never removes it meanwhile (see handoff.py)."""
     req = getattr(ctx, "request", None)
     name = None
     if req is not None and hasattr(req, "query_params"):
         name = (req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
                 or req.scope.get("state", {}).get("b123d_workspace"))  # a token's default workspace (TokenAuth)
     token, rtoken = _WORKSPACE.set(name), _REQUEST.set(req)
+    _in_use(name, True)
     try:
-        return await call_next(ctx)
+        return _scrub_result(await call_next(ctx))
     finally:
+        _in_use(name, False)
         _WORKSPACE.reset(token)
         _REQUEST.reset(rtoken)
+
+
+def _scrub_result(result):
+    """Remote: no tool result, error messages included, shows the server's own folders (_scrub)."""
+    content = result.get("content") if isinstance(result, dict) else getattr(result, "content", None)
+    if not _remote() or not isinstance(content, list):
+        return result
+    try:
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "text" and isinstance(c.get("text"), str):
+                c["text"] = _scrub(c["text"])
+            elif getattr(c, "type", "") == "text":
+                c.text = _scrub(c.text)
+    except ToolError:  # a bad workspace name: _root() refused it, and the result says so
+        pass
+    return result
+
+
+def _in_use(name: str | None, start: bool) -> None:
+    """A request for workspace `name` starts or ends: touch it, and hold it against retention."""
+    if not name or not WORKSPACE_RE.match(name):
+        return
+    ret = STATE.get("retention")
+    if ret is not None:
+        (ret.enter if start else ret.leave)(name)
+    handoff.touch(STATE["root"] / "workspaces" / name)
 
 
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
 STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
-               "tokens": None, "queue": None,
+               "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
 EMBED_MAX = 2_000_000  # bytes: export(embed=True) inlines files up to this size ...
 EMBED_TOTAL = 8_000_000  # ... and this much in all
@@ -139,11 +178,48 @@ def _error_text(res: dict) -> str:
         s += f"\n\n{res['traceback']}"
     if res.get("log"):
         s += f"\n\nOutput:\n{res['log']}"
-    return s
+    return _scrub(s)
 
 
 def _http() -> bool:
     return STATE["transport"] == "http"
+
+
+def _remote() -> bool:
+    """HTTP or SSH: the files are on a server, not on the client's machine."""
+    return _http() or bool(STATE["ssh_dest"])
+
+
+def _kept() -> str:
+    """How long the server keeps this workspace, for the notes in results."""
+    days = STATE["retention_days"]
+    if _http() and _WORKSPACE.get() and days > 0:
+        return f"deleted after {days:g} days unused"
+    return "kept for now, but it is not your copy"
+
+
+def _home_note(name: str | None) -> str:
+    """Remote: where the files are and how to bring them home (empty over stdio)."""
+    if not _remote():
+        return ""
+    call = f"download_part('{name}')" if name else "download_part('<part>')"
+    how = (f"{call} and unzip it in your project folder (it creates parts/{name or '<part>'}/)" if _http() else
+           f"{call} gives the `b123d-print pull` command that copies it into parts/{name or '<part>'}/ in your project folder")
+    return (f"The server copy is a temporary working copy ({_kept()}). Bring it home: {how}. "
+            "Do not use ssh/scp: the server gives no shell access.")
+
+
+def _files_doc(f):
+    """Tools that write files: their description says how a remote client gets them (REMOTE_DOC)."""
+    f.__doc__ = f.__doc__.rstrip() + REMOTE_DOC
+    return f
+
+
+def _scrub(text: str) -> str:
+    """Remote: the server's own folders never show in a result (workspace-relative paths only)."""
+    if not _remote():
+        return text
+    return handoff.hide_paths(text, [_root(), _root().resolve(), STATE["root"], STATE["root"].resolve()])
 
 
 def _token_name() -> str | None:
@@ -247,13 +323,21 @@ def _with_image(text: str, image: str, inline: bool) -> list:
     and over HTTP its download link and resource link."""
     note, extra = _image_links(image)
     if not inline and not extra:
-        note = f"\nImage file: {image}"
+        note = f"\nImage file: {_show(image)}"
     return [text + note, *([Image(path=image)] if inline else []), *extra]
 
 
+def _with_note(result: list, name: str | None) -> list:
+    """Remote: the bring-it-home note after a result that wrote files."""
+    note = _home_note(name)
+    if note and result and isinstance(result[0], str):
+        result[0] += "\n\n" + note
+    return result
+
+
 def _show(image: str) -> str:
-    """The image's path as the client should see it: workspace-relative over HTTP, absolute over stdio."""
-    return Path(image).relative_to(_root()).as_posix() if _http() else image
+    """The image's path as the client should see it: workspace-relative over HTTP and SSH, absolute over stdio."""
+    return Path(image).relative_to(_root()).as_posix() if _remote() else image
 
 
 # ---------------------------------------------------------------------------------------------
@@ -268,7 +352,8 @@ def list_parts() -> str:
     return json.dumps(
         {
             "version": _pkg_version(),
-            "workspace": str(_root()),
+            **({"workspace": _ws_name(), "files": "on the server: a temporary working copy; download_part(<name>) "
+                                                    "brings a part home"} if _remote() else {"workspace": str(_root())}),
             "parts_dir": s.parts_dir,
             "parts": parts,
             "examples": examples(),
@@ -370,7 +455,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
         raise ToolError(str(e)) from None
     rel = p.relative_to(_root()).as_posix()
     if show_code:
-        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
+        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_bytes().decode('utf-8')}"
     src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
     return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
             "shows the current code. A single part returned by build() is named 'part' in checks "
@@ -380,7 +465,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
 @mcp.tool()
 def read_part(name: str) -> str:
     """Return the current code of a part script."""
-    return _script(name).read_text(encoding="utf-8")
+    return _script(name).read_bytes().decode("utf-8")  # exactly as stored: what download_part / pull bring home
 
 
 @mcp.tool()
@@ -394,7 +479,7 @@ def write_part(name: str, code: str) -> str:
         compile(code, str(p), "exec")
     except SyntaxError as e:
         return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
-    p.write_text(code, encoding="utf-8")
+    p.write_text(code, encoding="utf-8", newline="")  # exactly as sent, on every OS (no CRLF on Windows)
     return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
 
 
@@ -411,6 +496,7 @@ async def build_part(name: str, variant: str | None = None) -> str:
 
 
 @mcp.tool(structured_output=False)
+@_files_doc
 async def render_preview(name: str, variant: str | None = None, parts: str | None = None,
                          size: str = "normal", inline: bool = True) -> list:
     """Render six views (iso, top, front, right, iso from below, bottom) as a PNG image.
@@ -425,10 +511,11 @@ async def render_preview(name: str, variant: str | None = None, parts: str | Non
         return [_error_text(res)]
     summary = {"variant": res["variant"], "layout": res["layout"], "drawn": res["drawn"], "parts": res["parts"],
                "file": _show(res["image"])}
-    return _with_image(json.dumps(summary, indent=1), res["image"], inline)
+    return _with_note(_with_image(json.dumps(summary, indent=1), res["image"], inline), name)
 
 
 @mcp.tool(structured_output=False)
+@_files_doc
 async def section(name: str, plane: str, at: float, variant: str | None = None, parts: str | None = None,
                   size: str = "normal", inline: bool = True) -> list:
     """Cross-section as a PNG image, each part in its own color. plane: 'XY' (at = Z height),
@@ -442,7 +529,8 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
     res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at, size=size)
     if not res.get("ok"):
         return [_error_text(res)]
-    return _with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}", res["image"], inline)
+    return _with_note(_with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}",
+                                  res["image"], inline), name)
 
 
 async def _check(name: str, variant: str | None) -> dict:
@@ -487,7 +575,8 @@ async def check(name: str, variant: str | None = None) -> str:
     overhangs > 45 deg from vertical in print orientation (bed face ignored) and bridge spans,
     thin features (walls under one line width fail), round-topped horizontal holes, fillets on
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
-    around deep cuts) and Probes. Fix every FAIL; report every WARN."""
+    around deep cuts) and Probes. Fix every FAIL; report every WARN. On a remote server (HTTP/SSH)
+    the part is not on the user's machine until download_part brings it home."""
     res = await _check(name, variant)
     if not res.get("ok"):
         return _error_text(res)
@@ -496,7 +585,10 @@ async def check(name: str, variant: str | None = None) -> str:
         lines.append(f"\n{name} [{v}]")
         for f in findings:
             lines.append(f"  [{f['level'].upper():4}] {f['check']:8} {f['target']}: {f['message']}")
-    return "\n".join(lines)
+    if res["passed"] and _remote():
+        lines.append(f"\nNot on your machine yet: download_part('{name}') brings the part home when it is done. "
+                     + _home_note(name))
+    return _scrub("\n".join(lines))
 
 
 @mcp.tool()
@@ -526,6 +618,7 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
 
 
 @mcp.tool(structured_output=False)
+@_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
                  embed: bool = False) -> list:
     """Export printable parts to parts/<name>/out/. Default: every part, all variants.
@@ -534,9 +627,9 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
     user's `formats` setting (default: all four). Ask the user which they want if unclear.
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
-    and a b123d-print://files/ resource link; over SSH the result gives the `b123d-print pull`
-    command that copies the files to the client. embed=True also puts files up to 2 MB into the
-    result itself, for clients that can neither fetch URLs nor read resources."""
+    and a b123d-print://files/ resource link; download_part gets the whole part (script, out/,
+    ref/) in one zip. embed=True also puts files up to 2 MB into the result itself, for clients
+    that can neither fetch URLs nor read resources."""
     if formats:
         try:
             parse_formats(formats)
@@ -573,20 +666,94 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     if expires:
         out.append("\n" + _expiry_note(expires))
     if STATE["ssh_dest"]:
-        out.append("\n" + _pull_note(name, formats, len(files)))
+        out.append("\n" + _pull_note(name, formats, None))
+    if _remote():
+        out.append("\n" + _home_note(name))
     return ["\n".join(out), *extra]
 
 
-def _pull_note(name: str, formats: str | None, n: int) -> str:
-    """SSH: the files are on the server; this is the command that copies them to the client."""
+def _pull_cmd(name: str, formats: str | None, variant: str | None) -> str:
     import shlex
 
     cmd = f"b123d-print pull {name}"
     if formats:
         cmd += f" --formats {shlex.quote(formats)}"
-    return (f"These {n} file(s) are on the SSH server ({STATE['ssh_dest']}). To copy them to the client machine, "
-            f"run there (it uses the same SSH key as this MCP connection; add -o DIR to choose the folder):\n"
-            f"  {cmd} --from {STATE['ssh_dest']}")
+    if variant is not None:
+        cmd += f" --variant {shlex.quote(variant or 'standard')}"
+    return f"{cmd} --from {STATE['ssh_dest']}"
+
+
+def _pull_note(name: str, formats: str | None, variant: str | None) -> str:
+    """SSH: the files are on the server; this is the command that copies the part to the client."""
+    return (f"The part is on the SSH server ({STATE['ssh_dest']}). To copy it to the client machine, run this "
+            f"there, in the project folder (it uses the same SSH key as this MCP connection; -o DIR picks another "
+            f"project folder). It writes parts/{name}/{name}.py, parts/{name}/out/ and parts/{name}/ref/:\n"
+            f"  {_pull_cmd(name, formats, variant)}")
+
+
+def _part_files(name: str, variant: str | None, formats: str | None) -> list[tuple[str, Path]]:
+    _script(name)  # the usual "no part" error, with the list of parts
+    try:
+        fmts = parse_formats(formats) if formats else None
+        return handoff.part_files(_root(), load_settings(_root()).parts_dir, name, variant, fmts)
+    except (ValueError, SyntaxError) as e:
+        raise ToolError(str(e)) from None
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+def download_part(name: str, variant: str | None = None, formats: str | None = None, embed: bool = False) -> list:
+    """Bring a whole part home from a remote server, in the same layout a local install writes:
+    parts/<name>/<name>.py, parts/<name>/out/ (exports, renders, sections) and parts/<name>/ref/
+    (reference models). Over HTTP: ONE signed link (no token needed, expires) to a zip of all of
+    it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
+    files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
+    (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
+    = ''); formats: only those out/ files (step, stl, 3mf, png); the script and ref/ always come.
+    embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
+    URLs nor read resources. Call it as the last step of remote work, before reporting."""
+    files = _part_files(name, variant, formats)
+    total = sum(p.stat().st_size for _, p in files)
+    parts_dir = load_settings(_root()).parts_dir
+    prefix = f"{parts_dir}/{name}"
+    listing = "\n".join(f"  {prefix}/{rel}  ({_human_size(p.stat().st_size)})" for rel, p in files)
+    head = f"Part '{name}': {handoff.summary(files)}, {_human_size(total)} in all."
+    if not _remote():
+        return [f"{head}\nThis server runs locally: the files are already in the project folder, "
+                f"{_root() / parts_dir / name}. Nothing to download.\n{listing}"]
+    if STATE["ssh_dest"]:
+        return [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
+                f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+    query = links.zip_query(variant, formats)
+    url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
+    url = _base_url() + url
+    when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
+    text = (f"{head}\n"
+            f"Download it (one zip, no token needed; the link expires {when}; after that call download_part again):\n"
+            f"  curl -fLo {name}.zip '{url}'\n"
+            f"Then, in the project folder: unzip -o {name}.zip   (Windows: tar -xf {name}.zip)\n"
+            f"It creates the same layout as a local install (paths relative to the project folder):\n{listing}\n"
+            f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n\n"
+            + _home_note(name))
+    from mcp_types import ResourceLink
+
+    uri = f"b123d-print://download/{_ws_name()}/{name}"
+    out: list = [text, ResourceLink(uri=uri, name=f"{name}.zip", mime_type="application/zip",
+                                    description=f"the whole part as a zip (unfiltered); download: {url}")]
+    if embed:
+        if total > EMBED_TOTAL:
+            out[0] += f"\n(embed: not embedded, the part is over {EMBED_TOTAL // 1_000_000} MB; use the link)"
+        else:
+            out.append(_embedded_bytes(handoff.zip_bytes(files, prefix), uri, "application/zip"))
+    return out
+
+
+def _embedded_bytes(data: bytes, uri: str, mime: str):
+    import base64
+
+    from mcp_types import BlobResourceContents, EmbeddedResource
+
+    return EmbeddedResource(resource=BlobResourceContents(uri=uri, mime_type=mime, blob=base64.b64encode(data).decode()))
 
 
 def _workspace_file(rel: str) -> Path:
@@ -604,6 +771,7 @@ def _workspace_file(rel: str) -> Path:
 
 
 @mcp.tool(structured_output=False)
+@_files_doc
 async def compare(reference: str, candidate: str, thresholds: str = "", image: bool = False,
                   size: str = "normal", inline: bool = True) -> list:
     """Compare a part with a reference model: bounding box, volume and surface area differences,
@@ -630,7 +798,11 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
     if not res.get("ok"):
         return [_error_text(res)]
     text = res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)
-    return _with_image(text, res["image"], inline) if res.get("image") else [text]
+    if not res.get("image"):
+        return [text]
+    m = re.match(rf"^{re.escape(load_settings(_root()).parts_dir)}/([a-z][a-z0-9_]*)/", cand.relative_to(_root().resolve()).as_posix()
+                 if cand.is_relative_to(_root().resolve()) else "")
+    return _with_note(_with_image(text, res["image"], inline), m.group(1) if m else None)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -732,8 +904,8 @@ async def describe_model(part: str, file: str, scale: str = "", image: bool = Tr
     res = await _run({"op": "describe", "file": str(path), "scale": sc, "image": image, "size": size}, out)
     if not res.get("ok"):
         return [_error_text(res)]
-    text = json.dumps(res["summary"], indent=1, default=str)
-    return _with_image(text, res["image"], inline) if res.get("image") else [text]
+    text = _scrub(json.dumps(res["summary"], indent=1, default=str))
+    return _with_note(_with_image(text, res["image"], inline), part) if res.get("image") else [text]
 
 
 @mcp.tool(structured_output=False)
@@ -749,7 +921,7 @@ async def before_after(name: str, variant: str | None = None, size: str = "norma
     a, b = res["files"]
     head = f"{name} [{res['variant']}]: {_show(a)}, {_show(b)}\n\n{res['text']}"
     first = _with_image(head, a, inline)
-    return first + _with_image("", b, inline)[1 if inline else 0:]
+    return _with_note(first + _with_image("", b, inline)[1 if inline else 0:], name)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -783,8 +955,34 @@ def workspace_file(workspace: str, path: str) -> bytes:
         raise ResourceError(f"no file {path!r} (only parts/<part>/out/ files are served)") from None
 
 
+@mcp.resource("b123d-print://download/{workspace}/{part}", mime_type="application/zip")
+def part_zip(workspace: str, part: str) -> bytes:
+    """A whole part as a zip in the local layout (parts/<part>/<part>.py, out/, ref/), in this
+    session's own workspace; download_part links to it."""
+    from mcp.server.mcpserver.exceptions import ResourceError
+
+    if workspace != _ws_name():
+        raise ResourceError(f"workspace {workspace!r} is not this session's ({_ws_name()!r})")
+    if not NAME_RE.match(part or ""):
+        raise ResourceError(f"bad part name {part!r}")
+    parts_dir = load_settings(_root()).parts_dir
+    try:
+        return handoff.zip_bytes(handoff.part_files(_root(), parts_dir, part), f"{parts_dir}/{part}")
+    except handoff.HandoffError as e:
+        raise ResourceError(str(e)) from None
+
+
 def _rules() -> str:
     return data("AGENTS.md")
+
+
+def _remote_step(name: str = "<name>") -> str:
+    """The last step of remote work, the same in every prompt."""
+    return (f"download_part('{name}') and bring the part home into my project folder, in the same layout "
+            f"as a local install (parts/{name}/{name}.py, parts/{name}/out/, parts/{name}/ref/): over HTTP "
+            f"`curl -fLo {name}.zip '<link>'` and unzip it in the project folder, over SSH the `b123d-print pull` "
+            "command it gives. Check the files exist on my machine before reporting. Use only the MCP tools and "
+            "their links: never ssh, scp or a shell on the server (there is none). The server copy is temporary.")
 
 
 @mcp.prompt()
@@ -810,9 +1008,11 @@ Work in these steps:
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.
-4. Report: overall X x Y x Z, key feature sizes, validity, clearances (per side or total) and
-   hole compensation applied, check results and warnings, print orientation, supports needed.
-   Then offer the design review for the part's style (design_metrics and the design rubric).
+4. Remote server (HTTP or SSH) only, required: {_remote_step()}
+5. Report: overall X x Y x Z, key feature sizes, validity, clearances (per side or total) and
+   hole compensation applied, check results and warnings, print orientation, supports needed,
+   and where the files are on my machine. Then offer the design review for the part's style
+   (design_metrics and the design rubric).
 
 The full rules:
 
@@ -828,7 +1028,8 @@ read_part first. Keep the script's conventions: change Dims fields rather than n
 geometry, add a variant to VARIANTS instead of copying the script if the old version should stay.
 If the change needs a dimension I have not given, ask. After write_part: build_part,
 render_preview, a section through what changed, and check (add a Wall check if the change cuts
-deeper than a wall). Report what changed in numbers.
+deeper than a wall). Remote server (HTTP or SSH) only, required: {_remote_step(name)}
+Report what changed in numbers.
 
 The full rules:
 
@@ -866,7 +1067,8 @@ Work in these steps:
 5. Verify: build_part, render_preview, section through what changed, check. Findings marked
    "inherited from the original" were already in the original: report them, do not "fix" them
    unless I ask. Fix every new FAIL. before_after shows the change and its score.
-6. Report as usual, plus: what changed in numbers, inherited vs new findings, the license and the
+6. Remote server (HTTP or SSH) only, required: {_remote_step(name)}
+7. Report as usual, plus: what changed in numbers, inherited vs new findings, the license and the
    attribution line to use when sharing it (e.g. "Remix of <title> by <author>, <license>, <URL>").
 
 The full rules:
@@ -916,6 +1118,7 @@ def design_review(name: str, style: str = "") -> str:
    measure a suggestion, but leave the script as it was.
 6. If I say yes: change Dims (a new variant if both should stay), then build_part,
    render_preview, sections, check, and design_metrics again to show before and after.
+   Remote server (HTTP or SSH) only, required: {_remote_step(name)}
 
 {data("design_review.md")}"""
 
@@ -976,10 +1179,62 @@ async def download(request):
         f = links.servable(root, load_settings(root).parts_dir, path)
     except links.LinkError as e:
         return PlainTextResponse(str(e) + "\n", status_code=e.status)
+    if ws != links.ROOT_WS:
+        handoff.touch(root)  # a download is a use too
     mime = links.content_type(path)
     return FileResponse(f, media_type=mime, filename=f.name,
                         content_disposition_type="inline" if mime == "image/png" else "attachment",
                         headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+
+
+@mcp.custom_route("/zip/{workspace}/{token}/{file}", methods=["GET"])
+async def download_zip(request):
+    """A signed zip link (download_part): needs no bearer token, serves a zip of one part (filtered
+    as signed) until it expires. Built when fetched, so it holds the files as they are now."""
+    import tempfile
+
+    from starlette.background import BackgroundTask
+    from starlette.responses import PlainTextResponse, StreamingResponse
+
+    ws, token, file = (request.path_params[k] for k in ("workspace", "token", "file"))
+    variant, formats = request.query_params.get("variant"), request.query_params.get("formats")
+    part = file[:-4] if file.endswith(".zip") else ""
+    try:
+        if not NAME_RE.match(part):
+            raise links.LinkError(404, "not found")
+        links.verify_zip(STATE["link_secret"], ws, token, part, links.zip_query(variant, formats))
+        root = _ws_dir(ws)
+        if root is None:
+            raise links.LinkError(404, "not found")
+    except links.LinkError as e:
+        return PlainTextResponse(str(e) + "\n", status_code=e.status)
+    name = ws if ws != links.ROOT_WS else None
+    _in_use(name, True)
+    try:
+        parts_dir = load_settings(root).parts_dir
+
+        def build():
+            files = handoff.part_files(root, parts_dir, part, variant, parse_formats(formats) if formats else None)
+            tmp = tempfile.TemporaryFile()
+            handoff.write_zip(files, f"{parts_dir}/{part}", tmp)
+            size = tmp.tell()
+            tmp.seek(0)
+            return tmp, size
+
+        try:
+            tmp, size = await anyio.to_thread.run_sync(build)
+        except (ValueError, SyntaxError, OSError):
+            return PlainTextResponse("not found\n", status_code=404)
+    finally:
+        _in_use(name, False)
+
+    def chunks():
+        while chunk := tmp.read(1 << 20):
+            yield chunk
+
+    return StreamingResponse(chunks(), media_type="application/zip", background=BackgroundTask(tmp.close),
+                             headers={"Content-Disposition": f'attachment; filename="{part}.zip"', "Content-Length": str(size),
+                                      "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @mcp.custom_route("/upload/{workspace}/{token}/{path:path}", methods=["PUT"])
@@ -1088,7 +1343,7 @@ async def _deny(send, status: int, error: str, description: str) -> None:
 
 def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
     path = scope["path"]
-    if path.startswith(("/files/", "/upload/")):  # never log the signature: a log line must not be a working link
+    if path.startswith(("/files/", "/upload/", "/zip/")):  # never log the signature: a log line must not be a working link
         parts = path.split("/", 4)
         path = f"/{parts[1]}/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
     client = (scope.get("client") or ("-",))[0]
@@ -1097,7 +1352,7 @@ def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
 
 
 class TokenAuth:
-    """ASGI wrapper: every HTTP request except /health and the signed /files/ and /upload/ links (which carry
+    """ASGI wrapper: every HTTP request except /health and the signed /files/, /zip/ and /upload/ links (which carry
     their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
     may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
     token's single workspace if it has exactly one, else the shared root workspace. Every request
@@ -1130,7 +1385,7 @@ class TokenAuth:
         path = scope["path"]
         if path == "/health":
             return await self.app(scope, receive, send)
-        if path.startswith(("/files/", "/upload/")):
+        if path.startswith(("/files/", "/upload/", "/zip/")):
             await self.app(scope, receive, send_logged)
             return _log(scope, "link", status["code"])
         if self.store is None:  # --insecure-no-auth
@@ -1220,6 +1475,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "(default: from the request; $B123D_PRINT_PUBLIC_URL)")
     ap.add_argument("--link-ttl", type=float, default=float(env("B123D_PRINT_LINK_TTL", 3600)),
                     help="http: seconds a download link stays valid (default 3600; $B123D_PRINT_LINK_TTL)")
+    ap.add_argument("--retention-days", type=float, default=float(env("B123D_PRINT_RETENTION_DAYS", 30)),
+                    help="http: remove a named workspace (workspaces/<name>) nobody has used for this many days; checked "
+                         "at startup and hourly, never while it is in use; 0 = never (default 30; $B123D_PRINT_RETENTION_DAYS)")
     ap.add_argument("--tokens-file", default=env("B123D_PRINT_TOKENS_FILE"),
                     help="http: named tokens, each limited to workspaces (see `token add`); re-read when it changes "
                          "($B123D_PRINT_TOKENS_FILE)")
@@ -1307,7 +1565,10 @@ def main(argv: list[str] | None = None) -> None:
     queue = Path(args.job_queue).expanduser().resolve() if args.job_queue else None
     if queue:
         queue.mkdir(parents=True, exist_ok=True)
-    STATE.update(tokens=store, queue=queue,
+    if args.retention_days < 0:
+        sys.exit("b123d-print-mcp: --retention-days must be 0 (never) or more")
+    retention = handoff.Retention(root, args.retention_days)
+    STATE.update(tokens=store, queue=queue, retention_days=args.retention_days, retention=retention,
                  link_secret=links.derive_secret(token, secret), link_ttl=max(1.0, args.link_ttl),
                  public_url=(args.public_url or "").rstrip("/") or None,
                  allowed_hosts=[h.strip() for h in (args.allowed_hosts or "").split(",") if h.strip()])
@@ -1317,7 +1578,9 @@ def main(argv: list[str] | None = None) -> None:
 
     auth = f"tokens {', '.join(store.names())}" if store else "NONE"
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  auth {auth}  "
-          f"max builds {STATE['max_builds']}  builds {'in worker via ' + str(queue) if queue else 'here'}", file=sys.stderr)
+          f"max builds {STATE['max_builds']}  builds {'in worker via ' + str(queue) if queue else 'here'}  "
+          f"retention {f'{args.retention_days:g} days' if args.retention_days > 0 else 'off'}", file=sys.stderr)
+    retention.start()
     if store and hasattr(signal, "SIGHUP"):  # SIGHUP (not on Windows): re-read the tokens file now (it is also re-read whenever it changes)
         signal.signal(signal.SIGHUP, lambda *_: store.request_reload())
     # uvicorn handles SIGTERM/SIGINT: stop accepting, let running calls finish for up to
@@ -1331,6 +1594,7 @@ def main(argv: list[str] | None = None) -> None:
         uvicorn.run(http_app(args.host, store, args.allowed_hosts), host=args.host, port=args.port,
                     log_level="info", access_log=False, timeout_graceful_shutdown=args.shutdown_grace)
     finally:
+        retention.stop()
         n = sandbox.kill_all()
         if queue:
             jobqueue.cancel_all(queue)

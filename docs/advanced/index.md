@@ -10,8 +10,8 @@ strongest isolation.
 | Mode | Use it for | Login | Files come back by |
 | --- | --- | --- | --- |
 | [Local (stdio)](../getting-started/mcp-clients.md) | everything on one machine (the normal setup) | none needed | they are already on your disk |
-| [SSH](../getting-started/ssh.md) | a home server and a few of your own machines | your SSH key, one line per machine in `authorized_keys` | `b123d-print pull`, or `export(embed=true)` |
-| [HTTP](../getting-started/http.md) | many agents at once, eval runs, a shared service | a named token per tool, TLS from a reverse proxy | download links |
+| [SSH](../getting-started/ssh.md) | a home server and a few of your own machines | your SSH key, one line per machine in `authorized_keys` | `download_part` gives the `b123d-print pull` command (the whole part into `parts/<name>/`), or `export(embed=true)` |
+| [HTTP](../getting-started/http.md) | many agents at once, eval runs, a shared service | a named token per tool, TLS from a reverse proxy | `download_part`: one link to a zip of the whole part, unzipped into `parts/<name>/`; workspaces unused for 30 days are removed |
 
 [Docker](../getting-started/docker.md) runs the server in a container, either locally over
 stdio (the strongest isolation, and the way to get one on Windows) or as the HTTP service with

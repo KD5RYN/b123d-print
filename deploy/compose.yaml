@@ -19,8 +19,9 @@
 # Settings in a .env file next to this one (no need to edit this file): B123D_PRINT_IMAGE,
 # B123D_PRINT_PUBLIC_URL, B123D_PRINT_LISTEN (default 127.0.0.1:8000: put a TLS reverse proxy in
 # front, e.g. the Caddy block below; 8000 on a trusted network), B123D_PRINT_PARTS,
-# B123D_PRINT_CONFIG, B123D_PRINT_UID/GID, B123D_PRINT_MAX_BUILDS, B123D_PRINT_TIMEOUT (default 120 s per
-# build), B123D_PRINT_CHECK_TIMEOUT (default 300 s per check).
+# B123D_PRINT_CONFIG, B123D_PRINT_UID/GID, B123D_PRINT_MAX_BUILDS, B123D_PRINT_RETENTION_DAYS (default 30:
+# a workspace nobody used for that many days is removed; 0 = never), B123D_PRINT_TIMEOUT (default 120 s
+# per build), B123D_PRINT_CHECK_TIMEOUT (default 300 s per check).
 x-common: &common
   image: ${B123D_PRINT_IMAGE:-ghcr.io/kd5ryn/b123d-print-mcp:latest}
   restart: unless-stopped
@@ -44,6 +45,9 @@ services:
       B123D_PRINT_TIMEOUT: ${B123D_PRINT_TIMEOUT:-120}               # seconds per build, render, export
       B123D_PRINT_CHECK_TIMEOUT: ${B123D_PRINT_CHECK_TIMEOUT:-300}   # seconds per check (returns what it has, near the end)
       B123D_PRINT_SHUTDOWN_GRACE: "30"                 # on stop: let running calls finish this long
+      # the server is a workbench, not storage: a workspace nobody used for this many days is
+      # removed (checked hourly, never while in use; clients bring parts home with download_part)
+      B123D_PRINT_RETENTION_DAYS: ${B123D_PRINT_RETENTION_DAYS:-30}   # 0 = never
       # the address clients use (behind a reverse proxy: its https URL), for download links and
       # the config `token add` prints; empty: taken from each request
       B123D_PRINT_PUBLIC_URL: ${B123D_PRINT_PUBLIC_URL:-}

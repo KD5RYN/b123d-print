@@ -36,6 +36,7 @@ In place of `b123d-print` in any config on this page:
 | `--shutdown-grace <seconds>` | `$B123D_PRINT_SHUTDOWN_GRACE`, else 30 | HTTP: on SIGTERM or Ctrl-C, how long running calls may finish before their builds are killed |
 | `--public-url <url>` | `$B123D_PRINT_PUBLIC_URL` | HTTP: the base URL clients reach the server at, used in download links (e.g. `https://cad.example.com`); default: the request's `Host`, and proxy headers for hosts in `--allowed-hosts` |
 | `--link-ttl <seconds>` | `$B123D_PRINT_LINK_TTL`, else 3600 | HTTP: how long a download link stays valid |
+| `--retention-days <days>` | `$B123D_PRINT_RETENTION_DAYS`, else 30 | HTTP: [remove a named workspace](http.md#workspace-retention) nobody has used for this many days (checked at startup and hourly, never while in use); `0` = never |
 | `--tokens-file <path>` | `$B123D_PRINT_TOKENS_FILE` | HTTP: [named tokens](http.md#tokens), each limited to workspaces; re-read when it changes |
 | `--job-queue <folder>` | `$B123D_PRINT_JOB_QUEUE` | HTTP: hand builds to a separate `worker` process through this folder (the Compose setup's network-less worker) |
 | `--insecure-no-auth` | off | HTTP: run without a token (otherwise `$B123D_PRINT_TOKEN` or `$B123D_PRINT_TOKEN_FILE` is required) |

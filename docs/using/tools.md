@@ -16,7 +16,8 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `section(name, plane, at, variant?, parts?, size?, inline?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
 | `check(name, variant?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
 | `design_metrics(name, variant?, style?, up?, as_json?)` | the design numbers per part: size, filament (roughly ±20 %) and cost, print time (rough), supports, shallow slopes that show layer steps, edge treatment (sharp / filleted / chamfered, radii), symmetry, screw sizes, seam corners, water traps (`up` = the side up in use); then the suggestions the part's `style` triggers, each citing its rule ([design review](design-review.md)). Changes nothing; `as_json` for the full numbers |
-| `export(name, variant?, formats?, parts?, embed?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"`; says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the files, and `embed=true` puts files up to 2 MB into the result |
+| `export(name, variant?, formats?, parts?, embed?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"`; says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result |
+| `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
 | `compare(reference, candidate, thresholds?, image?, size?, inline?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
 | `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it: `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
 | `describe_model(part, file, scale?, image?, size?, inline?)` | inspect an original before remixing it: format, units, size, faces before and after merging, the curved (faceted) share, round holes, repairs, the designer and license metadata it carries, and a suggestion to modify or redraw it; `image` adds a 6-view render |
@@ -53,5 +54,16 @@ carries the full [workflow rules](../scripts/rules.md).
 | `b123d-print://guide` | the workflow and print rules (the same text as [`AGENTS.md`](../scripts/rules.md)) |
 | `b123d-print://template` | the part-script template `new_part` starts from |
 | `b123d-print://files/{workspace}/{+path}` | a file the server wrote (`parts/<part>/out/...`), only in the session's own workspace (`_` = the root workspace). Tool results link to these |
+| `b123d-print://download/{workspace}/{part}` | a whole part as a zip in the local layout (`parts/<part>/<part>.py`, `out/`, `ref/`), only in the session's own workspace; `download_part` links to it |
 
 The server also sends short instructions on connect, which point the model at the guide.
+
+## Remote servers: bring the part home
+
+Over HTTP and SSH the server is a workbench, not storage: what it writes is a temporary working
+copy (over HTTP, a workspace nobody uses for 30 days is [removed](../getting-started/http.md#workspace-retention)).
+The descriptions of the tools that write files, their results, the server's instructions,
+`AGENTS.md` and the prompts all say the same: use only the MCP tools and the links they return
+(the server gives no shell, ssh or scp access), and as the last step call `download_part`, unzip
+it in the project folder, and check the files are there before reporting. Results over HTTP and
+SSH show workspace-relative paths (`parts/box/out/box.3mf`), never the server's own folders.

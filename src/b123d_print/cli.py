@@ -34,7 +34,7 @@ def init_workspace(root: Path, update_agents: bool = False) -> list[Path]:
     for fname, content in ((WORKSPACE_FILE, data("b123d-print.toml")), ("AGENTS.md", data("AGENTS.md"))):
         p = root / fname
         if not p.exists() or (update_agents and fname == "AGENTS.md" and p.read_text(encoding="utf-8") != content):
-            p.write_text(content, encoding="utf-8")
+            p.write_text(content, encoding="utf-8", newline="")
             made.append(p)
     (root / "parts").mkdir(exist_ok=True)
     return made
@@ -57,7 +57,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
     p.parent.mkdir(parents=True, exist_ok=True)  # it may exist already: a reference file was uploaded first
     if example:
         src = files("b123d_print").joinpath("examples", example)
-        p.write_text(src.joinpath(f"{example}.py").read_text(encoding="utf-8"), encoding="utf-8")
+        p.write_text(src.joinpath(f"{example}.py").read_text(encoding="utf-8"), encoding="utf-8", newline="")
         if src.joinpath("ref").is_dir():  # a remix example's original model
             (p.parent / "ref").mkdir(exist_ok=True)
             for f in src.joinpath("ref").iterdir():
@@ -65,7 +65,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
                     (p.parent / "ref" / f.name).write_bytes(f.read_bytes())
         return p
     title = name.replace("_", " ").capitalize()
-    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8")
+    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8", newline="")
     return p
 
 
@@ -295,7 +295,7 @@ def cmd_ssh(args) -> int:
             sys.exit(f"push: {e}")
         return 0
     try:
-        got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh)
+        got = ssh.pull(args.part, args.source, Path(args.out), args.formats, args.ssh, args.variant)
     except (RuntimeError, ValueError) as e:
         sys.exit(f"pull: {e}")
     print("\n".join(str(p) for p in got))
@@ -383,11 +383,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
     p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
     p.add_argument("--check-timeout", type=float, help="seconds per check run (default 300, or --timeout if longer)")
-    p = sub.add_parser("pull", help="on the client: copy a part's exported files from an SSH server")
+    p = sub.add_parser("pull", help="on the client: copy a part (script, out/, ref/) from an SSH server into "
+                                    "parts/<part>/ of the project folder")
     p.add_argument("part")
     p.add_argument("--from", dest="source", required=True, metavar="USER@HOST", help="the server, as in your MCP config")
-    p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
-    p.add_argument("-o", "--out", default=".", help="folder to write the files to (default: the current folder)")
+    p.add_argument("--formats", help=f"only these out/ files, comma-separated, from {','.join(FORMATS)} (default: every file in out/)")
+    p.add_argument("--variant", help="only this variant's out/ files ('standard' for the default one)")
+    p.add_argument("-o", "--out", default=".", help="the project folder; the part goes to <it>/parts/<part>/ (default: the current folder)")
     p.add_argument("--ssh", default="ssh", help="ssh command and options, e.g. 'ssh -i ~/.ssh/b123d_print -p 2222' (default: ssh)")
     p = sub.add_parser("push", help="on the client: copy a model to remix (STL/3MF/STEP) to an SSH server, into "
                                     "parts/<part>/ref/")
