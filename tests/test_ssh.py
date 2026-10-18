@@ -27,7 +27,7 @@ def ws(tmp_path, monkeypatch):
     out = w / "parts" / "box" / "out"
     out.mkdir(parents=True)
     (w / "b123d-print.toml").write_text("", encoding="utf-8")
-    (w / "parts" / "box" / "box.py").write_text("SECRET = 1\n", encoding="utf-8")
+    (w / "parts" / "box" / "box.py").write_text("SECRET = 1\n", encoding="utf-8", newline="")
     for name, data in (("box.3mf", b"3mf-bytes"), ("box.stl", b"stl-bytes"), ("box.png", b"png"), (".hidden.stl", b"no")):
         (out / name).write_bytes(data)
     (tmp_path / "outside.stl").write_bytes(b"outside")

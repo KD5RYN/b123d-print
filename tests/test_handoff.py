@@ -25,7 +25,7 @@ def ws(tmp_path, monkeypatch):
     (part / "out").mkdir(parents=True)
     (part / "ref").mkdir()
     (w / "b123d-print.toml").write_text("", encoding="utf-8")
-    (part / "box.py").write_text(SCRIPT, encoding="utf-8")
+    (part / "box.py").write_text(SCRIPT, encoding="utf-8", newline="")
     files = {"box.3mf": b"std-3mf", "box.stl": b"std-stl", "box_xz0.png": b"std-png", "box_lid.stl": b"std-lid",
              "box_140.3mf": b"140-3mf", "box_140_xz0.png": b"140-png",
              "box_140_tall.3mf": b"tall-3mf", ".hidden.stl": b"no"}
@@ -68,11 +68,11 @@ def test_part_files_layout_and_filters(ws):
 
 
 def test_variants_must_be_literal(ws):
-    (ws / "parts/box/box.py").write_text("VARIANTS = {k: {} for k in 'ab'}\n", encoding="utf-8")
+    (ws / "parts/box/box.py").write_text("VARIANTS = {k: {} for k in 'ab'}\n", encoding="utf-8", newline="")
     with pytest.raises(handoff.HandoffError, match="leave variant out"):
         handoff.part_files(ws, "parts", "box", variant="a")
     assert handoff.part_files(ws, "parts", "box")  # unfiltered still works
-    (ws / "parts/box/box.py").write_text("x = 1\n", encoding="utf-8")  # no VARIANTS: just the standard one
+    (ws / "parts/box/box.py").write_text("x = 1\n", encoding="utf-8", newline="")  # no VARIANTS: just the standard one
     assert handoff.variant_keys(ws / "parts/box/box.py") == [""]
 
 
@@ -107,7 +107,7 @@ def http(tmp_path, monkeypatch):
         part = root / "workspaces" / ws / "parts" / "box"
         (part / "out").mkdir(parents=True)
         (root / "workspaces" / ws / "b123d-print.toml").write_text("", encoding="utf-8")
-        (part / "box.py").write_text(SCRIPT, encoding="utf-8")
+        (part / "box.py").write_text(SCRIPT, encoding="utf-8", newline="")
         (part / "out" / "box.3mf").write_bytes(f"{ws}-3mf".encode())
         (part / "out" / "box_140.3mf").write_bytes(f"{ws}-140".encode())
     old = dict(m.STATE)
@@ -231,7 +231,7 @@ def test_part_zip_resource_is_scoped(http):
 def make_ws(root: Path, name: str, age_days: float, now: float) -> Path:
     w = root / "workspaces" / name
     (w / "parts" / "p").mkdir(parents=True)
-    (w / "parts" / "p" / "p.py").write_text("x", encoding="utf-8")
+    (w / "parts" / "p" / "p.py").write_text("x", encoding="utf-8", newline="")
     t = now - age_days * 86400
     for dirpath, dirnames, filenames in os.walk(w):
         for n in dirnames + filenames:
@@ -273,3 +273,15 @@ def test_retention_through_requests(http):
     m._in_use("alice", False)
     assert (root / "workspaces/alice" / handoff.LAST_USE).exists()
     assert r.sweep(now) == ["alice"] and root.exists()
+
+
+def test_write_part_stores_the_script_exactly(http):
+    """What the agent sends is what is stored, served and brought home, on every OS (no CRLF added on Windows)."""
+    from b123d_print import mcp_server as m
+
+    _, root = http
+    code = "x = 1\ny = 2\r\nz = 3\n"
+    assert "Saved" in call(m, "write_part", "alice", name="box", code=code)
+    p = root / "workspaces/alice/parts/box/box.py"
+    assert p.read_bytes() == code.encode() and call(m, "read_part", "alice", name="box") == code
+    assert unzip(call(m, "part_zip", "alice", workspace="alice", part="box"))["parts/box/box.py"] == code.encode()

@@ -34,7 +34,7 @@ def init_workspace(root: Path, update_agents: bool = False) -> list[Path]:
     for fname, content in ((WORKSPACE_FILE, data("b123d-print.toml")), ("AGENTS.md", data("AGENTS.md"))):
         p = root / fname
         if not p.exists() or (update_agents and fname == "AGENTS.md" and p.read_text(encoding="utf-8") != content):
-            p.write_text(content, encoding="utf-8")
+            p.write_text(content, encoding="utf-8", newline="")
             made.append(p)
     (root / "parts").mkdir(exist_ok=True)
     return made
@@ -57,7 +57,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
     p.parent.mkdir(parents=True, exist_ok=True)  # it may exist already: a reference file was uploaded first
     if example:
         src = files("b123d_print").joinpath("examples", example)
-        p.write_text(src.joinpath(f"{example}.py").read_text(encoding="utf-8"), encoding="utf-8")
+        p.write_text(src.joinpath(f"{example}.py").read_text(encoding="utf-8"), encoding="utf-8", newline="")
         if src.joinpath("ref").is_dir():  # a remix example's original model
             (p.parent / "ref").mkdir(exist_ok=True)
             for f in src.joinpath("ref").iterdir():
@@ -65,7 +65,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
                     (p.parent / "ref" / f.name).write_bytes(f.read_bytes())
         return p
     title = name.replace("_", " ").capitalize()
-    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8")
+    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8", newline="")
     return p
 
 

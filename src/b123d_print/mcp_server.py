@@ -457,7 +457,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
         raise ToolError(str(e)) from None
     rel = p.relative_to(_root()).as_posix()
     if show_code:
-        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_text(encoding='utf-8')}"
+        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_bytes().decode('utf-8')}"
     src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
     return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
             "shows the current code. A single part returned by build() is named 'part' in checks "
@@ -467,7 +467,7 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
 @mcp.tool()
 def read_part(name: str) -> str:
     """Return the current code of a part script."""
-    return _script(name).read_text(encoding="utf-8")
+    return _script(name).read_bytes().decode("utf-8")  # exactly as stored: what download_part / pull bring home
 
 
 @mcp.tool()
@@ -481,7 +481,7 @@ def write_part(name: str, code: str) -> str:
         compile(code, str(p), "exec")
     except SyntaxError as e:
         return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
-    p.write_text(code, encoding="utf-8")
+    p.write_text(code, encoding="utf-8", newline="")  # exactly as sent, on every OS (no CRLF on Windows)
     return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
 
 
