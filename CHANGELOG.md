@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-18
 
 **Design review.** After the print checks pass, the assistant can review a part for its purpose
 and a design style, and suggest changes; it never changes the part without your OK.
@@ -21,6 +21,9 @@ and a design style, and suggest changes; it never changes the part without your 
 - New settings `style`, `filament_price`, `print_flow`; material profiles gain `density`.
 - [Design styles and review](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/): the rules
   (`DS-*`), sourced like the FDM design rules.
+
+**Releases:** each version now gets a GitHub Release page made from its CHANGELOG section
+(older versions are filled in too), and PyPI links to the changelog and releases.
 
 ## 0.2.1 — 2026-10-18
 
