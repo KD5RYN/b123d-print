@@ -84,9 +84,10 @@ async def flow(c, pw, expect) -> None:
 
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
-                     "export", "compare", "upload_reference", "describe_model", "before_after"}, f"tools: {sorted(tools)}")
+                     "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics"},
+           f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
-    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part"},
+    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review"},
            f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
@@ -162,8 +163,17 @@ async def flow(c, pw, expect) -> None:
     expect("Created" in text(res), "new_part from a bundled example")
     res = await c.call_tool("check", {"name": "coupon"})
     expect(text(res).startswith("PASSED"), "example passes its checks")
+    res = await c.call_tool("design_metrics", {"name": "coupon", "style": "modern"})
+    t = text(res)
+    expect("style: modern" in t and "roughly ±20 %" in t and "rough estimate" in t and "findings" in t,
+           "design_metrics reports the numbers and the style's findings (in the sandbox)" + ("" if "style:" in t else f"\n{t[:2000]}"))
+    res = await c.call_tool("design_metrics", {"name": "coupon", "style": "baroque"})
+    expect(res.is_error and "no style 'baroque'" in text(res), "design_metrics refuses an unknown style with the list")
+    g = await c.get_prompt("design_review", {"name": "coupon"})
+    expect("Do NOT change the part" in g.messages[0].content.text and "DS-G9" in g.messages[0].content.text,
+           "design_review prompt carries the rubric and the no-change rule")
     res = await c.call_tool("list_parts", {})
-    expect('"box"' in text(res) and '"coupon"' in text(res), "list_parts")
+    expect('"box"' in text(res) and '"coupon"' in text(res) and '"rugged"' in text(res), "list_parts (with styles)")
     sb = json.loads(text(res))["sandbox"]
     print(f"     sandbox: {sb}")
     want = os.environ.get("B123D_PRINT_EXPECT_SANDBOX")  # e.g. "bubblewrap" in CI on Linux

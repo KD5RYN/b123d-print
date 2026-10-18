@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+**Design review.** After the print checks pass, the assistant can review a part for its purpose
+and a design style, and suggest changes; it never changes the part without your OK.
+- Five styles: `functional` (default), `modern`, `least_cost`, `rugged`, `soft`. Set `STYLE` in
+  `Dims` (variants can override it) or `style` in the workspace config. The industrial look is
+  functional with `EDGES = "chamfer"`.
+- `design_metrics` (MCP tool) and `b123d-print metrics` (CLI): size, filament (a simple estimate,
+  roughly ±20 %) and cost, print time (one rule, a rough estimate), supports, shallow slopes that
+  show layer steps, edge treatment (sharp / filleted / chamfered, distinct radii), mirror
+  symmetry, likely screw sizes, seam corners and water traps; then the findings the style's
+  thresholds trigger, each citing a `DS-*` rule.
+- `design_review` prompt; a "Design review" step in `AGENTS.md`; `design_part_from_photos` asks
+  for a style.
+- Optional script fields `SHOW` (sides seen in use), `UP` (side up in use) and `EDGES`.
+- Styles are TOML files: write your own in `~/.config/b123d-print/styles/` or the workspace's
+  `styles/` folder, start from another with `based_on`, or replace a built-in by its name;
+  `b123d-print styles` lists them.
+- New settings `style`, `filament_price`, `print_flow`; material profiles gain `density`.
+- [Design styles and review](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/): the rules
+  (`DS-*`), sourced like the FDM design rules.
+
 ## 0.2.1 — 2026-10-18
 
 **Native Windows support for local use.** The MCP server and the CLI run on Windows 10/11 with

@@ -276,6 +276,7 @@ def list_parts() -> str:
                          "min_wall": s.min_wall, "max_overhang": s.max_overhang, "max_bridge": s.max_bridge,
                          "formats": list(s.formats)},
             "printer": _printer_summary(s),
+            "styles": _styles(),
             "sandbox": sandbox.describe(),
             "max_concurrent_builds": STATE["max_builds"],
             **({"token": _token_name(), "build_worker": "separate process (job queue)" if STATE["queue"] else "in-process"}
@@ -283,6 +284,12 @@ def list_parts() -> str:
         },
         indent=1,
     )
+
+
+def _styles() -> dict:
+    from .styles import available
+
+    return available(_root())
 
 
 def _pkg_version() -> str:
@@ -453,6 +460,32 @@ async def check(name: str, variant: str | None = None) -> str:
         for f in findings:
             lines.append(f"  [{f['level'].upper():4}] {f['check']:8} {f['target']}: {f['message']}")
     return "\n".join(lines)
+
+
+@mcp.tool()
+async def design_metrics(name: str, variant: str | None = None, style: str = "", up: str = "", as_json: bool = False) -> str:
+    """Design numbers for the design review, per printable part: size and proportions, filament
+    (simple estimate, roughly +-20 %) and cost, print time (rough estimate), supports, shallow
+    slopes that show layer steps, edge treatment (sharp / filleted / chamfered shares, distinct
+    radii and chamfer sizes), mirror symmetry, screw sizes, seam corners and water traps; then the
+    suggestions the part's style triggers, each citing its DS-* rule. Run it after check passes.
+    style: override the part's STYLE (functional, modern, least_cost, rugged, soft, or a style
+    file of the user's: list_parts shows them). up: the
+    direction that points up in use for the water-trap check (+X, -Y, ...; default the script's UP,
+    else +Z). as_json: the full numbers as JSON instead of the text report. Changes nothing."""
+    if style:
+        from .styles import StyleError, load_style
+
+        try:
+            load_style(style, _root())
+        except StyleError as e:
+            raise ToolError(str(e)) from None
+    res = await _job(name, "metrics", variant=variant, style=style or None, up=up or None)
+    if not res.get("ok"):
+        return _error_text(res)
+    if as_json:
+        return json.dumps({"variant": res["variant"], **res["metrics"]}, indent=1, default=str)
+    return f"{name} [{res['variant']}]\n{res['text']}"
 
 
 @mcp.tool(structured_output=False)
@@ -729,7 +762,10 @@ Work in these steps:
 1. From my photos and text, LIST EVERY DIMENSION you read, the feature it belongs to and its
    source (typed by me / read from a photo / estimate). List features you can see that have no
    dimension. Flag any conflict between a photo and a typed number (typed wins). Ask about
-   anything missing or ambiguous. Then STOP and wait for my confirmation. Do not model yet.
+   anything missing or ambiguous. If I have said nothing about how it should look, ask once
+   for a style: functional (default), modern/minimal, least cost, rugged/outdoor or
+   soft/handheld (it goes in Dims as STYLE). Then STOP and wait for my confirmation. Do not
+   model yet.
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a source comment). Mating features get CLEARANCE (0.2 mm
    default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
@@ -739,6 +775,7 @@ Work in these steps:
    Fix and repeat until check passes.
 4. Report: overall X x Y x Z, key feature sizes, validity, clearances (per side or total) and
    hole compensation applied, check results and warnings, print orientation, supports needed.
+   Then offer the design review for the part's style (design_metrics and the design rubric).
 
 The full rules:
 
@@ -807,11 +844,43 @@ def verify_part(name: str) -> str:
 section through every pocket, boss, rib, hole and mating feature, and check. Look for: missing
 Wall checks around cuts deeper than their wall, magic numbers outside Dims, missing clearance or
 hole compensation, overhangs that need supports, bed edges with fillets. Report findings
-most serious first; do not change the script unless I ask.
+most serious first; do not change the script unless I ask. When check passes, offer a design
+review (the design_review prompt) for the part's style.
 
 The full rules:
 
 {_rules()}"""
+
+
+@mcp.prompt()
+def design_review(name: str, style: str = "") -> str:
+    """Review a part that passes the print checks for its purpose and design style: metrics,
+    renders, 3-7 concrete suggestions with rule IDs. Changes nothing without the user's OK."""
+    pick = f"Use the style '{style}'." if style else (
+        "Use the part's STYLE (design_metrics reports it and where it came from). If it came from the default "
+        "and I never chose one, ask me once: functional (default), modern/minimal, least cost, rugged/outdoor, "
+        "soft/handheld, or one of my own styles (list_parts shows them).")
+    return f"""Review the design of the part '{name}'. {pick}
+
+1. check('{name}') first. If anything FAILs, stop and report the failures: the design review
+   is for parts that print.
+2. design_metrics('{name}'{f", style='{style}'" if style else ""}): the numbers and the findings
+   the style's thresholds trigger.
+3. render_preview, and section where a number points (a handle, a pocket, a water trap). If the
+   script has no SHOW and it matters which sides are seen in use, ask me.
+4. Judge the part with the general rubric below (notes) and the style's own rubric, which
+   design_metrics prints at the end (suggestions; it comes from the style's file, so a user's
+   own style brings its own). Every finding names its rule ID (DS-...) and its evidence: a metric or what the
+   render shows.
+5. Report briefly: the style; the 4-6 numbers that matter for it (filament and time are rough
+   estimates: say so); 3-7 findings, most valuable first, each with the concrete change in
+   numbers, its expected effect and its trade-off; one line on what is already good. Then ask
+   which ones to apply. Do NOT change the part without my OK. You may build a trial variant to
+   measure a suggestion, but leave the script as it was.
+6. If I say yes: change Dims (a new variant if both should stay), then build_part,
+   render_preview, sections, check, and design_metrics again to show before and after.
+
+{data("design_review.md")}"""
 
 
 @mcp.prompt()

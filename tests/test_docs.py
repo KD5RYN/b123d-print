@@ -234,3 +234,11 @@ def test_readme_images_exist():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for img in re.findall(r"\]\((docs/images/[^)]+)\)", readme):
         assert (ROOT / img).is_file(), img
+
+
+def test_style_file_fields_documented():
+    """The style-file field table on design-review.md is exactly what a style file may set."""
+    from b123d_print.styles import FILE_FIELDS
+
+    section = page("using/design-review.md").split("## Custom styles\n", 1)[1].split("\n## ", 1)[0]
+    assert set(table_rows(section)) == FILE_FIELDS

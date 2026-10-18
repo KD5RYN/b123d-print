@@ -15,14 +15,16 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
    - verify with `render_preview`, `section` and `check` (plus `Wall` checks around deep cuts)
      before reporting.
 2. **For a new design** use the MCP prompt `design_part_from_photos`; to change a part,
-   `modify_part`; to review one, `verify_part`; to calibrate holes, `calibrate_hole_comp`; to remix someone else's STL, 3MF or
+   `modify_part`; to review one, `verify_part`; once its checks pass, `design_review` (the design
+   for its style; suggestions only, nothing changes without the user's OK); to calibrate holes, `calibrate_hole_comp`; to remix someone else's STL, 3MF or
    STEP, `remix_part`.
 3. **Tools** (b123d-print MCP server): `list_parts`, `new_part`, `read_part`, `write_part`,
-   `build_part`, `render_preview`, `section`, `check`, `export`, `compare` (to measure a part
+   `build_part`, `render_preview`, `section`, `check`, `design_metrics` (design numbers and the
+   style's suggestions; filament and time are rough estimates), `export`, `compare` (to measure a part
    against a reference STL/3MF/STEP the user put in the workspace), `upload_reference`,
    `describe_model` and `before_after` (remixing an existing model: get it onto the server, inspect
    it, compare the remix with it), and `use_printer` (only when the user asks to set a printer). If the server is remote, over HTTP download exported files
    from the links `export` returns (`curl -fO <url>`, no token, they expire) or read the
    `b123d-print://files/` resources; over SSH run the `b123d-print pull ...` command `export`
    gives; never open a shell on the server. Without the MCP server, use the
-   CLI from a workspace: `b123d-print new|build|check|config` (`uvx --from <b123d-print> b123d-print ...`).
+   CLI from a workspace: `b123d-print new|build|check|metrics|config` (`uvx --from <b123d-print> b123d-print ...`).

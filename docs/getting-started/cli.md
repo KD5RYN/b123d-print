@@ -39,6 +39,8 @@ b123d-print check
 | `new <name> [-d/--description text] [--from <example>]` | scaffold `parts/<name>/<name>.py` from the template, or from a bundled example |
 | `build [parts] [--variant v] [--formats f]` | export + section views, report sizes; `--formats` overrides the `formats` setting |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |
+| `metrics [parts] [--variant v] [--style s] [--up +Y] [--json]` | the [design review](../using/design-review.md) numbers and the suggestions the part's style triggers (filament roughly ±20 %, time a rough estimate); never fails |
+| `styles [name]` | list the [design styles](../using/design-review.md#custom-styles) and where each comes from (workspace, user, built-in), or show one with `based_on` applied |
 | `printer list [words]` | search the printer profiles |
 | `printer show [name]` | show a printer (default: the active one) |
 | `printer use <name> [--material m]` | set the active printer (and material); `generic` clears it |
@@ -57,7 +59,7 @@ b123d-print check
 Global options, before the command: `--root <folder>` (the workspace; default the nearest
 folder with a `b123d-print.toml`, else the current folder) and `--version`.
 
-`parts` is a list of part names or script paths; without it, `build` and `check` take every part
+`parts` is a list of part names or script paths; without it, `build`, `check` and `metrics` take every part
 in the workspace. Each command's full `--help` output is in the [Reference](../reference.md#b123d-print).
 
 ## Agents and `AGENTS.md`

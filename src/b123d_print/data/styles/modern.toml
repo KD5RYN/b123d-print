@@ -1,0 +1,20 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Modern / minimal"
+description = "Few elements, one radius language, clean surfaces, nothing that does not need to be there."
+review = """
+Look for: one edge-break size and at most one styling radius, used the same way everywhere
+[DS-G1]; few features, flush faces, features that do several jobs [DS-G2]; no screw heads on
+visible sides (underside, or behind a press-fit cover) [DS-G3]; symmetry where the function
+allows [DS-G7]; rounded edges [DS-G8]; clean show faces without layer steps [DS-S1]. Keep the
+cues a user needs (an opening notch, a grip) even when they break the clean look [DS-G5].
+Typical: "radii 1, 1.5, 2 and 4: use 1 mm edge breaks and 4 mm for the vertical corners";
+"move the screws to the underside"; "keep the notch: it is the only cue for how to open it".
+"""
+min_treated_edge_share = 0.9
+max_edge_break_sizes = 1
+max_styling_radii = 1
+max_chamfer_sizes = 1
+min_symmetry = 0.98
+max_shallow_slope_share = 0.2
+hidden_screws_note = true

@@ -122,6 +122,11 @@ It is not a general CAD framework.
   (coplanar triangles merged), the checks tell the original's problems from the ones the remix
   added, and a before/after view shows the change
   ([remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/)).
+- **Design review** — after the print checks pass, the assistant reviews the part for a style
+  you pick (functional, modern, least cost, rugged/outdoor, soft/handheld): rough filament and
+  time estimates, supports, edge treatment, layer steps, water traps, and concrete suggestions
+  from [sourced design rules](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). It changes
+  nothing without your OK ([design review](https://kd5ryn.github.io/b123d-print/using/design-review/)).
 - **The workflow, model-neutral** — MCP prompts plus an [`AGENTS.md`](AGENTS.md) any agent can
   read. The rules come from real prints; one exists because a part broke through a 0.05 mm skin
   that no render showed.

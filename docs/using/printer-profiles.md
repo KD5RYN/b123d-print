@@ -28,7 +28,9 @@ b123d-print printer use bambu_lab_a1_mini --material petg
 - **Printer:** build volume (round beds by diameter), nozzle, layer height (0.2 unless set),
   overhang limit (45° unless set), bridge limit (`max_bridge`, 10 mm unless set). Derived: line
   width ≈ 1.125 × nozzle (the thin check fails below one line), minimum wall = 2 lines.
-- **Material:** label, notes for the model, optional clearance. Built-in: pla, petg, asa, abs, tpu.
+- **Material:** label, notes for the model, optional clearance, density (g/cm³, from the maker's
+  datasheet; the [design review](design-review.md)'s filament estimate uses it). Built-in: pla,
+  petg, asa, abs, tpu.
 - **Calibration:** what the coupons measured, per printer + material (`printer calibrate`, or
   `printer hole-comp` for hole compensation), kept in `~/.config/b123d-print/calibration.toml`:
   `hole_comp`, `hole_comp_h`, `clearance`, `press_fit`, `free_fit`, `pip_clearance`,
@@ -52,7 +54,7 @@ nozzle = 0.6
 ```
 
 Materials work the same way in `~/.config/b123d-print/materials/<name>.toml` (`label`, `notes`,
-optional `clearance`).
+optional `clearance` and `density`).
 
 ## Sources
 
@@ -73,3 +75,5 @@ optional `clearance`).
 - `printer(__file__)` in part scripts returns the active profile (or `None` in generic mode);
   `hole_comp(__file__)` picks up the calibration.
 - MCP: `list_parts` shows the printer/material, `use_printer` searches and sets them.
+- `design_metrics` uses the printer's nozzle and layer height and the material's density for its
+  rough filament and time estimates.

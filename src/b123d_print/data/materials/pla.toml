@@ -1,2 +1,3 @@
 label = "PLA"
+density = 1.24  # g/cm^3, Prusament PLA and Bambu PLA Basic datasheets
 notes = "Stiff, easy to print. Softens around 55-60 C: not for parts in sun, cars or near heat. Brittle in thin snap fits."

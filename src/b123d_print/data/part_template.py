@@ -24,12 +24,16 @@ class Dims:
     BED_CHAMFER: float = 0.5  # bed edges: chamfer, not fillet
     CLEARANCE: float = clearance(__file__)  # mating gap, per side
     HOLE_COMP: float = hole_comp(__file__)  # added to hole diameters when cutting (from config)
+    STYLE: str = ""  # design review: functional, modern, least_cost, rugged, soft ("" = workspace, else functional)
 
     # --- Derived ---
     # @property
     # def INNER_W(self):
     #     return self.WIDTH - 2 * self.WALL
 
+
+# Optional, for the design review: the sides seen in use and the side that is up in use (print
+# orientation), e.g. SHOW = ["+Y", "+Z"]; UP = "+Z". EDGES = "chamfer" or "fillet" sets the edge language.
 
 # Only overrides; "" is the standard part. Output files get the key as a suffix.
 VARIANTS = {{"": {{}}}}

@@ -28,6 +28,10 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    feature, and [the checks](checks.md) — and it fixes what fails.
 4. **A report** with the overall size, key dimensions, the clearance and hole compensation
    applied, check results, print orientation and any supports needed.
+5. **A design review, if you want one.** Once the checks pass, the model can review the part for
+   the style you chose (functional, modern, least cost, rugged, soft, or your own) and suggest
+   changes with rough filament and time numbers. It changes nothing without your OK. See
+   [Design review](design-review.md).
 
 !!! note
     The model can only look at its renders if your client passes tool-result images to the

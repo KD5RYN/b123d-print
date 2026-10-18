@@ -1,2 +1,3 @@
 label = "TPU"
+density = 1.22  # g/cm^3, Bambu TPU 95A HF datasheet
 notes = "Flexible. Thicker walls than rigid plastics for the same stiffness; avoid bridges, fine detail and tight fits."

@@ -53,6 +53,18 @@ if __name__ == "__main__":
 
 A script with only a module-level `part = ...` (no `Dims`) also works, without variants.
 
+## For the design review
+
+Optional names the [design review](../using/design-review.md) reads, in `Dims` (so a variant can
+override them) or at module level:
+
+| Name | Example | What |
+| --- | --- | --- |
+| `STYLE` | `STYLE: str = "modern"` | `functional`, `modern`, `least_cost`, `rugged` or `soft`; `""` (the template's) uses the workspace's `style`, else functional |
+| `SHOW` | `SHOW = ["+Y", "+Z"]` | the sides seen in use, in print orientation; surface findings are limited to them |
+| `UP` | `UP = "+Y"` | the side that points up in use (print orientation), for the water-trap check; default `+Z` |
+| `EDGES` | `EDGES = "chamfer"` | the edge language: `chamfer` or `fillet`; functional with `chamfer` is the industrial look |
+
 ## Values from the user's config
 
 | Helper | Use |

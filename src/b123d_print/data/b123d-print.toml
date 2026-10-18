@@ -17,3 +17,6 @@ parts_dir = "parts"
 # max_bridge = 10     # mm; longer bridges warn
 # max_triangles = 50000  # import_model refuses meshes with more triangles (simplify them first)
 # formats = ["step", "stl", "3mf", "png"]   # what export writes; e.g. ["3mf", "png"]
+# style = "functional"  # design review style for parts without STYLE: functional, modern, least_cost, rugged, soft
+# filament_price = 25  # per kg; design_metrics then shows a cost
+# print_flow = 10      # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)

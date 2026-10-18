@@ -1,0 +1,18 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Functional"
+description = "Does its job, prints well, looks deliberate rather than decorated (the default)."
+review = """
+Look for: visible faces on vertical walls or flat tops, not shallow slopes or supported faces
+[DS-S1, DS-S2]; a sharp vertical corner where the seam can hide, on the back [DS-S3]; like edges
+treated alike [DS-G1]; one or two screw sizes, one tool [DS-G3]; every separate part justified
+[DS-G2]; clear cues for how to hold, open or mount it [DS-G5]. With EDGES = "chamfer" and exposed
+standard screws this is the industrial look: chamfers in one or two sizes, ribs as thick as the
+wall, no fake features [DS-G6].
+Typical: "turn it 90 deg so the front is a vertical wall: no support scars"; "M3 for all four
+screws instead of M3 + M4"; "a 0.6 mm vertical groove on the back for the seam".
+"""
+max_shallow_slope_share = 0.2
+supports_on_visible = true
+seam_note = true
+max_screw_sizes = 2

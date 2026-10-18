@@ -1,0 +1,15 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Soft / handheld"
+description = "Comfortable in the hand: rounded, smooth where it is touched."
+review = """
+Look for: grips 30-40 mm across, measured with a section [DS-H1]; rounded edges on held surfaces
+[DS-G8]; gently domed tops and shallow curves that show layer steps: print on its side or use
+variable layer height [DS-H2, DS-S1]; supports on curved faces (organic/tree supports scar less);
+clear cues for buttons and grip [DS-G5]. Curvature-continuous blends only matter if it will be
+sanded or painted [DS-H3].
+Typical: "the handle is 26 mm across: 32-36 mm is more comfortable"; "print the dome on its side".
+"""
+max_sharp_edge_share = 0.05
+max_shallow_slope_share = 0.15
+curved_supports_note = true
