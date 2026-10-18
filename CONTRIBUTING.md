@@ -7,7 +7,7 @@ git clone https://github.com/KD5RYN/b123d-print && cd b123d-print && uv sync
 ```
 
 ```bash
-uv run pytest && uv run b123d-print check && uv run python tests/mcp_smoke.py
+uv run pytest -n auto && uv run b123d-print check && uv run python tests/mcp_smoke.py
 ```
 
 The smoke test drives every MCP tool; `--http` runs it over HTTP, `--ssh` through the SSH
