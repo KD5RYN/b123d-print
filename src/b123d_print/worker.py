@@ -35,6 +35,7 @@ from b123d_print.project import (  # noqa: E402
     assembly,
     before_after,
     built,
+    check_share,
     dims,
     export_variant,
     load,
@@ -283,6 +284,11 @@ def do(job: dict) -> dict:
         plane, at = job["plane"].upper(), float(job["at"])
         f = section_view(sel, plane, at, out / f"{tag}_{plane.lower()}{round(at, 3):g}{small}.png", tag, size=size)
         return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at}
+    if op == "check" and job.get("share"):  # one of several workers sharing a check run (mcp_server.check)
+        share = tuple(job["share"])
+        return {"shares": {kk or "standard": check_share(mod, kk, settings, share, deadline=job.get("deadline"),
+                                                       started=job.get("started"))
+                           for kk in (keys if key is None else [key])}}
     if op == "check":
         res = {}
         for i, kk in enumerate(keys if key is None else [key]):

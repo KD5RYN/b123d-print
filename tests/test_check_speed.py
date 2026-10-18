@@ -264,3 +264,130 @@ def test_benchmark_script_runs(tmp_path):
     assert "reference mesh:" in r.stdout and "run 2:" in r.stdout
     assert "ThinFeature(original)" in r.stdout.split("run 2:")[0]
     assert "ThinFeature(original)" not in r.stdout.split("run 2:")[1]  # cached
+
+
+# --- parallel checks: shares of one check run ---------------------------------------------------
+
+
+def test_partition():
+    from b123d_print.project import partition
+
+    assert partition([1.0, 1.0], 3) == [0, 0]  # too little to split
+    assert partition([5.0, 1.0, 4.0, 2.0], 1) == [0, 0, 0, 0]
+    assert partition([5.0, 1.0, 4.0, 2.0], 2) == [0, 0, 1, 1]  # longest first: 5->0, 4->1, 2->1, 1->0
+    assert partition([5.0, 4.0], 2, first=10.0) == [1, 1]  # share 0 is busy with the validity findings
+
+
+def lines(found):
+    return [(f.level, f.check, f.target, f.message) for f in found]
+
+
+@pytest.mark.parametrize("count", [2, 3])
+def test_shares_merge_to_the_sequential_result(remix_ws, monkeypatch, count):
+    from b123d_print import project
+
+    settings = load_settings(remix_ws)
+    mod = load(remix_ws)
+    seq = run_checks(mod, "", settings)
+    monkeypatch.setattr(project, "COST_MIN_SPLIT", 0.0)  # split even this small part
+    shares = [project.check_share(mod, "", settings, (i, count), started=time.time()) for i in range(count)]
+    assert sum(len(s["assigned"]) for s in shares) == len({a for s in shares for a in s["assigned"]})  # no item twice
+    assert sum(bool(s["assigned"]) for s in shares) > 1  # really split
+    assert lines(project.merge_shares(shares)) == lines(seq)
+
+
+def test_shares_on_an_assembly_example(monkeypatch):
+    from b123d_print import project
+
+    script = ROOT / "src" / "b123d_print" / "examples" / "esp_ir_blaster" / "esp_ir_blaster.py"
+    mod = load(script)
+    settings = load_settings(script)
+    seq = run_checks(mod, "", settings)
+    monkeypatch.setattr(project, "COST_MIN_SPLIT", 0.0)
+    shares = [project.check_share(mod, "", settings, (i, 3)) for i in range(3)]
+    assert lines(project.merge_shares(shares)) == lines(seq)
+
+
+def test_a_failed_share_is_reported(remix_ws, monkeypatch):
+    from b123d_print import project
+
+    settings = load_settings(remix_ws)
+    mod = load(remix_ws)
+    monkeypatch.setattr(project, "COST_MIN_SPLIT", 0.0)
+    shares = [project.check_share(mod, "", settings, (i, 2)) for i in range(2)]
+    found = project.merge_shares(shares[:1], failed=["check worker 2 of 2 failed: killed"])
+    err = [f for f in found if f.check == "error"]
+    assert len(err) == 1 and "killed" in err[0].message and err[0].data["not_run"]
+    # a share that never reported, with no failure known: still not silent
+    found = project.merge_shares(shares[:1])
+    assert any(f.check == "error" and "no check worker" in f.message for f in found)
+
+
+def test_mesh_conversion_runs_once_for_concurrent_workers(remix_ws):
+    """Workers of one check import the same mesh at once: one converts, the others wait for its cache."""
+    code = ("import sys; from b123d_print.remix import import_model, IMPORTED; "
+            "import_model('ref/o.stl', script=sys.argv[1]); print(IMPORTED[-1][1].cached)")
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(remix_ws)], stdout=subprocess.PIPE, text=True)
+             for _ in range(3)]
+    outs = sorted(p.communicate(timeout=120)[0].strip() for p in procs)
+    assert outs == ["False", "True", "True"], outs
+
+
+SLOW_SPLIT = SLOW.replace('    label: str = "spins"\n', '    label: str = "spins"\n    cost: float = 30.0\n')
+
+
+def run_server_check(monkeypatch, root, name, builds, check_timeout=300.0):
+    import anyio
+
+    from b123d_print import mcp_server as m
+
+    monkeypatch.setitem(m.STATE, "root", root)
+    monkeypatch.setitem(m.STATE, "max_builds", builds)
+    monkeypatch.setitem(m.STATE, "check_timeout", check_timeout)
+    monkeypatch.setitem(m.STATE, "queue", None)
+    monkeypatch.setitem(m.STATE, "limiter", None)
+    monkeypatch.setattr(sandbox, "MAX_BUILDS", builds)
+    return anyio.run(m._check, name, None)
+
+
+def test_server_splits_a_check_and_merges_it(remix_ws, monkeypatch):
+    root = remix_ws.parents[2]
+    one = run_server_check(monkeypatch, root, "rx", 1)
+    two = run_server_check(monkeypatch, root, "rx", 3)
+    assert one["ok"] and two["ok"] and two["workers"] == 3
+    key = lambda r: [(f["level"], f["check"], f["target"], f["message"]) for f in r["variants"]["standard"]]  # noqa: E731
+    assert key(one) == key(two)
+    assert one["passed"] == two["passed"]
+
+
+def test_timeout_across_workers_keeps_the_finished_shares(tmp_path, monkeypatch):
+    script = tmp_path / "parts" / "slow" / "slow.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(SLOW_SPLIT, encoding="utf-8")
+    (tmp_path / "b123d-print.toml").write_text('parts_dir = "parts"\n', encoding="utf-8")
+    t0 = time.monotonic()
+    res = run_server_check(monkeypatch, tmp_path, "slow", 2, check_timeout=20.0)
+    assert time.monotonic() - t0 < 30  # the shares stop at the soft deadline, 17 s
+    assert res["ok"] and not res["passed"]
+    found = res["variants"]["standard"]
+    assert any(f["check"] == "wall" and f["level"] == "ok" for f in found)  # the other worker's share
+    assert any(f["check"] == "overhang" for f in found)
+    to = [f for f in found if f["check"] == "timeout"]
+    assert len(to) == 1 and to[0]["data"]["running"] == "Slow(part, spins)"
+
+
+def test_one_build_slot_runs_one_worker(monkeypatch, tmp_path):
+    import anyio
+
+    from b123d_print import mcp_server as m
+
+    calls = []
+
+    async def fake(name, op, **kw):
+        calls.append(kw)
+        return {"ok": True, "passed": True, "variants": {}}
+
+    monkeypatch.setattr(m, "_job", fake)
+    monkeypatch.setitem(m.STATE, "max_builds", 1)
+    anyio.run(m._check, "x", None)
+    assert calls == [{"variant": None}]

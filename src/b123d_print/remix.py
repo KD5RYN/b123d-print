@@ -659,6 +659,50 @@ def _cache_key(path: Path, factor: float, merge: bool) -> str:
     return h.hexdigest()[:32]
 
 
+class _cache_lock:
+    """An exclusive lock on `path` (a file next to the cache entry) for as long as the block runs;
+    released by the OS if the process dies. No lock when the folder cannot be written."""
+
+    def __init__(self, path: Path | None):
+        self.path, self.fd = path, None
+
+    def __enter__(self):
+        if self.path is None:
+            return self
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError:
+            return self
+        if sys.platform == "win32":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(self.fd, msvcrt.LK_LOCK, 1)  # retries for 10 s, then raises
+                    break
+                except OSError:
+                    continue
+        else:
+            import fcntl
+
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            if sys.platform == "win32":
+                import msvcrt
+
+                try:
+                    os.lseek(self.fd, 0, os.SEEK_SET)
+                    msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            os.close(self.fd)
+        return False
+
+
 def _caller_file() -> str | None:
     f = sys._getframe(2)
     while f is not None:
@@ -713,29 +757,40 @@ def import_model(path: str | Path, scale=1.0, max_triangles: int | None = None, 
     factor = _scale_factor(scale)
     cache = Path(script).resolve().parent / "out" / ".cache" if script else None
     part = info = None
-    if cache is not None:
-        key = _cache_key(src, factor, merge)
+    key = _cache_key(src, factor, merge) if cache is not None else ""
+
+    def cached():
         brep, meta = cache / f"{key}.brep", cache / f"{key}.json"
         if brep.is_file() and meta.is_file():
             try:
-                info = ImportInfo(**json.loads(meta.read_text(encoding="utf-8")))
-                part = Part(import_brep(brep).wrapped)
-                info.cached = True
+                found = ImportInfo(**json.loads(meta.read_text(encoding="utf-8")))
+                found.cached = True
+                return Part(import_brep(brep).wrapped), found
             except Exception:  # noqa: BLE001 - a broken cache entry is rebuilt
-                part = info = None
-    if part is None:
-        part, info = load(src, factor, max_triangles, merge)
-        if cache is not None:
-            try:
-                from build123d import export_brep
-
-                cache.mkdir(parents=True, exist_ok=True)
-                tmp = cache / f".{key}.{os.getpid()}.tmp"
-                export_brep(part, tmp)
-                os.replace(tmp, brep)
-                meta.write_text(json.dumps(asdict(info)), encoding="utf-8")
-            except Exception:  # noqa: BLE001 - no cache (read-only folder): convert every time
                 pass
+        return None, None
+
+    if cache is not None:
+        part, info = cached()
+    if part is None:
+        # several workers of one check run (mcp_server.check) import the same file at once:
+        # the first converts it, the others wait for its cache entry instead of converting too
+        with _cache_lock(cache / f"{key}.lock" if cache is not None else None):
+            if cache is not None:
+                part, info = cached()
+            if part is None:
+                part, info = load(src, factor, max_triangles, merge)
+                if cache is not None:
+                    try:
+                        from build123d import export_brep
+
+                        tmp = cache / f".{key}.{os.getpid()}.tmp"
+                        export_brep(part, tmp)
+                        meta = cache / f"{key}.json"
+                        meta.write_text(json.dumps(asdict(info)), encoding="utf-8")
+                        os.replace(tmp, cache / f"{key}.brep")
+                    except Exception:  # noqa: BLE001 - no cache (read-only folder): convert every time
+                        pass
     info.file = os.path.relpath(src, Path(script).resolve().parent) if script else str(src)
     IMPORTED.append((part, info))
     return part

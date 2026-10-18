@@ -183,7 +183,8 @@ writes your user config, as before.)
 
 **Builds take turns.** `--max-builds N` (default: half the CPU cores) caps how many build,
 render, section, check, export and compare processes run at once across all clients; further
-calls wait. Each one keeps its own time limit once it starts: `--timeout` (default 120 s), or
+calls wait; a `check` uses up to N of them at once, split by check, and gives them up as its
+shares finish. Each one keeps its own time limit once it starts: `--timeout` (default 120 s), or
 `--check-timeout` for a check (default 300 s; a check returns a little before it, with what it
 found). A long queue can outlast a client's read timeout (300 s by default in the MCP Python
 SDK), so size N and the number of clients together. `list_parts` reports the limit.

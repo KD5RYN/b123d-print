@@ -70,6 +70,14 @@ FAIL that names the check that was still running and the ones not run:
 Raise the limit for that server, or narrow the slow check (`ThinFeature(part, step=4.0)`, or
 fewer `planes`). The CLI's `b123d-print check` has no time limit.
 
+Over MCP, one `check` uses several cores: the server starts up to `--max-builds` sandboxed
+workers at once (default: half the CPU cores). Each builds the part, taking the converted model
+from the cache, and runs its share of the checks, the original's included; the findings are
+put back in their usual order. Every worker takes a build slot like any build, so on a busy
+server the shares take turns, and with `--max-builds 1` a check is one worker, as before. A
+worker takes about 3 s to start, so a small part stays in one worker (the split pays from a few
+seconds of checks up). When the time limit comes, every finished share's findings are kept.
+
 Checks on a mesh-derived part (a remix) are the slow case: a section through a solid made from
 10,000 triangles has thousands of edges. Such parts (over 1500 faces, or 400 or more that are
 nearly all flat) are cut from their triangulation, which is exact for flat faces and much faster.

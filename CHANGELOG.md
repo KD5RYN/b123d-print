@@ -19,6 +19,17 @@ several times faster:
   (four identical clips tie, and which one a section reports was arbitrary).
 - `tools/bench_mesh_checks.py` times `check` on a generated 10,000-triangle remix.
 
+**Parallel checks.** Over MCP (stdio, HTTP incl. the separate worker container, SSH; Windows
+too) one `check` runs in up to `--max-builds` sandboxed workers at once, each with its share of
+the checks (the original's included), balanced by an estimate of each check's cost; the server
+merges the findings back in order. Workers still cannot start processes: the server starts
+them, and each takes a build slot. Each worker builds the part from the cached conversion; the
+first to need a mesh converted converts it while the others wait for it. One build slot, or a
+small part, is one worker, as before. On the generated 41,000-triangle remix (Apple M4,
+`tools/bench_mesh_checks.py --workers N`): 45 s → 30 s (3 workers) / 27 s (4) for the first
+check, 26 s → 19 s / 16 s after. A worker takes ~3 s to start, so the 10,000-triangle remix
+gains less: 10.8 s → 8.3 s first, 7.7 s → 6.5 s after (3 workers).
+
 **Partial results at the time limit.** A `check` that runs out of time returns every finding it
 finished, plus a `timeout` FAIL naming the check that was running and the ones not run, instead
 of the worker being killed with nothing.

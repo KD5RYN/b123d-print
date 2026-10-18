@@ -146,59 +146,220 @@ def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True
     first variant only, so a check run says it once.
     deadline: a time.time() by which to stop (the worker's soft limit, below the hard timeout
     that kills it). A check still running then is interrupted; the result is every finding
-    finished so far plus a "timeout" FAIL naming the check that was running and those not run."""
+    finished so far plus a "timeout" FAIL naming the check that was running and those not run.
+    The MCP server runs the same checks split over several workers (check_share, merge_shares)."""
+    return merge_shares([check_share(mod, key, settings, deadline=deadline)], nudge)
+
+
+# A check run is a list of items: each check spec on the printable parts ("<i>:part") and, for a
+# remix, the automatic ones again on the original ("<i>:original"). check_share runs the items of
+# one share; merge_shares puts the shares' findings back in spec order and labels inherited ones.
+# Shares are what the MCP server runs in parallel workers: every worker builds the part (from
+# import_model's cache) and computes the same partition, so no worker needs another's result.
+
+COST_MIN_SPLIT = 4.0  # estimated seconds: a smaller check run is not worth splitting (a worker takes ~3 s to start)
+
+
+def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int, int] = (0, 1),
+                deadline: float | None = None, started: float | None = None) -> dict:
+    """Run share `share` = (index, count) of one variant's check items (see partition). started:
+    when the check run began; an original's findings cached before then count as free (cached
+    later: not, so every share sees the same and computes the same partition). Returns a
+    JSON-able dict: "pre" (import and validity findings), "labels" and "inherit" per spec,
+    "results" {item: [finding dicts]}, "assigned" items, "stopped" (what was running and not run
+    when the deadline passed) or "error" (the build failed), "hole_comp_set", "costs"."""
     tag = key or "standard"
+    res: dict = {"tag": tag, "pre": [], "labels": [], "inherit": [], "results": {}, "assigned": [], "stopped": None,
+                 "error": None, "hole_comp_set": hole_comp_source(getattr(mod, "__file__", None)) is not None}
     if deadline is not None and time.time() >= deadline:
-        return [ck.Finding(ck.FAIL, "timeout", tag, "not checked: the time limit was reached on an earlier variant")]
-    out: list[ck.Finding] = []
+        res["stopped"] = {"running": None, "not_run": [f"variant {tag}"], "seconds": 0.0}
+        return res
     current = f"building variant {tag}"
+    todo: list = []
     with _Deadline(deadline) as dl:
         try:
-            d = dims(mod, key)
-            parts, orig, imports = built(mod, d)
-            asm = assembly(mod, d)
-        except CheckTimeout:
-            return [_timeout_finding(tag, current, [], dl)]
-        except Exception as e:
-            return [ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}", {"traceback": traceback.format_exc()})]
-        out += [import_finding(i) for i in imports]
-        specs: list = []
-        try:
-            for name, p in parts.items():
+            try:
+                d = dims(mod, key)
+                parts, orig, imports = built(mod, d)
+                asm = assembly(mod, d)
+            except CheckTimeout:
+                raise
+            except Exception as e:
+                res["error"] = finding_dict(ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}",
+                                                       {"traceback": traceback.format_exc()}))
+                return res
+            pre = [import_finding(i) for i in imports]
+            for name, p in parts.items() if share[0] == 0 else ():  # once per run: share 0 reports them
                 current = f"validity of {name or 'part'}"
                 valid = bool(p.is_valid) and p.volume > 0
-                out.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
+                pre.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
                                       "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
+            res["pre"] = [finding_dict(f) for f in pre] if share[0] == 0 else []
+            res["share"] = list(share)
             named = {(k or "part"): v for k, v in parts.items()}
             lookup = dict(named)
             if list(parts) == [""]:  # a bare Part from build(): also findable by the script's own name
                 lookup.setdefault(Path(getattr(mod, "__file__", "part")).stem, named["part"])
             current = "checks(d)"
             specs = check_specs(mod, d, named, asm)
+            res["labels"] = [spec_label(sp) for sp in specs]
+            res["inherit"] = [orig is not None and isinstance(sp, INHERITABLE) and getattr(sp, "other", None) is None
+                              for sp in specs]
+            items = [(i, side) for i in range(len(specs)) for side in ("part", "original")
+                     if side == "part" or res["inherit"][i]]
             originals = OriginalFindings(mod, orig, settings) if orig is not None else None
-            while specs:
-                spec = specs[0]
-                current = spec_label(spec)
+            costs = [0.01 if side == "original" and started is not None
+                     and originals.cached_before(replace(specs[i], part=ORIGINAL), started)
+                     else item_cost(specs[i], lookup, asm, orig if side == "original" else None) for i, side in items]
+            mine = partition(costs, share[1], first=0.0003 * sum(len(p.faces()) for p in parts.values()))
+            todo = [it for it, j in zip(items, mine) if j == share[0]]
+            res["assigned"] = [f"{i}:{side}" for i, side in todo]
+            res["costs"] = round(sum(costs), 2)
+            while todo:
+                i, side = todo[0]
+                spec = specs[i]
+                current = res["labels"][i] + (" on the original" if side == "original" else "")
                 try:
-                    found = spec.run(lookup, asm, settings)
-                    if originals is not None and isinstance(spec, INHERITABLE) and getattr(spec, "other", None) is None:
-                        current = f"{spec_label(spec)} on the original"
-                        from .remix import mark_inherited
-
-                        found = mark_inherited(found, originals.get(replace(spec, part=ORIGINAL)),
-                                               originals.probe(spec) if isinstance(spec, ck.ThinFeature) else None)
-                    out.extend(found)
+                    if side == "original":
+                        found = originals.get(replace(spec, part=ORIGINAL))
+                    else:
+                        found = spec.run(lookup, asm, settings)
+                        if isinstance(spec, ck.ThinFeature) and res["inherit"][i]:
+                            probe = originals.probe(spec)  # is the original thin at each listed spot? (merge_shares)
+                            for f in found:
+                                for spot in f.data.get("spots", []) if f.level != ck.OK else []:
+                                    spot["original_thin"] = bool(probe(spot))
                 except CheckTimeout:
                     raise
                 except Exception as e:
-                    out.append(ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
-                                          {"traceback": traceback.format_exc()}))
-                specs.pop(0)
+                    found = [ck.Finding(ck.FAIL, "error", getattr(spec, "part", type(spec).__name__), repr(e),
+                                        {"traceback": traceback.format_exc()})]
+                res["results"][f"{i}:{side}"] = [finding_dict(f) for f in found]
+                todo.pop(0)
         except CheckTimeout:
-            out.append(_timeout_finding(tag, current, [spec_label(s) for s in specs[1:]], dl))
-            return out
-    if nudge:
-        out.extend(setup_findings(mod, out))
+            not_run = [res["labels"][i] + (" on the original" if side == "original" else "") for i, side in todo[1:]]
+            res["stopped"] = {"running": current, "not_run": not_run, "seconds": round(time.time() - dl.started, 1)}
+    return res
+
+
+def merge_shares(shares: list[dict], nudge: bool = True, failed: list[str] = ()) -> list[ck.Finding]:
+    """The findings of one variant from its shares (check_share), in spec order: import and
+    validity, then each check's findings, labeled "inherited" against the original's; a timeout
+    FAIL if any share stopped at the deadline, an error per share that failed (`failed`)."""
+    from .remix import mark_inherited
+
+    tag = next((s["tag"] for s in shares), "standard")
+    err = next((s["error"] for s in shares if s.get("error")), None)
+    if err:
+        return [ck.Finding(**err)]
+    base = next((s for s in shares if s["labels"]), shares[0] if shares else None)
+    first = next((s for s in shares if s.get("share", [0])[0] == 0), base)  # share 0 has the validity findings
+    out = [ck.Finding(**f) for f in first["pre"]] if first else []
+    results = {k: [ck.Finding(**f) for f in v] for s in shares for k, v in s["results"].items()}
+    labels, inherit = (base["labels"], base["inherit"]) if base else ([], [])
+    for i, label in enumerate(labels):
+        found = results.get(f"{i}:part")
+        if found is None:
+            continue
+        theirs = results.get(f"{i}:original")
+        if inherit[i] and theirs is not None:
+            found = mark_inherited(found, theirs, lambda spot: spot.get("original_thin", False))
+        for f in found:
+            for spot in f.data.get("spots", []):
+                spot.pop("original_thin", None)
+        out.extend(found)
+    stopped = [s["stopped"] for s in shares if s.get("stopped")]
+    if stopped:
+        running = [x["running"] for x in stopped if x["running"]]
+        not_run = [n for x in stopped for n in x["not_run"]]
+        spent = max(x["seconds"] for x in stopped)
+        if not running and not labels:
+            out.append(ck.Finding(ck.FAIL, "timeout", tag, "not checked: the time limit was reached on an earlier variant"))
+        else:
+            what = " and ".join(running) if running else "the checks"
+            rest = f"; not run: {', '.join(not_run)}" if not_run else ""
+            out.append(ck.Finding(ck.FAIL, "timeout", tag,
+                                  f"time limit reached while running {what} (after {spent:.0f} s of checks on this variant): "
+                                  f"stopped{rest}. The findings above are complete. Raise the check time limit "
+                                  "(B123D_PRINT_CHECK_TIMEOUT on the server, default 300 s) or run fewer checks",
+                                  {"running": running[0] if len(running) == 1 else running, "not_run": not_run,
+                                   "seconds": spent}))
+    done = {a for s in shares for a in s["assigned"]}
+    missing = [labels[i] + (" on the original" if side == "original" else "")
+               for i in range(len(labels)) for side in ("part", "original")
+               if (side == "part" or inherit[i]) and f"{i}:{side}" not in done]
+    if missing and not failed and not stopped:  # the shares disagreed on the partition: never silently
+        failed = ["some checks were assigned to no check worker"]
+    if failed:
+        for msg in failed:
+            out.append(ck.Finding(ck.FAIL, "error", tag, msg + (f" (not run: {', '.join(missing)})" if missing else ""),
+                                  {"not_run": missing}))
+    if nudge and base is not None:
+        out.extend(setup_findings_for(out, base["hole_comp_set"]))
+    return out
+
+
+def finding_dict(f: ck.Finding) -> dict:
+    """A finding as plain JSON values (numpy numbers become Python numbers)."""
+    import json
+
+    return json.loads(json.dumps(f.__dict__, default=_plain))
+
+
+def _plain(x):
+    import numpy as np
+
+    if isinstance(x, np.generic):
+        return x.item()
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    return str(x)
+
+
+def item_cost(spec, lookup: dict, asm, orig) -> float:
+    """A rough estimate, in seconds on a fast CPU, of one check item: enough to balance shares.
+    The same in every worker, so they all compute the same partition. A check object of your own
+    may give its own estimate as a `cost` attribute (seconds)."""
+    if isinstance(getattr(spec, "cost", None), (int, float)):
+        return float(spec.cost)
+    try:
+        if orig is not None:
+            part = orig
+        elif isinstance(spec, ck.Overlap):
+            return 0.2 + 0.002 * sum(len(p.faces()) for p, _, _ in asm or [])
+        elif isinstance(getattr(spec, "part", None), Part):
+            part = spec.part
+        elif getattr(spec, "frame", "print") == "assembly":
+            part = next(p for p, _, lbl in asm or [] if lbl == spec.part)
+        else:
+            part = ck._get(lookup, spec.part)
+        n = len(part.faces())
+        flat = ck.meshy(part)
+    except Exception:  # noqa: BLE001 - an estimate only; the check itself reports the problem
+        return 0.5
+    if isinstance(spec, ck.ThinFeature):
+        return 0.2 + n * (0.0006 if flat else 0.02)
+    if isinstance(spec, ck.Overhang):
+        return 0.05 + n * 0.0003
+    if isinstance(spec, ck.Wall):
+        return 0.2 + n * 0.0002
+    if isinstance(spec, (ck.Gap, ck.Probe)):
+        return 0.1 + n * 0.0005
+    return 0.02 + n * 0.00002
+
+
+def partition(costs: list[float], count: int, first: float = 0.0) -> list[int]:
+    """Which share runs each item: longest first, each to the share with the least so far (ties:
+    the lowest share). Everything in share 0 when the total is under COST_MIN_SPLIT. first: what
+    share 0 does besides (the validity findings)."""
+    if count <= 1 or sum(costs) < COST_MIN_SPLIT:
+        return [0] * len(costs)
+    load = [first] + [0.0] * (count - 1)
+    out = [0] * len(costs)
+    for k in sorted(range(len(costs)), key=lambda k: (-costs[k], k)):
+        j = min(range(count), key=lambda j: (load[j], j))
+        out[k] = j
+        load[j] += costs[k]
     return out
 
 
@@ -274,16 +435,6 @@ class _Deadline:
         return False
 
 
-def _timeout_finding(tag: str, current: str, not_run: list[str], dl: _Deadline) -> ck.Finding:
-    spent = time.time() - dl.started
-    rest = f"; not run: {', '.join(not_run)}" if not_run else ""
-    return ck.Finding(ck.FAIL, "timeout", tag,
-                      f"time limit reached while running {current} (after {spent:.0f} s of checks on this variant): "
-                      f"it was stopped{rest}. The findings above are complete. Raise the check time limit "
-                      "(B123D_PRINT_CHECK_TIMEOUT on the server, default 300 s) or run fewer checks",
-                      {"running": current, "not_run": not_run, "seconds": round(spent, 1)})
-
-
 CACHE_VERSION = 1  # bump when what is cached changes
 
 
@@ -319,6 +470,15 @@ class OriginalFindings:
         if not hasattr(self, "_slicer"):
             self._slicer = ck.MeshSlicer(self.orig) if ck.meshy(self.orig) else None
         return lambda spot: spec.thin_at(self.orig, spot, self.settings, self._slicer)
+
+    def cached_before(self, twin, when: float) -> bool:
+        """Were the findings of `twin` cached before `when` (time.time())?"""
+        if self.dir is None:
+            return False
+        try:
+            return (self.dir / f"original-{self._key(twin)}.json").stat().st_mtime < when
+        except OSError:
+            return False
 
     def get(self, twin) -> list[ck.Finding]:
         k = repr(twin)
@@ -380,19 +540,10 @@ def _write_findings(path: Path, findings: list[ck.Finding]) -> None:
     import json
     import os
 
-    import numpy as np
-
-    def plain(x):
-        if isinstance(x, np.generic):
-            return x.item()
-        if isinstance(x, np.ndarray):
-            return x.tolist()
-        return str(x)
-
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-        tmp.write_text(json.dumps({"findings": [f.__dict__ for f in findings]}, default=plain), encoding="utf-8")
+        tmp.write_text(json.dumps({"findings": [f.__dict__ for f in findings]}, default=_plain), encoding="utf-8")
         os.replace(tmp, path)
     except OSError:  # a read-only folder: no cache
         pass
@@ -415,8 +566,12 @@ def import_finding(info) -> ck.Finding:
 def setup_findings(mod: ModuleType, findings: list[ck.Finding]) -> list[ck.Finding]:
     """Reminders about settings the part depends on but nobody has set: hole_comp is 0 until it
     is measured, so a part with holes gets them at nominal size, which prints small (BP-H1)."""
+    return setup_findings_for(findings, hole_comp_source(getattr(mod, "__file__", None)) is not None)
+
+
+def setup_findings_for(findings: list[ck.Finding], hole_comp_set: bool) -> list[ck.Finding]:
     n = sum(len(f.data.get("holes", [])) for f in findings if f.check == "holes")
-    if not n or hole_comp_source(getattr(mod, "__file__", None)) is not None:
+    if not n or hole_comp_set:
         return []
     return [ck.Finding(ck.WARN, "hole_comp", "settings",
                        f"this part has {n} round hole(s) and hole_comp has never been set (user config, workspace, "

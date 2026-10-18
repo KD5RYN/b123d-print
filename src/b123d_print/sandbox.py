@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import os
 import shutil
 import signal
@@ -170,7 +171,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
         # the worker's own soft limit, a little before the hard one kills it: `check` stops there and
         # returns what it finished instead of nothing (see project.run_checks)
         job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable,
-               "deadline": time.time() + timeout - soft_margin(timeout)}
+               "deadline": min(job.get("deadline", math.inf), time.time() + timeout - soft_margin(timeout))}
         job_file = os.path.join(tmp, "job.json")
         with open(job_file, "w", encoding="utf-8") as f:
             json.dump(job, f)

@@ -1,12 +1,13 @@
 """Time `check` on a mesh-imported part the size of a downloaded model (~10k triangles).
 
-    uv run python tools/bench_mesh_checks.py [--triangles 10000] [--keep DIR] [--repeat 2]
+    uv run python tools/bench_mesh_checks.py [--triangles 10000] [--keep DIR] [--repeat 2] [--workers N]
 
 Generates a cable-holder-like part (a filleted base plate with C-shaped clips, slots and screw
 holes), exports it as a faceted STL (made here: no third-party model), writes a remix script that
 imports it with import_model, cuts a hole and declares two Wall checks around it, and runs every
 check the way `b123d-print check` does, printing the time per check. The second run shows what
-the caches save (the import conversion and the original's findings).
+the caches save (the import conversion and the original's findings). --workers N runs the check
+the way the MCP server does instead: sandboxed, split over N workers (1: one worker, as before).
 """
 
 from __future__ import annotations
@@ -113,11 +114,30 @@ def run(ws: Path, repeat: int) -> list[dict]:
     return times
 
 
+def run_server(ws: Path, repeat: int, workers: int) -> list[float]:
+    """The MCP server's check (sandboxed workers, split over `workers`); seconds per run."""
+    import anyio
+
+    from b123d_print import mcp_server as m, sandbox
+
+    m.STATE.update(root=ws, timeout=120.0, check_timeout=300.0, max_builds=workers, queue=None, limiter=None)
+    sandbox.MAX_BUILDS = workers
+    out = []
+    for _ in range(repeat):
+        t0 = time.perf_counter()
+        res = anyio.run(m._check, "bench", None)
+        out.append(time.perf_counter() - t0)
+        if not res.get("ok"):
+            raise SystemExit(f"check failed: {res.get('error')}")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--triangles", type=int, default=10000)
     ap.add_argument("--repeat", type=int, default=2)
     ap.add_argument("--keep", type=Path, help="write the workspace here and keep it")
+    ap.add_argument("--workers", type=int, help="run the check like the MCP server, split over this many workers")
     args = ap.parse_args()
     ws = args.keep or Path(tempfile.mkdtemp(prefix="b123d-bench-"))
     try:
@@ -128,6 +148,10 @@ def main() -> int:
         n = make_ref(part_dir / "ref" / "holder.stl", args.triangles)
         (part_dir / "bench.py").write_text(SCRIPT, encoding="utf-8")
         print(f"reference mesh: {n} triangles")
+        if args.workers:
+            for i, t in enumerate(run_server(ws, args.repeat, args.workers)):
+                print(f"run {i + 1}: {t:.1f} s ({args.workers} worker(s))")
+            return 0
         for i, r in enumerate(run(ws, args.repeat)):
             print(f"run {i + 1}: {r['total']:.1f} s")
             for k, v in sorted(r["per_check"].items(), key=lambda kv: -kv[1]):

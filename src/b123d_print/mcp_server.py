@@ -445,6 +445,42 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
     return _with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}", res["image"], inline)
 
 
+async def _check(name: str, variant: str | None) -> dict:
+    """Run a check over up to --max-builds workers at once: each builds the part (import_model's
+    conversion is cached and shared) and runs its share of the check items (project.partition);
+    the findings are merged back in order. Each worker takes a build slot like any build, so on
+    a busy server the shares simply take turns; with one slot it is one worker, as before.
+    All shares stop at the same soft deadline, so a check that runs out of time still returns
+    every finding that finished."""
+    count = max(1, STATE["max_builds"])
+    if count == 1:
+        return await _job(name, "check", variant=variant)
+    from .project import merge_shares
+
+    timeout = STATE["check_timeout"]
+    started = time.time()
+    deadline = started + timeout - sandbox.soft_margin(timeout)
+    results: list = [None] * count
+
+    async def one(i: int) -> None:
+        results[i] = await _job(name, "check", variant=variant, share=[i, count], deadline=deadline, started=started)
+
+    async with anyio.create_task_group() as tg:
+        for i in range(count):
+            tg.start_soon(one, i)
+    good = [r for r in results if r.get("ok")]
+    if not good:
+        return results[0]
+    failed = [f"check worker {i + 1} of {count} failed: {r.get('error')}"
+              for i, r in enumerate(results) if not r.get("ok")]
+    out: dict = {"variants": {}, "workers": count}
+    for i, v in enumerate(good[0]["shares"]):
+        found = merge_shares([r["shares"][v] for r in good if v in r["shares"]], nudge=i == 0, failed=failed)
+        out["variants"][v] = [f.__dict__ for f in found]
+    out["passed"] = not any(f["level"] == "fail" for v in out["variants"].values() for f in v)
+    return {"ok": True, **out}
+
+
 @mcp.tool()
 async def check(name: str, variant: str | None = None) -> str:
     """Run the print checks: validity, overlap between assembly parts (incl. stand-ins),
@@ -452,7 +488,7 @@ async def check(name: str, variant: str | None = None) -> str:
     thin features (walls under one line width fail), round-topped horizontal holes, fillets on
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
     around deep cuts) and Probes. Fix every FAIL; report every WARN."""
-    res = await _job(name, "check", variant=variant)
+    res = await _check(name, variant)
     if not res.get("ok"):
         return _error_text(res)
     lines = [f"{'PASSED' if res['passed'] else 'FAILED'}"]
