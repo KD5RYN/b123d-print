@@ -659,6 +659,50 @@ def _cache_key(path: Path, factor: float, merge: bool) -> str:
     return h.hexdigest()[:32]
 
 
+class _cache_lock:
+    """An exclusive lock on `path` (a file next to the cache entry) for as long as the block runs;
+    released by the OS if the process dies. No lock when the folder cannot be written."""
+
+    def __init__(self, path: Path | None):
+        self.path, self.fd = path, None
+
+    def __enter__(self):
+        if self.path is None:
+            return self
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError:
+            return self
+        if sys.platform == "win32":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(self.fd, msvcrt.LK_LOCK, 1)  # retries for 10 s, then raises
+                    break
+                except OSError:
+                    continue
+        else:
+            import fcntl
+
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            if sys.platform == "win32":
+                import msvcrt
+
+                try:
+                    os.lseek(self.fd, 0, os.SEEK_SET)
+                    msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            os.close(self.fd)
+        return False
+
+
 def _caller_file() -> str | None:
     f = sys._getframe(2)
     while f is not None:
@@ -713,29 +757,40 @@ def import_model(path: str | Path, scale=1.0, max_triangles: int | None = None, 
     factor = _scale_factor(scale)
     cache = Path(script).resolve().parent / "out" / ".cache" if script else None
     part = info = None
-    if cache is not None:
-        key = _cache_key(src, factor, merge)
+    key = _cache_key(src, factor, merge) if cache is not None else ""
+
+    def cached():
         brep, meta = cache / f"{key}.brep", cache / f"{key}.json"
         if brep.is_file() and meta.is_file():
             try:
-                info = ImportInfo(**json.loads(meta.read_text(encoding="utf-8")))
-                part = Part(import_brep(brep).wrapped)
-                info.cached = True
+                found = ImportInfo(**json.loads(meta.read_text(encoding="utf-8")))
+                found.cached = True
+                return Part(import_brep(brep).wrapped), found
             except Exception:  # noqa: BLE001 - a broken cache entry is rebuilt
-                part = info = None
-    if part is None:
-        part, info = load(src, factor, max_triangles, merge)
-        if cache is not None:
-            try:
-                from build123d import export_brep
-
-                cache.mkdir(parents=True, exist_ok=True)
-                tmp = cache / f".{key}.{os.getpid()}.tmp"
-                export_brep(part, tmp)
-                os.replace(tmp, brep)
-                meta.write_text(json.dumps(asdict(info)), encoding="utf-8")
-            except Exception:  # noqa: BLE001 - no cache (read-only folder): convert every time
                 pass
+        return None, None
+
+    if cache is not None:
+        part, info = cached()
+    if part is None:
+        # several workers of one check run (mcp_server.check) import the same file at once:
+        # the first converts it, the others wait for its cache entry instead of converting too
+        with _cache_lock(cache / f"{key}.lock" if cache is not None else None):
+            if cache is not None:
+                part, info = cached()
+            if part is None:
+                part, info = load(src, factor, max_triangles, merge)
+                if cache is not None:
+                    try:
+                        from build123d import export_brep
+
+                        tmp = cache / f".{key}.{os.getpid()}.tmp"
+                        export_brep(part, tmp)
+                        meta = cache / f"{key}.json"
+                        meta.write_text(json.dumps(asdict(info)), encoding="utf-8")
+                        os.replace(tmp, cache / f"{key}.brep")
+                    except Exception:  # noqa: BLE001 - no cache (read-only folder): convert every time
+                        pass
     info.file = os.path.relpath(src, Path(script).resolve().parent) if script else str(src)
     IMPORTED.append((part, info))
     return part
@@ -838,9 +893,13 @@ INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "gap")
 MATCH_MM = 1.5  # an item of a finding counts as the original's when one of the original's is this close
 
 
-def _items(f) -> list[np.ndarray]:
-    """The located items of a finding (face centers, thin spots, holes), as points."""
+def _items(f, every: bool = False) -> list[np.ndarray]:
+    """The located items of a finding (face centers, thin spots, holes), as points. every: all of
+    them where the finding keeps more than it lists (ThinFeature lists the 8 thinnest spots; many
+    spots on one knife edge are equally thin, so which 8 is arbitrary)."""
     d = f.data or {}
+    if every and f.check == "thin" and isinstance(d.get("located"), dict):
+        return [np.asarray(p, float) for p in d["located"].get(_kind(f), []) if len(p) == 3]
     keys = {"overhang": ("faces",), "bridge": ("bridges",), "thin": ("spots",), "holes": ("round_top", "small"),
             "bed edge": ("faces",)}.get(f.check, ())
     pts = []
@@ -862,16 +921,18 @@ def _kind(f) -> str:
     return ""
 
 
-def mark_inherited(findings: list, original: list) -> list:
+def mark_inherited(findings: list, original: list, probe=None) -> list:
     """Label the findings the original already had: all of a finding's items (spots, faces, holes)
     within MATCH_MM of the original's -> one inherited finding (WARN at most: it is not the
-    remix's to fix); some of them -> the finding stays, saying which are new. Others are new."""
+    remix's to fix); some of them -> the finding stays, saying which are new. Others are new.
+    probe(spot) -> bool: whether the original is thin at a thin spot of the remix that matched
+    none of the original's listed spots (see ThinFeature.thin_at)."""
     from .checks import FAIL, OK, WARN, Finding
 
     orig = {}
     for f in original:
         if f.level != OK and f.check in INHERITABLE:
-            orig.setdefault((f.check, _kind(f)), []).extend(_items(f) or [None])
+            orig.setdefault((f.check, _kind(f)), []).extend(_items(f, every=True) or [None])
     out = []
     for f in findings:
         key = (f.check, _kind(f))
@@ -884,6 +945,9 @@ def mark_inherited(findings: list, original: list) -> list:
             inherited = [True]
         else:
             inherited = [bool(theirs) and min(float(np.linalg.norm(p - q)) for q in theirs) <= MATCH_MM for p in mine]
+            spots = f.data.get("spots") or []
+            if probe is not None and f.check == "thin" and len(spots) == len(mine):
+                inherited = [i or bool(probe(s)) for i, s in zip(inherited, spots)]
         if all(inherited):
             level = WARN if f.level == FAIL else f.level
             note = " (a FAIL on the original too)" if f.level == FAIL else ""

@@ -108,7 +108,7 @@ def _in_use(name: str | None, start: bool) -> None:
 
 
 mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
-STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "transport": "stdio", "max_builds": 2, "limiter": None,
+STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
@@ -154,12 +154,13 @@ async def _run(job: dict, out_dir: Path) -> dict:
     and under the shared build limit."""
     root = _root()  # resolve the client's workspace here, not in the worker thread
     queue = STATE["queue"]
+    timeout = STATE["check_timeout"] if job.get("op") == "check" else STATE["timeout"]
 
     def run() -> dict:
         if queue is None:
-            return sandbox.run_job(job, root, out_dir, STATE["timeout"])
+            return sandbox.run_job(job, root, out_dir, timeout)
         try:  # a separate worker (container) runs it: see jobqueue.py
-            return jobqueue.submit(queue, job, root, out_dir, STATE["timeout"])
+            return jobqueue.submit(queue, job, root, out_dir, timeout)
         except jobqueue.WorkerDown as e:
             return {"ok": False, "error": str(e)}
 
@@ -532,6 +533,42 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
                                   res["image"], inline), name)
 
 
+async def _check(name: str, variant: str | None) -> dict:
+    """Run a check over up to --max-builds workers at once: each builds the part (import_model's
+    conversion is cached and shared) and runs its share of the check items (project.partition);
+    the findings are merged back in order. Each worker takes a build slot like any build, so on
+    a busy server the shares simply take turns; with one slot it is one worker, as before.
+    All shares stop at the same soft deadline, so a check that runs out of time still returns
+    every finding that finished."""
+    count = max(1, STATE["max_builds"])
+    if count == 1:
+        return await _job(name, "check", variant=variant)
+    from .project import merge_shares
+
+    timeout = STATE["check_timeout"]
+    started = time.time()
+    deadline = started + timeout - sandbox.soft_margin(timeout)
+    results: list = [None] * count
+
+    async def one(i: int) -> None:
+        results[i] = await _job(name, "check", variant=variant, share=[i, count], deadline=deadline, started=started)
+
+    async with anyio.create_task_group() as tg:
+        for i in range(count):
+            tg.start_soon(one, i)
+    good = [r for r in results if r.get("ok")]
+    if not good:
+        return results[0]
+    failed = [f"check worker {i + 1} of {count} failed: {r.get('error')}"
+              for i, r in enumerate(results) if not r.get("ok")]
+    out: dict = {"variants": {}, "workers": count}
+    for i, v in enumerate(good[0]["shares"]):
+        found = merge_shares([r["shares"][v] for r in good if v in r["shares"]], nudge=i == 0, failed=failed)
+        out["variants"][v] = [f.__dict__ for f in found]
+    out["passed"] = not any(f["level"] == "fail" for v in out["variants"].values() for f in v)
+    return {"ok": True, **out}
+
+
 @mcp.tool()
 async def check(name: str, variant: str | None = None) -> str:
     """Run the print checks: validity, overlap between assembly parts (incl. stand-ins),
@@ -540,7 +577,7 @@ async def check(name: str, variant: str | None = None) -> str:
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
     around deep cuts) and Probes. Fix every FAIL; report every WARN. On a remote server (HTTP/SSH)
     the part is not on the user's machine until download_part brings it home."""
-    res = await _job(name, "check", variant=variant)
+    res = await _check(name, variant)
     if not res.get("ok"):
         return _error_text(res)
     lines = [f"{'PASSED' if res['passed'] else 'FAILED'}"]
@@ -1416,7 +1453,11 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--workspace", default=env("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
     ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
-                    help="seconds per build (default 120)")
+                    help="seconds per build, render, section or export (default 120; $B123D_PRINT_TIMEOUT)")
+    ap.add_argument("--check-timeout", type=float, default=float(env("B123D_PRINT_CHECK_TIMEOUT", 0)) or None,
+                    help="seconds per check run, which builds the part and runs every check (on a remix, on the original "
+                         "too); near the limit it stops and returns the findings it has (default: 300, or --timeout if "
+                         "longer; $B123D_PRINT_CHECK_TIMEOUT)")
     ap.add_argument("--max-builds", type=int, default=int(env("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2),
                     help="build processes at once, across all clients and all server processes of this user (one per SSH session); "
                          "more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
@@ -1493,7 +1534,8 @@ def main(argv: list[str] | None = None) -> None:
         # containers: keep user settings (printer, calibration) with the mounted parts, not in a
         # home folder that disappears with the container
         os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
-    STATE.update(root=root, timeout=args.timeout, transport=args.transport, max_builds=max(1, args.max_builds))
+    STATE.update(root=root, timeout=args.timeout, check_timeout=args.check_timeout or max(300.0, args.timeout),
+                 transport=args.transport, max_builds=max(1, args.max_builds))
     if args.transport == "stdio":
         mcp.run("stdio")
         return

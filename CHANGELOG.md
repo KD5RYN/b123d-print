@@ -25,6 +25,43 @@ at startup and hourly and logged by name; never while a request or build for it 
 `--retention-days` / `B123D_PRINT_RETENTION_DAYS` (`0` = never); in `deploy/compose.yaml` and the
 new `deploy/.env.example`. The shared root workspace and SSH and local folders are never removed.
 
+**Faster checks on remixes.** Checking a part made from a downloaded mesh (~10,000 triangles) is
+several times faster:
+- Section outlines no longer use `Wire.order_edges` and `Edge.positions`, which took seconds per
+  section on the thousand-edge outlines of mesh-derived solids. A `Wall` check on such a section:
+  14 s → 1 s; it also cuts its section once instead of twice.
+- `Wall` measurements cast their rays against only the nearby part of the outline first
+  (same results; a test compares them with the full cast).
+- `ThinFeature` cuts mesh-derived parts from their triangulation from 400 mostly flat faces up
+  (was: over 1500 faces).
+- The checks on a remix's original are cached in `out/.cache/` (keyed by its geometry, the
+  check, the settings and the b123d-print version): after the first `check`, only the remix is
+  checked.
+- A remix's thin spot that matches none of the original's listed spots is checked against the
+  original's geometry, so knife edges the original already had are labeled inherited every time
+  (four identical clips tie, and which one a section reports was arbitrary).
+- `tools/bench_mesh_checks.py` times `check` on a generated 10,000-triangle remix.
+
+**Parallel checks.** Over MCP (stdio, HTTP incl. the separate worker container, SSH; Windows
+too) one `check` runs in up to `--max-builds` sandboxed workers at once, each with its share of
+the checks (the original's included), balanced by an estimate of each check's cost; the server
+merges the findings back in order. Workers still cannot start processes: the server starts
+them, and each takes a build slot. Each worker builds the part from the cached conversion; the
+first to need a mesh converted converts it while the others wait for it. One build slot, or a
+small part, is one worker, as before. On the generated 41,000-triangle remix (Apple M4,
+`tools/bench_mesh_checks.py --workers N`): 45 s → 30 s (3 workers) / 27 s (4) for the first
+check, 26 s → 19 s / 16 s after. A worker takes ~3 s to start, so the 10,000-triangle remix
+gains less: 10.8 s → 8.3 s first, 7.7 s → 6.5 s after (3 workers).
+
+**Partial results at the time limit.** A `check` that runs out of time returns every finding it
+finished, plus a `timeout` FAIL naming the check that was running and the ones not run, instead
+of the worker being killed with nothing.
+
+**A separate time limit for `check`:** `--check-timeout` / `B123D_PRINT_CHECK_TIMEOUT`, default
+300 s (or `--timeout` if longer); builds, renders and exports keep `--timeout` (120 s).
+`deploy/compose.yaml` reads both from `.env` (`B123D_PRINT_TIMEOUT`, `B123D_PRINT_CHECK_TIMEOUT`),
+so a host can change them without editing the file.
+
 ## 0.3.0 — 2026-10-18
 
 **Design review.** After the print checks pass, the assistant can review a part for its purpose

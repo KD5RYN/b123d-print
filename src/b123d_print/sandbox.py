@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import os
 import shutil
 import signal
@@ -152,6 +153,12 @@ else:
         pass
 
 
+def soft_margin(timeout: float) -> float:
+    """Seconds before the hard timeout at which the worker stops checking and reports: 10 %,
+    between 3 and 30 s (time to interrupt an OCC call and write the result)."""
+    return min(30.0, max(3.0, 0.1 * timeout))
+
+
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -161,7 +168,10 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
         tmp = _real(tmp)
         writable = [_real(out_dir), tmp, _real(mpl)]
         readable = [_real(workspace)] + _python_roots()
-        job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable}
+        # the worker's own soft limit, a little before the hard one kills it: `check` stops there and
+        # returns what it finished instead of nothing (see project.run_checks)
+        job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable,
+               "deadline": min(job.get("deadline", math.inf), time.time() + timeout - soft_margin(timeout))}
         job_file = os.path.join(tmp, "job.json")
         with open(job_file, "w", encoding="utf-8") as f:
             json.dump(job, f)

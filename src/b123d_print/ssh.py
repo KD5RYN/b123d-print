@@ -154,7 +154,7 @@ def write_tar(files: list[Path] | list[tuple[str, Path]], stream) -> None:
 
 
 def serve(workspace: str, dest: str | None, timeout: float | None, original: str | None,
-          stdout=None, stderr=None, stdin=None) -> int:
+          stdout=None, stderr=None, stdin=None, check_timeout: float | None = None) -> int:
     """The forced command's whole job. Returns the exit code (the MCP server never returns)."""
     stdout = stdout or sys.stdout.buffer
     stderr = stderr or sys.stderr
@@ -171,6 +171,8 @@ def serve(workspace: str, dest: str | None, timeout: float | None, original: str
         argv = ["--workspace", str(ws), "--transport", "stdio"]
         if timeout:
             argv += ["--timeout", str(timeout)]
+        if check_timeout:
+            argv += ["--check-timeout", str(check_timeout)]
         mcp_server.main(argv)
         return 0
     if what == "version":

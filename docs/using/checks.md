@@ -55,6 +55,36 @@ also run on the original, and findings the original already had are labeled **in
 the original**: reported, never failing the check, not the remix's to fix. An **import** line
 says what was loaded and warns when its units look wrong.
 
+## Time limit
+
+Over MCP, a `check` call has its own time limit, longer than a build's: 300 s by default
+(`--check-timeout`, `B123D_PRINT_CHECK_TIMEOUT`; never shorter than `--timeout`). Shortly before
+it (30 s at most), the checks stop and you get every finding that finished, plus a **timeout**
+FAIL that names the check that was still running and the ones not run:
+
+```text
+[FAIL] timeout  standard: time limit reached while running ThinFeature(part) (after 268 s of checks on this variant):
+       it was stopped; not run: Holes(part), BedEdge(part), Gap(part). The findings above are complete. ...
+```
+
+Raise the limit for that server, or narrow the slow check (`ThinFeature(part, step=4.0)`, or
+fewer `planes`). The CLI's `b123d-print check` has no time limit.
+
+Over MCP, one `check` uses several cores: the server starts up to `--max-builds` sandboxed
+workers at once (default: half the CPU cores). Each builds the part, taking the converted model
+from the cache, and runs its share of the checks, the original's included; the findings are
+put back in their usual order. Every worker takes a build slot like any build, so on a busy
+server the shares take turns, and with `--max-builds 1` a check is one worker, as before. A
+worker takes about 3 s to start, so a small part stays in one worker (the split pays from a few
+seconds of checks up). When the time limit comes, every finished share's findings are kept.
+
+Checks on a mesh-derived part (a remix) are the slow case: a section through a solid made from
+10,000 triangles has thousands of edges. Such parts (over 1500 faces, or 400 or more that are
+nearly all flat) are cut from their triangulation, which is exact for flat faces and much faster.
+A remix's original does not change while you work on the remix, so its findings are cached in
+`out/.cache/` next to the converted model, keyed by its geometry, the check's arguments, your
+settings and the b123d-print version: after the first `check`, only the remix is checked.
+
 !!! warning "Why wall checks matter"
     `is_valid` and hole-diameter checks do not catch a 0.05 mm skin. A real print broke there.
     Wherever a cut goes deeper than the wall it starts in, add a `Wall` check just past the wall.
