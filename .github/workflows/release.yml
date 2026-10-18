@@ -16,6 +16,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: Tag matches the package version
         run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - name: The changelog has a dated section for this version
+        run: python3 tools/release_notes.py "$GITHUB_REF_NAME" > /dev/null
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -44,3 +46,19 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    # the GitHub Release page for the tag, text = this version's CHANGELOG.md section;
+    # also creates any missing pages for older tags
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Release notes from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release_notes.py --backfill

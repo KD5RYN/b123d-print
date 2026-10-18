@@ -50,6 +50,8 @@ While 0.x, the part-script convention may still change; say so in the release no
 2. Bump `version` in `pyproject.toml` and `.claude-plugin/plugin.json`, run `uv lock`, merge.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z` → `release.yml` waits for approval of the `pypi`
    environment, then uploads to PyPI and pushes `ghcr.io/kd5ryn/b123d-print-mcp:X.Y.Z` + `latest`.
-4. Write the release notes as a GitHub release on the tag (say when the part-script
-   convention changed).
+4. The release notes write themselves: the `github-release` job turns the version's
+   `CHANGELOG.md` section into the GitHub Release page (and creates missing pages for older
+   tags). The release refuses to start if that section is missing or still says "unreleased",
+   so date it in step 2. Preview: `python tools/release_notes.py X.Y.Z`.
 5. Update the pinned-version examples in the docs (`b123d-print==0.2.0`) if they should follow.
