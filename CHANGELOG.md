@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — unreleased
+## 0.2.1 — 2026-10-18
 
 **Native Windows support for local use.** The MCP server and the CLI run on Windows 10/11 with
 `uvx`, like on macOS and Linux; CI now tests Windows too (unit tests, MCP end to end over stdio
