@@ -9,7 +9,7 @@ workspace with `/mcp?workspace=<name>` (or the header `X-B123D-Workspace`), whic
 <workspace>/workspaces/<name>; without one, clients share <workspace> itself. Files the server
 writes come back as signed download links (GET /files/..., no token, they expire) and as
 b123d-print://files/ resources; download_part gives one signed link (GET /zip/...) to a zip of a
-whole part. A named workspace nobody uses for --retention-days (default 30) is removed.
+whole part, and export a signed 3D view link (GET /view/..., viewer.py). A named workspace nobody uses for --retention-days (default 30) is removed.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import handoff, jobqueue, links, sandbox, tokens
+from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
 from .project import find_parts
@@ -39,7 +39,8 @@ MAX_SCRIPT_BYTES = 256_000
 INSTRUCTIONS = """\
 Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export. To remix an existing STL/3MF/STEP: upload_reference ->
+check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export (it returns a
+3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
 describe_model -> import_model in the script (prompt remix_part). Read the resource
 b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
@@ -622,12 +623,17 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
 @mcp.tool(structured_output=False)
 @_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
-                 embed: bool = False) -> list:
+                 embed: bool = False, view: str = "print") -> list:
     """Export printable parts to parts/<name>/out/. Default: every part, all variants.
     parts: comma-separated part names from build() to export only those; variant: one variant.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
-    (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
-    user's `formats` setting (default: all four). Ask the user which they want if unclear.
+    (slicers; 3MF keeps units), png (6-view preview + section views), glb (binary glTF, for web
+    and 3D apps), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
+    png). Ask the user which they want if unclear.
+    view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
+    parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
+    signed link (no token, expires like the downloads); locally a self-contained HTML file next to
+    the outputs (works offline). Offer it to the user after an export.
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
     and a b123d-print://files/ resource link; download_part gets the whole part (script, out/,
     ref/) in one zip. embed=True also puts files up to 2 MB into the result itself, for clients
@@ -637,7 +643,11 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
             parse_formats(formats)
         except ValueError as e:
             raise ToolError(str(e)) from None
-    res = await _job(name, "export", variant=variant, formats=formats, parts=parts)
+    try:
+        layout = viewer.parse_layout(view)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    res = await _job(name, "export", variant=variant, formats=formats, parts=parts, view=layout)
     if not res.get("ok"):
         return [_error_text(res)]
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
@@ -667,11 +677,56 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
                 budget -= info["size"]
     if expires:
         out.append("\n" + _expiry_note(expires))
+    views = _view_lines(name, res["variants"])
+    if views:
+        out.append("\n" + "\n".join(views))
     if STATE["ssh_dest"]:
         out.append("\n" + _pull_note(name, formats, None))
     if _remote():
         out.append("\n" + _home_note(name))
     return ["\n".join(out), *extra]
+
+
+def _view_link(part: str, glb: Path) -> tuple[str, int]:
+    """HTTP: the signed /view/ link of out/<stem>.glb (the page; the model sits behind the same token)."""
+    url, expires = links.sign_view(STATE["link_secret"], _ws_name(), part, glb.stem, STATE["link_ttl"])
+    return _base_url() + url, expires
+
+
+def _view_glb(name: str, path: str) -> Path | None:
+    """The view GLB a build reported, if it really is a regular <parts_dir>/<name>/out/*_view.glb in
+    this workspace (the report comes from the process that ran the part script: never trust a path in it)."""
+    root = _root()
+    try:
+        rel = Path(path).resolve().relative_to(root.resolve()).as_posix()
+        f = links.servable(root, load_settings(root).parts_dir, rel)
+    except (ValueError, OSError, links.LinkError):
+        return None
+    return f if f.parent.parent.name == name and f.name.endswith("_view.glb") else None
+
+
+def _view_lines(name: str, variants: list[dict]) -> list[str]:
+    """What export says about the 3D views it wrote: a link (HTTP), a file (stdio) or how to make one (SSH)."""
+    lines = [f"  [{v['variant']}] no 3D view: {v['view_error']}" for v in variants if v.get("view_error")]
+    glbs = [(v["variant"], g) for v in variants if v.get("view") and (g := _view_glb(name, str(v["view"])))]
+    if not glbs:
+        return ["3D view:", *lines] if lines else []
+    if _http():
+        expires = 0
+        for var, glb in glbs:
+            url, expires = _view_link(name, glb)
+            lines.append(f"  [{var}] {url}")
+        when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
+        return [f"3D view (give the user these links: they open in a browser, need no token and expire {when}; "
+                "rotate, hide pieces, measure the bounding box, cut a section):", *lines]
+    if STATE["ssh_dest"]:
+        return [f"3D view: written as out/{glbs[0][1].name} on the server. After `b123d-print pull {name}`, "
+                f"`b123d-print view {name}` on the user's machine writes a self-contained HTML view of it "
+                "(opens offline in a browser).", *lines]
+    for var, glb in glbs:
+        lines.append(f"  [{var}] {viewer.write_offline(glb)}")
+    return ["3D view (self-contained HTML files, no server needed: tell the user to open them in a browser; "
+            "they work offline):", *lines]
 
 
 def _triple(v, what: str) -> list[float] | None:
@@ -829,7 +884,8 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
     files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
-    = ''); formats: only those out/ files (step, stl, 3mf, png); the script and ref/ always come.
+    = ''); formats: only those out/ files (step, stl, 3mf, png, glb); the script and ref/ always come.
+    Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
     embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
     URLs nor read resources. Call it as the last step of remote work, before reporting."""
     files = _part_files(name, variant, formats)
@@ -848,13 +904,17 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
     url = _base_url() + url
     when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
+    views = [f"  {_view_link(name, p)[0]}" for rel, p in _part_files(name, variant, "glb")
+             if rel.startswith("out/") and p.name.endswith("_view.glb")]
     text = (f"{head}\n"
             f"Download it (one zip, no token needed; the link expires {when}; after that call download_part again):\n"
             f"  curl -fLo {name}.zip '{url}'\n"
             f"Then, in the project folder: unzip -o {name}.zip   (Windows: tar -xf {name}.zip)\n"
             f"It creates the same layout as a local install (paths relative to the project folder):\n{listing}\n"
-            f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n\n"
-            + _home_note(name))
+            f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n"
+            + (f"3D view in a browser (no token, same expiry; offer it to the user):\n" + "\n".join(views) + "\n"
+               if views else "")
+            + "\n" + _home_note(name))
     from mcp_types import ResourceLink
 
     uri = f"b123d-print://download/{_ws_name()}/{name}"
@@ -1388,6 +1448,48 @@ async def download_zip(request):
                                       "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
+@mcp.custom_route("/view/{workspace}/{token}/{part}/{file}", methods=["GET"])
+async def view_link(request):
+    """A signed 3D view link (export's view): needs no bearer token. .../<stem> is the viewer page
+    (the same static page for every part), .../<stem>.glb the model, which must be
+    <parts_dir>/<part>/out/<stem>.glb in the workspace the link was signed for; until it expires."""
+    from starlette.responses import FileResponse, PlainTextResponse, Response
+
+    ws, token, part, file = (request.path_params[k] for k in ("workspace", "token", "part", "file"))
+    is_model = file.endswith(".glb")
+    stem = file[:-4] if is_model else file
+    try:
+        if not NAME_RE.match(part) or not stem:
+            raise links.LinkError(404, "not found")
+        links.check_path(f"{part}/{stem}.glb")
+        links.verify_view(STATE["link_secret"], ws, token, part, stem)
+        root = _ws_dir(ws)
+        if root is None:
+            raise links.LinkError(404, "not found")
+        parts_dir = load_settings(root).parts_dir
+        glb = links.servable(root, parts_dir, f"{parts_dir}/{part}/out/{stem}.glb")
+    except links.LinkError as e:
+        return PlainTextResponse(str(e) + "\n", status_code=e.status,
+                                 headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+    if ws != links.ROOT_WS:
+        handoff.touch(root)  # a view is a use too
+    if is_model:
+        return FileResponse(glb, media_type=viewer.GLB_MIME, filename=glb.name, content_disposition_type="attachment",
+                            headers=viewer.MODEL_HEADERS)
+    return Response(viewer.served_page(), media_type="text/html; charset=utf-8", headers=viewer.PAGE_HEADERS)
+
+
+@mcp.custom_route("/view-assets/{name}", methods=["GET"])
+async def view_asset(request):
+    """The viewer page's static files: a fixed list of package files (viewer.ASSETS), no token."""
+    from starlette.responses import PlainTextResponse, Response
+
+    name = request.path_params["name"]
+    if name not in viewer.ASSETS:
+        return PlainTextResponse("not found\n", status_code=404, headers={"X-Content-Type-Options": "nosniff"})
+    return Response(viewer.asset_bytes(name), media_type=viewer.ASSETS[name], headers=viewer.ASSET_HEADERS)
+
+
 @mcp.custom_route("/upload/{workspace}/{token}/{path:path}", methods=["PUT"])
 async def upload(request):
     """A signed upload link (upload_reference): needs no bearer token, stores one reference file in
@@ -1494,7 +1596,7 @@ async def _deny(send, status: int, error: str, description: str) -> None:
 
 def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
     path = scope["path"]
-    if path.startswith(("/files/", "/upload/", "/zip/")):  # never log the signature: a log line must not be a working link
+    if path.startswith(("/files/", "/upload/", "/zip/", "/view/")):  # never log the signature: a log line must not be a working link
         parts = path.split("/", 4)
         path = f"/{parts[1]}/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
     client = (scope.get("client") or ("-",))[0]
@@ -1503,8 +1605,8 @@ def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
 
 
 class TokenAuth:
-    """ASGI wrapper: every HTTP request except /health and the signed /files/, /zip/ and /upload/ links (which carry
-    their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
+    """ASGI wrapper: every HTTP request except /health, the viewer's static /view-assets/ and the signed /files/,
+    /zip/, /upload/ and /view/ links (which carry their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
     may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
     token's single workspace if it has exactly one, else the shared root workspace. Every request
     is logged with the token's name. No reply starts before the request body is in (_BodyGuard).
@@ -1536,7 +1638,7 @@ class TokenAuth:
         path = scope["path"]
         if path == "/health":
             return await self.app(scope, receive, send)
-        if path.startswith(("/files/", "/upload/", "/zip/")):
+        if path.startswith(("/files/", "/upload/", "/zip/", "/view/", "/view-assets/")):
             await self.app(scope, receive, send_logged)
             return _log(scope, "link", status["code"])
         if self.store is None:  # --insecure-no-auth

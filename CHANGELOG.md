@@ -16,6 +16,31 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
+**View in 3D**: turn a part around in the browser before printing, without a slicer
+([docs](https://kd5ryn.github.io/b123d-print/using/formats/#3d-view-in-the-browser)).
+- `export` makes a 3D view per variant (`view="print"`, the default: the printable parts on the
+  bed; `"assembly"`: `assembly(d)` with its stand-ins; `"none"`). Over HTTP it returns a signed
+  **view link** (`/view/...`: no token, bound to the workspace, expires with the download links),
+  which `download_part` lists too; locally it writes a self-contained `out/<name>_view.html`
+  (viewer and model inline: opens offline from `file://`). New CLI command `b123d-print view
+  <part>` (`--assembly`, `--variant`, `--parts`, `--open`).
+- The viewer: orbit, pan and zoom; the pieces listed with their sizes, each one to show or hide;
+  the bed grid at Z = 0; the overall size and extent in mm and a bounding box; a section plane
+  across X, Y or Z; iso, top, front and right views.
+- Security: the view page is one static file with a strict Content-Security-Policy (scripts and
+  styles from the server only, no inline script, `connect-src 'self'`, no framing),
+  `nosniff`, `no-referrer`; the model is served as `model/gltf-binary`; piece names are shown as
+  text; view signatures have their own purpose and never open other links (and the reverse).
+  The offline HTML allows only its own inline scripts, by hash, and no network.
+- New export format **`glb`** (binary glTF: one named, colored node per piece), for web and 3D
+  apps; not in the default set (`all` now includes it).
+- The viewer library, [three.js](https://threejs.org) r186 (MIT), is vendored in the package
+  (640 KB, 160 KB gzipped): the server and the browser need no internet. Its license notice heads
+  the bundle, ships as `three-LICENSE.txt` (listed in `license-files`) and travels inside every
+  view HTML; `tools/vendor_viewer.py` rebuilds it from the npm tarball (integrity-checked) and
+  records its provenance. `THIRD_PARTY.md` and the credits page list it.
+- `AGENTS.md`: offer the 3D view after an export.
+
 ## 0.3.3 — 2026-10-19
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,

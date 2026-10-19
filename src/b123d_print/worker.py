@@ -50,6 +50,7 @@ from b123d_print.render import render, report, section_view, side_by_side  # noq
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 from b123d_print import metrics  # noqa: E402
 from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
+from b123d_print import viewer  # noqa: E402  (the 3D view's GLB)
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (
@@ -331,8 +332,17 @@ def do(job: dict) -> dict:
         return write_template(script, k, printables(mod, d), spec, out, fmts, settings)
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
-        src = _OnlyParts(mod, [n.strip() for n in job["parts"].split(",") if n.strip()]) if job.get("parts") else mod
-        return {"variants": [export_variant(src, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
+        only = [n.strip() for n in job["parts"].split(",") if n.strip()] if job.get("parts") else None
+        src = _OnlyParts(mod, only) if only else mod
+        res = {"variants": [export_variant(src, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
+        if job.get("view"):  # the 3D view of each variant (export's view=)
+            for kk, v in zip(keys if key is None else [key], res["variants"]):
+                tag = "_".join(x for x in (script.stem, kk) if x)
+                try:
+                    v["view"] = str(viewer.write_view(mod, dims(mod, kk), tag, out, job["view"], only))
+                except (KeyError, ValueError) as e:  # e.g. view='assembly' without assembly(d): the export still stands
+                    v["view_error"] = str(e).strip('"')
+        return res
     raise ValueError(f"unknown op {op!r}")
 
 

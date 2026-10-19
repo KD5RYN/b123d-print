@@ -126,9 +126,17 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     expect(text(res).startswith("FAILED") and "[FAIL] wall" in text(res), "check catches the thin wall in the 'thin' variant")
     res = await c.call_tool("export", {"name": "box"})
     expect("box.stl" in text(res) and on_disk("parts/box/out/box_thin.3mf"), "export writes STEP/STL/3MF/PNG for each variant")
+    expect("3D view" in text(res) and on_disk("parts/box/out/box_view.glb") and on_disk("parts/box/out/box_thin_view.glb"),
+           "export writes a 3D view (GLB) for each variant and says so")
+    if mode == "stdio" and pw is not None:
+        page = pw / "parts/box/out/box_view.html"
+        html = page.read_text(encoding="utf-8") if page.is_file() else ""
+        expect(str(page) in text(res) and 'id="b123d-model"' in html and "Permission is hereby granted" in html
+               and "connect-src 'none'" in html and "<script src=" not in html,
+               "stdio: export writes a self-contained, offline view HTML (model, three.js and its license inline) and names it")
     if pw is not None:
         shutil.rmtree(pw / "parts/box/out")
-    res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf"})
+    res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "view": "none"})
     files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
     expect(files == ["parts/box/out/box.3mf"] and (pw is None or [p.name for p in (pw / "parts/box/out").iterdir()] == ["box.3mf"]),
            "export honors formats='3mf'")
@@ -139,6 +147,8 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
            f"export embed=True puts the file into the result ({len(emb)} embedded)")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
+    res = await c.call_tool("export", {"name": "box", "formats": "3mf", "view": "sideways"})
+    expect(res.is_error and "assembly" in text(res), "an unknown view layout is refused with the choices")
     await c.call_tool("export", {"name": "box", "formats": "3mf,png"})
     await template_checks(c, pw, expect)
     await handoff_checks(c, pw, expect, mode)
@@ -523,6 +533,68 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
            "render_preview over HTTP: the image, plus a download link and a resource link")
 
 
+async def view_checks(ca, a: str, b: str, token: str, expect) -> None:
+    """The 3D view link: the page and its model open without a token, with a strict CSP and the
+    right types; tampered, cross-workspace, traversal and expired links are refused."""
+    from urllib.parse import urljoin
+
+    from b123d_print import links
+
+    res = await ca.call_tool("export", {"name": "only_in_a", "variant": "standard", "formats": "3mf"})
+    m = re.search(r"(https?://\S+/view/\S+)", text(res))
+    expect(m and "no token" in text(res), "export over HTTP returns a 3D view link")
+    if not m:
+        return
+    page_url = m.group(1)
+    async with create_mcp_http_client() as h:  # no Authorization header
+        r = await h.get(page_url)
+        csp = r.headers.get("content-security-policy", "")
+        expect(r.status_code == 200 and r.headers.get("content-type", "").startswith("text/html")
+               and "script-src 'self'" in csp and "connect-src 'self'" in csp and "default-src 'none'" in csp
+               and "unsafe" not in csp and r.headers.get("x-content-type-options") == "nosniff"
+               and r.headers.get("referrer-policy") == "no-referrer",
+               f"the view page opens without a token, with a strict CSP and nosniff ({r.status_code}, {csp!r})")
+        expect("<script>" not in r.text and "only_in_a" not in r.text,
+               "the view page has no inline script and nothing of the part or the request in it")
+        refs = re.findall(r'(?:src|href)="([^"]+)"', r.text)
+        ok = bool(refs)
+        for ref in refs:
+            ra = await h.get(urljoin(page_url, ref))
+            ok &= ra.status_code == 200 and ra.headers.get("x-content-type-options") == "nosniff"
+        expect(ok, f"the page's scripts, style and license load from this server ({len(refs)} files)")
+        g = await h.get(page_url + ".glb")
+        expect(g.status_code == 200 and g.headers.get("content-type", "").startswith("model/gltf-binary")
+               and g.content[:4] == b"glTF" and g.headers.get("x-content-type-options") == "nosniff",
+               f"the model loads by the same token as model/gltf-binary ({g.status_code}, {len(g.content)} bytes)")
+        head, ws_, tok, part, stem = re.match(r"(https?://[^/]+(?:/.*?)?)/view/([^/]+)/([^/]+)/([^/]+)/([^/]+)$", page_url).groups()
+        exp, sig = tok.split(".")
+        bad = {
+            "tampered signature": f"{head}/view/{ws_}/{exp}.{sig[:-3]}AAA/{part}/{stem}",
+            "longer expiry": f"{head}/view/{ws_}/{int(exp) + 86400}.{sig}/{part}/{stem}.glb",
+            "workspace A's link pointed at workspace B": f"{head}/view/{b}/{tok}/{part}/{stem}.glb",
+            "other part, same signature": f"{head}/view/{ws_}/{tok}/only_in_b/{stem}.glb",
+            "other model, same signature": f"{head}/view/{ws_}/{tok}/{part}/{stem.replace('_view', '')}.glb",
+            "traversal": f"{head}/view/{ws_}/{tok}/{part}/%2e%2e%2f{stem}.glb",
+            "an asset outside the list": f"{head}/view-assets/vendor.json",
+            "an asset by traversal": f"{head}/view-assets/%2e%2e%2fviewer.py",
+        }
+        for what, u in bad.items():
+            rb = await h.get(u)
+            expect(rb.status_code == 404, f"view link refused: {what} ({rb.status_code})")
+        from b123d_print import tokens as tk
+
+        tf = Path(os.environ.get("B123D_PRINT_TOKENS_FILE", "/nonexistent"))
+        file_secret = tk.read(tf)[1] if tf.is_file() else None
+        legacy_only = not os.environ.get("B123D_PRINT_TOKENS_FILE") and not os.environ.get("B123D_PRINT_SMOKE_URL")
+        if os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret or legacy_only:
+            secret = links.derive_secret(token, os.environ.get("B123D_PRINT_LINK_SECRET") or file_secret)
+            old, _ = links.sign_view(secret, ws_, part, stem, -60)
+            rb = await h.get(head + old)
+            expect(rb.status_code == 410 and "expired" in rb.text, f"an expired view link is refused with 410 ({rb.status_code})")
+    res = await ca.call_tool("download_part", {"name": "only_in_a", "variant": "standard", "formats": "3mf"})
+    expect("/view/" in text(res), "download_part over HTTP lists the 3D view link too")
+
+
 async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) -> None:
     """Auth refusals, workspace isolation and parallel builds."""
     base = url.split("?")[0]
@@ -567,6 +639,7 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")
         await link_checks(ca, cb, a, b, token, wsroot, expect)
+        await view_checks(ca, a, b, token, expect)
     if await post_status(url, token, "..%2Fetc") == 403:  # a named token's workspace patterns refuse it first
         expect(True, "bad workspace name is refused (403: outside the token's workspaces)")
     else:

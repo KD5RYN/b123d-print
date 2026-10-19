@@ -1,0 +1,44 @@
+{
+ "library": "three.js",
+ "package": "three@0.186.1",
+ "license": "MIT",
+ "source": "https://registry.npmjs.org/three/-/three-0.186.1.tgz",
+ "integrity": "sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==",
+ "bundler": "esbuild@0.28.1",
+ "exports": {
+  "three": [
+   "Box3",
+   "Box3Helper",
+   "Color",
+   "DirectionalLight",
+   "DoubleSide",
+   "EdgesGeometry",
+   "GridHelper",
+   "Group",
+   "HemisphereLight",
+   "LineBasicMaterial",
+   "LineSegments",
+   "LoadingManager",
+   "MathUtils",
+   "Mesh",
+   "MeshBasicMaterial",
+   "PerspectiveCamera",
+   "Plane",
+   "PlaneGeometry",
+   "REVISION",
+   "Scene",
+   "Sphere",
+   "Vector3",
+   "WebGLRenderer"
+  ],
+  "three/examples/jsm/loaders/GLTFLoader.js": [
+   "GLTFLoader"
+  ],
+  "three/examples/jsm/controls/OrbitControls.js": [
+   "OrbitControls"
+  ]
+ },
+ "file": "three.bundle.min.js",
+ "sha256": "48812729377e22d26bb5a1b075f01f6e1c39e54e470da99b9338d0415911acc2",
+ "bytes": 640376
+}
