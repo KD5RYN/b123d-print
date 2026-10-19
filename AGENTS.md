@@ -12,8 +12,8 @@ Use the **b123d-print MCP server** tools if your client has them (`new_part`, `w
 use the CLI:
 
 - `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
-- `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png]` or `b123d-print build <name>` —
-  export to `parts/<name>/out/` and run the checks
+- `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png] [--only <pieces>]` or
+  `b123d-print build <name> [--only <pieces>]` — export to `parts/<name>/out/` and run the checks
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
 - `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
 - `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
@@ -30,13 +30,38 @@ use the CLI:
    `VARIANTS = {"": {}, "140": dict(PLATE_W=140.0)}` holds only the overrides. Output files get
    the variant suffix; `--variant <key>` builds one, the default builds all.
 4. `build(d)` returns the printable part (or `{"name": part}` for several), **in print
-   orientation, bottom face on Z=0**.
+   orientation, bottom face on Z=0**. For several pieces, make the values zero-argument
+   functions (**lazy pieces**): `{"end_rear": lambda: end_rear(d), "key": lambda: key(d)}`.
+   Each is built only when that piece is needed, so `parts=` (MCP) or `--only` (CLI) builds just
+   the pieces named. Plain shapes work too, but then every call builds them all.
 5. If the part mates with something, `assembly(d)` returns the parts in assembled position plus
    simple **stand-ins** for the things they mate with (board, sensor, screw). The overlap check
    uses it: nothing printed may intersect a stand-in.
 6. `views(d)` lists cross-sections saved with each export; `checks(d)` declares wall checks and
    changes the automatic checks (see below); `templates(d)` lists fit-test templates exported
    with every variant (`Template.slice("XY", 3)`, `Template.face_of("bottom")`, `Template.crop(...)`).
+
+## Big and multi-piece projects
+
+A part that takes long to build makes every step slow. The time limit is 240 s per call.
+
+- **Read the timing report.** `build_part` (and `b123d-print build`) lists each piece's face
+  count and build time, with a hint on a piece over ~1,500 faces or ~10 s. Fix that piece first.
+- **Build each distinct piece once, then mirror or copy it.** `front = mirror(rear(d))` builds
+  the rear piece a second time. Put `@functools.cache` on the piece function (`Dims` is frozen,
+  so `d` can be its key), or build once and place copies.
+- **Keep curves to the points they need.** Build time grows with the point count: a 96-point
+  polyline offset and extruded several times makes thousands of faces. Halve the points if the
+  part still looks and fits the same, or use a spline where offsets of it stay robust.
+- **Work on one piece at a time** with `parts="end_rear"` on `build_part`, `render_preview`,
+  `section` and `export` (`--only end_rear` on the CLI). Never invent a variant just to build
+  fewer pieces.
+- **Built pieces are cached** in `out/.cache/` per variant. `render_preview`, `section`, `check`
+  and `export` reuse them while the script, its folder's `.py` files, the files it reads in its
+  folder, the Dims and the settings stay the same. `fresh=True` rebuilds. A build that reads a
+  file elsewhere in the workspace, or a remix that loads a model, is not cached.
+- **Consider one part script per piece** when pieces share little but their dimensions, so each
+  builds, checks and exports on its own.
 
 ## Print rules
 

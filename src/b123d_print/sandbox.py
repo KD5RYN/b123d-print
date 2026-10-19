@@ -159,13 +159,18 @@ else:
         pass
 
 
+# seconds per build, render, section or export (--timeout, $B123D_PRINT_TIMEOUT): under the 300 s
+# a typical MCP client waits for a tool result; a check run has its own limit (300 s)
+DEFAULT_TIMEOUT = 240.0
+
+
 def soft_margin(timeout: float) -> float:
     """Seconds before the hard timeout at which the worker stops checking and reports: 10 %,
     between 3 and 30 s (time to interrupt an OCC call and write the result)."""
     return min(30.0, max(3.0, 0.1 * timeout))
 
 
-def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0, epoch: int | None = None) -> dict:
+def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_TIMEOUT, epoch: int | None = None) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     mpl = CACHE / "matplotlib"
@@ -176,7 +181,9 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0, e
         readable = [_real(workspace)] + _python_roots()
         # the worker's own soft limit, a little before the hard one kills it: `check` stops there and
         # returns what it finished instead of nothing (see project.run_checks)
+        # workspace: where the build cache looks for files a build read outside the part's folder
         job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable,
+               "workspace": _real(workspace),
                "deadline": min(job.get("deadline", math.inf), time.time() + timeout - soft_margin(timeout))}
         job_file = os.path.join(tmp, "job.json")
         with open(job_file, "w", encoding="utf-8") as f:
@@ -193,7 +200,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0, e
             "LANG": "C.UTF-8",
         }
         for var in ("B123D_PRINT_HOLE_COMP", "B123D_PRINT_CLEARANCE", "B123D_PRINT_MIN_WALL", "B123D_PRINT_MAX_OVERHANG",
-                    "B123D_PRINT_FORMATS", "B123D_PRINT_MAX_TRIANGLES", "XDG_CONFIG_HOME"):
+                    "B123D_PRINT_FORMATS", "B123D_PRINT_MAX_TRIANGLES", "B123D_PRINT_NO_CACHE", "XDG_CONFIG_HOME"):
             if var in os.environ:
                 env[var] = os.environ[var]
         # settings: the worker resolves the user config from the real home, so pass it explicitly

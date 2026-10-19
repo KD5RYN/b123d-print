@@ -13,11 +13,20 @@ too: the mesh files it parses may have been written by a part script.
 | [Docker](../getting-started/docker.md) | the container (`--network none`, only the mounted folder) |
 | [Docker over HTTP](../getting-started/http.md#compose) | a separate `worker` container with `network_mode: none` runs the part scripts; the HTTP container, which has a network, runs none |
 
-Every job also gets a timeout (default 120 s, `--timeout` or `B123D_PRINT_TIMEOUT`; a `check`
+Every job also gets a timeout (default 240 s, `--timeout` or `B123D_PRINT_TIMEOUT`; a `check`
 300 s, `--check-timeout` or `B123D_PRINT_CHECK_TIMEOUT`) and a CPU limit. A check stops a little
 before its limit and returns the findings it has ([time limit](checks.md#time-limit)); anything
 else that runs out of time is killed. The audit hook (blocks sockets, subprocesses, native libraries, writes elsewhere) is
 defense in depth, not a boundary on its own.
+
+The [build cache](../scripts/convention.md#big-and-multi-piece-projects) adds no new access. Only
+the sandboxed worker reads and writes it, only in the part's own `out/.cache/` (a folder it could
+already write), and it is used only when the job's output folder is the part's `out/`. It is
+never followed through a link. Its key reads only the part's own folder; a build that read a
+file elsewhere in the workspace is not saved. A piece's name never becomes a file name (entries
+are named by hashes). A script can write its own cache entries, as it can write any file in its
+`out/`: that changes only what this part builds, which the script decides anyway. The CLI builds
+in your own process and never reads the cache.
 
 `list_parts` reports the sandbox in use. `B123D_PRINT_SANDBOX=none` turns the OS sandbox off;
 the Docker image does this because the container is the sandbox.
