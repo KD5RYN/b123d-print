@@ -240,6 +240,48 @@ The per-file links serve only the files in `parts/<part>/out/`; the script and `
 in `download_part`'s zip. Nothing outside the workspace is ever served. Agents never need a shell
 on the server.
 
+### View in 3D
+
+`export` also returns a **view link** per variant (`view="print"` by default, `"assembly"`, or
+`"none"`), and `download_part` lists them again:
+
+```text
+https://cad.example.com/view/<workspace>/<expires>.<signature>/bracket/bracket_view
+```
+
+Open it in a browser to turn the part around before printing: orbit, zoom and pan, show or hide
+each piece, the bed at Z = 0, the size in mm and a section plane
+([what the viewer shows](../using/formats.md#3d-view-in-the-browser)). Like a download link it
+needs no token, is signed for one model of one part in one workspace, and expires with the others
+(`--link-ttl`; an expired one answers 410). The page loads the model,
+`parts/<part>/out/<part>_view.glb`, through the same signed link (`.../bracket_view.glb`), and
+its scripts from `/view-assets/`, a fixed list of files from the package that needs no token
+(they hold nothing of anyone's). The viewer library, three.js, ships inside the package: the
+browser loads nothing from the internet, so it works on a lab network without internet access.
+
+How the view is kept safe:
+
+- the same HMAC signature, workspace binding and expiry as the download links, under its own
+  purpose, so a view signature never opens a download, a zip or an upload, nor the other way
+  round; the model must be a regular file in that part's `out/` (no symlinks, no `..`);
+- the page is one static file, the same for every part: nothing from the request or the model
+  is written into it. Its headers: `Content-Security-Policy: default-src 'none'; script-src 'self';
+  style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none';
+  form-action 'none'; frame-ancestors 'none'` (no inline script at all),
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (the link is the
+  credential), `X-Frame-Options: DENY` and `Cache-Control: no-store`;
+- the model is served as `model/gltf-binary`, `nosniff`, as an attachment; the viewer treats it
+  as data: piece names are shown as text, and the loader fetches nothing the model names;
+- like the other links, the signature never appears in the server's log
+  (`GET /view/<workspace>/.../<part>/<stem>`).
+
+**Caddy (or another reverse proxy).** Nothing to change if it forwards everything to the server,
+as `caddy reverse-proxy --to b123d-print:8000` and the [Compose](#compose) block do. A
+Caddyfile that forwards only some paths needs `/view/*` and `/view-assets/*` next to `/mcp`,
+`/files/*`, `/zip/*` and `/upload/*`. Do not let the proxy replace the server's
+`Content-Security-Policy` header. `encode gzip` is worth having: the viewer's script is 640 KB,
+160 KB compressed.
+
 ### Workspace retention
 
 A named workspace (`?workspace=<name>`, kept in `<workspace>/workspaces/<name>`) that nobody has

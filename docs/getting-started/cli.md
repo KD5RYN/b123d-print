@@ -43,6 +43,7 @@ b123d-print check
 | `orient [parts] [--variant v] [--piece name] [--load X] [--image] [--json]` | rank the ways to put each part on the bed: supports, contact, height, time, bridges, tip-over, the load against the layers; prints the `Rot(...)` to apply in `build(d)` (see [suggest_orientation](../using/tools.md#suggest_orientation)); `--image` renders the top choice to `out/<part>_orient.png`; never fails, changes nothing |
 | `faces <part> [--variant v] [--part name] [--highlight ID] [--json]` | the part's flat faces with their ids, holes and sides, for a face template; `--highlight` draws one in red ([fit-test templates](../using/templates.md)) |
 | `template <part> --slice XY:3 \| --face ID \| --crop x,y,z:sx,sy,sz [--thickness t] [--no-label] [--no-base] [--name id] [--variant v] [--part name] [--formats f]` | make a [fit-test template](../using/templates.md), write it to `out/` and check it; exit code 1 if a check fails |
+| `view <part> [--variant v] [--parts a,b] [--assembly] [--open]` | write `out/<part>_view.html`, a self-contained [3D view](../using/formats.md#3d-view-in-the-browser) of the part (viewer and model inline: opens offline, from `file://`); the printable parts on the bed, or `--assembly`; `--open` also opens the browser |
 | `styles [name]` | list the [design styles](../using/design-review.md#custom-styles) and where each comes from (workspace, user, built-in), or show one with `based_on` applied |
 | `printer list [words]` | search the printer profiles |
 | `printer show [name]` | show a printer (default: the active one) |

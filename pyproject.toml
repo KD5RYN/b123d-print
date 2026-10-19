@@ -5,7 +5,7 @@ description = "Design, check and export 3D-printable parts with build123d, from 
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "KD5RYN" }, { name = "b123d-print contributors" }]
-license-files = ["LICENSE", "THIRD_PARTY.md"]
+license-files = ["LICENSE", "THIRD_PARTY.md", "src/b123d_print/data/viewer/three-LICENSE.txt"]
 keywords = ["cad", "3d-printing", "build123d", "mcp", "llm"]
 requires-python = "==3.12.*"
 dependencies = [

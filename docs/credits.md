@@ -9,6 +9,7 @@ b123d-print is a thin layer over:
 - [py_gearworks](https://github.com/GarryBGoode/py_gearworks) — involute gears for part scripts (Apache-2.0)
 - [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) — printer dimensions for the optional printer profiles (AGPL-3.0; facts only, no files copied)
 - [matplotlib](https://matplotlib.org) and [NumPy](https://numpy.org) — renders, sections, check math
+- [three.js](https://threejs.org) — the browser 3D view (MIT; vendored, with its license notice in every copy)
 - [Model Context Protocol](https://modelcontextprotocol.io) and its [Python SDK](https://github.com/modelcontextprotocol/python-sdk) (MIT)
 - [uv](https://github.com/astral-sh/uv) — packaging and `uvx`
 - This site: [MkDocs](https://www.mkdocs.org) and [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)

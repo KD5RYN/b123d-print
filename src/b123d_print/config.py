@@ -23,7 +23,8 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 WORKSPACE_FILE = "b123d-print.toml"
-FORMATS = ("step", "stl", "3mf", "png")  # every export format; `formats` picks a subset
+FORMATS = ("step", "stl", "3mf", "png", "glb")  # every export format; `formats` picks a subset
+DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb)
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class Settings:
     max_triangles: int = 50_000  # import_model refuses meshes with more triangles (simplify them first)
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
-    formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
+    formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps)
     style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
@@ -200,7 +201,7 @@ def hole_comp_source(start: str | Path | None = None) -> str | None:
 
 
 def formats_configured(start: str | Path | None = None) -> bool:
-    """True if the user, the workspace or the environment chose export formats (False: the built-in all four)."""
+    """True if the user, the workspace or the environment chose export formats (False: the built-in four, step, stl, 3mf and png)."""
     if os.environ.get("B123D_PRINT_FORMATS"):
         return True
     user = user_config_path()
