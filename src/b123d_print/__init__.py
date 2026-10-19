@@ -5,8 +5,8 @@ thickness, thin features, holes, bed edges, gaps), fit-test templates, per-user 
 and import_model (remix an existing STL, 3MF or STEP).
 """
 
-from .checks import (BedEdge, Finding, Fit, Gap, Holes, Overhang, Overlap, Probe, ThinFeature, Wall, holes, overhang_faces,
-                     overlap, wall_thickness)
+from .checks import (BedEdge, Finding, Fit, Gap, Holes, Overhang, Overlap, Probe, ThinFeature, TipOver, Wall, holes,
+                     overhang_faces, overlap, wall_thickness)
 from .config import Settings, clearance, hole_comp, load_settings, printer
 from .project import View, run
 from .remix import import_model
@@ -14,7 +14,7 @@ from .render import export, export_files, render, report, section, section_view
 from .templates import Template, crop_template, face_template, list_faces, slice_template
 
 __all__ = [
-    "BedEdge", "Finding", "Fit", "Gap", "Holes", "Overhang", "Overlap", "Probe", "Settings", "Template", "ThinFeature", "View",
+    "BedEdge", "Finding", "Fit", "Gap", "Holes", "Overhang", "Overlap", "Probe", "Settings", "Template", "ThinFeature", "TipOver", "View",
     "Wall", "clearance", "crop_template", "export", "export_files", "face_template", "hole_comp", "holes", "import_model", "list_faces", "load_settings", "overhang_faces", "overlap", "printer", "render", "report",
     "run", "section", "section_view", "slice_template", "wall_thickness",
 ]

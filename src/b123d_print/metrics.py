@@ -152,12 +152,17 @@ def print_time(part: Part, extruded: float, p: Params) -> dict:
             "accuracy": "rough estimate"}
 
 
-def supports(part: Part, mesh: Mesh, p: Params, faces: list | None = None) -> dict:
+def supports(part: Part, mesh: Mesh, p: Params, faces: list | None = None, max_points: int | None = None,
+             bridge_min_area: float = 0.0) -> dict:
     """M5: downward faces steeper than max_overhang that are not bridges within max_bridge;
-    column = area x |n_z| x height above whatever is below (ray down); supports ~20 % solid (DS-C4)."""
+    column = area x |n_z| x height above whatever is below (ray down); supports ~20 % solid (DS-C4).
+    "bridges": the span of every bridge seen, the ones over max_bridge (counted as supports) too.
+    max_points: measure the column height under at most this many evenly picked triangles (each
+    weighing for the ones skipped), and bridge_min_area: count flat ceilings smaller than this
+    (mm^2) as supported without measuring their span: faster, for comparing orientations (orient.py)."""
     zmin = part.bounding_box().min.Z
-    edge_faces = None
-    rows, pts, wts = [], [], []
+    edge_faces = inside = None
+    rows, pts, wts, spans = [], [], [], []
     for f in faces if faces is not None else part.faces():
         t = ck._down_tris(f, 0.05)
         if t is None:
@@ -166,11 +171,14 @@ def supports(part: Part, mesh: Mesh, p: Params, faces: list | None = None) -> di
         flag = (n[:, 2] < 0) & (ang > p.max_overhang + 0.5) & (tri[:, :, 2].max(1) > zmin + 0.05)
         if not flag.any():
             continue
-        if ang[flag].min() > 89 and f.geom_type.name == "PLANE":
+        if ang[flag].min() > 89 and f.geom_type.name == "PLANE" and f.area >= bridge_min_area:
             edge_faces = edge_faces if edge_faces is not None else ck._edge_faces(part)
-            b = ck.bridge_span(f, part, edge_faces=edge_faces)
-            if b.get("kind") == "bridge" and b.get("span", 1e9) <= p.max_bridge:
-                continue
+            inside = inside or ck.Inside(part)
+            b = ck.bridge_span(f, part, edge_faces=edge_faces, inside=inside)
+            if b.get("kind") == "bridge":
+                spans.append(b["span"])
+                if b["span"] <= p.max_bridge:
+                    continue
         c = tri[flag].mean(1)
         w = area[flag] * np.abs(n[flag][:, 2])
         pts.append(c)
@@ -179,30 +187,43 @@ def supports(part: Part, mesh: Mesh, p: Params, faces: list | None = None) -> di
         rows.append({"kind": f.geom_type.name.lower(), "area": round(float(area[flag].sum()), 1),
                      "center": [round(float(x), 1) for x in cc]})
     if not rows:
-        return {"area": 0.0, "column_mm3": 0.0, "grams": 0.0, "faces": []}
+        return {"area": 0.0, "column_mm3": 0.0, "grams": 0.0, "faces": [], "bridges": spans}
     P, W = np.concatenate(pts), np.concatenate(wts)
+    if max_points and len(P) > max_points:
+        keep = np.linspace(0, len(P) - 1, max_points).astype(int)
+        P, W = P[keep], W[keep] * (W.sum() / W[keep].sum())
     floor = _floor_below(mesh, P, zmin)
     col = float(np.sum(W * np.maximum(P[:, 2] - floor, 0)))
     vol = SUPPORT_FILL * col
     return {"area": round(float(sum(r["area"] for r in rows)), 1), "column_mm3": round(col),
-            "volume_mm3": round(vol), "grams": round(vol * p.density / 1000, 1), "faces": rows,
+            "volume_mm3": round(vol), "grams": round(vol * p.density / 1000, 1), "faces": rows, "bridges": spans,
             "accuracy": "rough estimate"}
 
 
 def _floor_below(mesh: Mesh, P: np.ndarray, zmin: float) -> np.ndarray:
-    """Height of the highest up-facing surface under each point (the bed if none)."""
+    """Height of the highest up-facing surface under each point (the bed if none). The points go
+    in chunks of neighbours (sorted along x), each against only the triangles that reach below
+    and around it."""
     up = mesh.n[:, 2] > 1e-6
     T = mesh.tri[up]
     out = np.full(len(P), zmin)
     if not len(T):
         return out
-    a, b, c = T[:, 0], T[:, 1], T[:, 2]
-    v0, v1 = c[:, :2] - a[:, :2], b[:, :2] - a[:, :2]
-    d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
-    den = d00 * d11 - d01 * d01
-    ok = np.abs(den) > 1e-12
-    for i0 in range(0, len(P), 256):
-        q = P[i0:i0 + 256]
+    order = np.lexsort((P[:, 1], P[:, 0]))
+    lo_all, hi_all = T.min(1), T.max(1)
+    for s0 in range(0, len(P), 64):
+        idx = order[s0:s0 + 64]
+        q = P[idx]
+        qlo, qhi = q.min(0), q.max(0)
+        near = ((hi_all[:, 0] >= qlo[0]) & (lo_all[:, 0] <= qhi[0]) & (hi_all[:, 1] >= qlo[1]) & (lo_all[:, 1] <= qhi[1])
+                & (lo_all[:, 2] < qhi[2]))
+        if not near.any():
+            continue
+        a, b, c = T[near, 0], T[near, 1], T[near, 2]
+        v0, v1 = c[:, :2] - a[:, :2], b[:, :2] - a[:, :2]
+        d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
+        den = d00 * d11 - d01 * d01
+        ok = np.abs(den) > 1e-12
         v2 = q[:, None, :2] - a[None, :, :2]
         d02, d12 = (v2 * v0[None]).sum(2), (v2 * v1[None]).sum(2)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -211,7 +232,7 @@ def _floor_below(mesh: Mesh, P: np.ndarray, zmin: float) -> np.ndarray:
         inside = ok[None] & (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9)
         z = a[None, :, 2] + u * (c[None, :, 2] - a[None, :, 2]) + v * (b[None, :, 2] - a[None, :, 2])
         z = np.where(inside & (z < q[:, None, 2] - 1e-3), z, -np.inf)
-        out[i0:i0 + 256] = np.maximum(out[i0:i0 + 256], z.max(1))
+        out[idx] = np.maximum(out[idx], z.max(1))
     return out
 
 

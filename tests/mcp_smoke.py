@@ -86,7 +86,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "download_part", "list_faces", "make_template"},
+                     "suggest_orientation", "download_part", "list_faces", "make_template"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
@@ -192,6 +192,13 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
            "design_metrics reports the numbers and the style's findings (in the sandbox)" + ("" if "style:" in t else f"\n{t[:2000]}"))
     res = await c.call_tool("design_metrics", {"name": "coupon", "style": "baroque"})
     expect(res.is_error and "no style 'baroque'" in text(res), "design_metrics refuses an unknown style with the list")
+    await c.call_tool("new_part", {"name": "lay"})  # box is the endless loop by now
+    res = await c.call_tool("suggest_orientation", {"name": "lay", "load": "along X", "image": True, "size": "small"})
+    t = text(res)
+    expect("orientations ranked" in t and "Rot(" in t and any(getattr(x, "type", "") == "image" for x in res.content),
+           "suggest_orientation ranks the orientations and renders the top choice (in the sandbox)" + ("" if "Rot(" in t else f"\n{t[:2000]}"))
+    res = await c.call_tool("suggest_orientation", {"name": "lay", "load": "sideways"})
+    expect(res.is_error and "load 'sideways'" in text(res), "suggest_orientation refuses a load it cannot read")
     g = await c.get_prompt("design_review", {"name": "coupon"})
     expect("Do NOT change the part" in g.messages[0].content.text and "DS-G9" in g.messages[0].content.text,
            "design_review prompt carries the rubric and the no-change rule")

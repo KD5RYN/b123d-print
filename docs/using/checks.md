@@ -28,6 +28,18 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
   and prints small: use a teardrop or a flat roof, or turn the part) and on holes under 1 mm.
 - **bed edge** — warns on a fillet (any curved face) that starts on the bed: its lowest band is a
   flat overhang that flares. Bed edges get a chamfer.
+- **tip-over** — warns when a part is tall on a small first layer: the nozzle can knock it off
+  the bed, or it wobbles and its top prints badly. The measure is OrcaSlicer's (and Bambu
+  Studio's) *Auto* brim: the brim it would add is `tip_speed × H² × W / (1920 I)`, from the
+  height H and the footprint's second moment of area I and width W about its weaker principal
+  axis; from 5 mm it warns, the size below which OrcaSlicer adds no brim. It also warns on a
+  footprint that is a thin strip (area / perimeter under 1.1 mm, where OrcaSlicer adds 5 mm of
+  brim) and on a centre of mass outside the footprint. Parts under 10 mm tall are not checked.
+  The finding gives the height over the narrowest footprint width and the contact area, and
+  suggests a 5–10 mm brim or mouse ears, laying the part down
+  ([`suggest_orientation`](tools.md#suggest_orientation)) or printing several together, tied.
+  `tip_speed` (default 200 mm/s, your slicer's fastest print move) scales it; `0` turns it off.
+  [Rule B6](../BEST_PRACTICES.md#5-bed-edges-first-layer-warping).
 - **gap** — for a part made of several solids (printed in place): fails when two are closer than
   `pip_clearance`, because they fuse. Declared between two parts, it checks a fit:
   `Gap("lid", "base", min=..., max=...)`.
@@ -45,7 +57,7 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
     declare them with `frame="assembly"` — see [which frame](../scripts/checks-api.md#which-frame).
 
 **valid**, **overlap**, **overhang** (with **bridge**), **thin**, **holes**, **bed edge**,
-**gap** and **fit** run on every part on their own; **wall** and **probe** run where the script
+**tip-over**, **gap** and **fit** run on every part on their own; **wall** and **probe** run where the script
 asks for them in `checks(d)`, which can also change or narrow the automatic ones — see the
 [Checks API](../scripts/checks-api.md). The rules behind each check, with their sources, are in
 [Design rules](../BEST_PRACTICES.md).

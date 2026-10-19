@@ -29,6 +29,7 @@ formats = ["step", "stl", "3mf", "png"]
 style = "functional"   # design review style for parts without STYLE
 filament_price = 25    # per kg: design_metrics shows a cost
 print_flow = 10        # mm^3/s for the rough print-time estimate
+tip_speed = 200        # mm/s: the tip-over check scales with it; 0 turns it off
 ```
 
 ## Keys
@@ -54,6 +55,7 @@ An unknown key is an error, so typos don't pass silently.
 | `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` or [your own](design-review.md#custom-styles) |
 | `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
 | `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |
+| `tip_speed` | `200` | mm/s, your slicer's fastest print move (infill or inner walls); the [tip-over check](checks.md) estimates the brim OrcaSlicer's Auto brim would give at this speed and warns from 5 mm; `0` turns the check off |
 | `parts_dir` | `"parts"` | folder in the workspace that holds `<name>/<name>.py` |
 
 All clearances are per side. Part scripts read any of them with `load_settings(__file__)`, e.g.

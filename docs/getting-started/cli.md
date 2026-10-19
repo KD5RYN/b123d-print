@@ -40,6 +40,7 @@ b123d-print check
 | `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |
 | `metrics [parts] [--variant v] [--style s] [--up +Y] [--json]` | the [design review](../using/design-review.md) numbers and the suggestions the part's style triggers (filament roughly ±20 %, time a rough estimate); never fails |
+| `orient [parts] [--variant v] [--piece name] [--load X] [--image] [--json]` | rank the ways to put each part on the bed: supports, contact, height, time, bridges, tip-over, the load against the layers; prints the `Rot(...)` to apply in `build(d)` (see [suggest_orientation](../using/tools.md#suggest_orientation)); `--image` renders the top choice to `out/<part>_orient.png`; never fails, changes nothing |
 | `faces <part> [--variant v] [--part name] [--highlight ID] [--json]` | the part's flat faces with their ids, holes and sides, for a face template; `--highlight` draws one in red ([fit-test templates](../using/templates.md)) |
 | `template <part> --slice XY:3 \| --face ID \| --crop x,y,z:sx,sy,sz [--thickness t] [--no-label] [--no-base] [--name id] [--variant v] [--part name] [--formats f]` | make a [fit-test template](../using/templates.md), write it to `out/` and check it; exit code 1 if a check fails |
 | `view <part> [--variant v] [--parts a,b] [--assembly] [--open]` | write `out/<part>_view.html`, a self-contained [3D view](../using/formats.md#3d-view-in-the-browser) of the part (viewer and model inline: opens offline, from `file://`); the printable parts on the bed, or `--assembly`; `--open` also opens the browser |
@@ -63,7 +64,7 @@ b123d-print check
 Global options, before the command: `--root <folder>` (the workspace; default the nearest
 folder with a `b123d-print.toml`, else the current folder) and `--version`.
 
-`parts` is a list of part names or script paths; without it, `build`, `check` and `metrics` take every part
+`parts` is a list of part names or script paths; without it, `build`, `check`, `metrics` and `orient` take every part
 in the workspace. Each command's full `--help` output is in the [Reference](../reference.md#b123d-print).
 
 ## Agents and `AGENTS.md`

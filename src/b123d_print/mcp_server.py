@@ -637,6 +637,35 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
 
 @mcp.tool(structured_output=False)
 @_files_doc
+async def suggest_orientation(name: str, variant: str | None = None, piece: str | None = None, load: str = "",
+                              image: bool = False, size: str = "normal", inline: bool = True) -> list:
+    """Rank the ways to put the part on the bed, so it does not print upside down or on a thin
+    edge: the six axis-aligned orientations and the large flat faces of its convex hull, each
+    scored on supports (area and grams under overhangs past max_overhang, bridges apart), bed
+    contact, height and print time (rough estimates), bridges, tip-over risk (as the check) and,
+    with a load or the structural style, whether the load runs along the layers (DS-T1). Returns
+    a ranked table with the Rot(x, y, z) to apply in build(d) and how. Run it before export when
+    the part is not obviously flat-bottomed. piece: one printable part (default: each).
+    load: the bending or tension direction as build(d) returns the part ('X', 'along Y', 'XZ',
+    '1,0,1'). image: also render the top choice (of the first part). Changes nothing."""
+    _image_options(size)
+    try:
+        from .orient import parse_load
+
+        parse_load(load)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    res = await _job(name, "orient", variant=variant, piece=piece, load=load or None, image=image or None, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    text = f"{name} [{res['variant']}]\n{res['text']}"
+    if not res.get("image"):
+        return [text]
+    return _with_note(_with_image(f"{text}\n\ntop choice: {_show(res['image'])}", res["image"], inline), name)
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
                  embed: bool = False, fresh: bool = False, view: str = "print") -> list:
     """Export printable parts to parts/<name>/out/. Default: every part, all variants.

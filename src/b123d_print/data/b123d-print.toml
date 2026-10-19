@@ -20,3 +20,4 @@ parts_dir = "parts"
 # style = "functional"  # design review style for parts without STYLE: functional, modern, least_cost, rugged, soft, structural
 # filament_price = 25  # per kg; design_metrics then shows a cost
 # print_flow = 10      # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
+# tip_speed = 200      # mm/s, your slicer's fastest print speed: the tip-over check scales with it; 0 turns it off
