@@ -108,14 +108,14 @@ def test_mcp_subcommand_starts_the_server_cli(capsys):
 
 
 def test_server_json_matches_the_package():
-    """The MCP Registry entry, the package and the plugin always carry the same version and name."""
+    """The MCP Registry entry and the package always carry the same version and name. (The plugin's
+    version follows the server version it runs: test_plugin_pins_the_released_package.)"""
     import json
     import tomllib
 
     server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    plugin = json.loads((ROOT / "plugin/.claude-plugin/plugin.json").read_text(encoding="utf-8"))
-    assert server["version"] == server["packages"][0]["version"] == version == plugin["version"]
+    assert server["version"] == server["packages"][0]["version"] == version
     assert server["packages"][0]["identifier"] == "b123d-print"
     assert f"mcp-name: {server['name']}" in (ROOT / "README.md").read_text(encoding="utf-8")
 
@@ -136,6 +136,8 @@ def test_plugin_pins_the_released_package():
     assert len(deps) == 1 and deps[0].startswith("b123d-print==")
     pin = deps[0].removeprefix("b123d-print==")
     assert ver(pin) <= ver(version)  # the plugin moves to a release after it is on PyPI
+    plugin = json.loads((ROOT / "plugin/.claude-plugin/plugin.json").read_text(encoding="utf-8"))
+    assert plugin["version"] == pin  # a release leaves plugin/ alone until its plugin-pin PR is merged
     assert mcp["command"] == "uvx" and mcp["args"] == [f"b123d-print=={pin}", "mcp"]  # the form a lock can pin
     lock = tomllib.loads((ROOT / "plugin/uv.lock").read_text(encoding="utf-8"))
     locked = [p for p in lock["package"] if p["name"] == "b123d-print"]

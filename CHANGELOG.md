@@ -16,7 +16,7 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
-## 0.3.3 — unreleased
+## 0.3.3 — 2026-10-19
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,
 hinges, gears, tool holders (also `strong`, `load_bearing`, `heavy_duty`). New sourced rules
@@ -42,6 +42,8 @@ bolted joints, hole edge distance, material and heat, annealing, snap fits, slic
   with inside corners.
 - The MCP `initialize` response names the server's version (`serverInfo.version` was empty).
 - Releases publish the MCP Registry entry and open the plugin's pin bump on their own.
+- The Claude plugin's version is now the server version it runs: a release leaves `plugin/` alone,
+  and the plugin moves (version, pin and lock) when the release's plugin-pin pull request is merged.
 
 ## 0.3.2 — 2026-10-19
 
