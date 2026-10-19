@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+{{CSP}}
+<title>{{TITLE}} · 3D view</title>
+{{STYLE}}
+</head>
+<body>
+<main id="stage">
+<canvas id="view" aria-label="3D view of the part: drag to rotate"></canvas>
+<p id="status" role="status">Loading the model…</p>
+</main>
+<aside id="panel">
+<h1 id="title">{{TITLE}}</h1>
+<p id="dims"></p>
+<p id="extent" class="muted"></p>
+<p id="tris" class="muted"></p>
+<h2>Pieces (<span id="pieces-count">0</span>)</h2>
+<ul id="pieces"></ul>
+<h2>Show</h2>
+<div class="row">
+<label><input type="checkbox" id="show-bed" checked> bed (Z = 0)</label>
+<label><input type="checkbox" id="show-box"> bounding box</label>
+<label><input type="checkbox" id="show-edges" checked> edges</label>
+</div>
+<h2>Section</h2>
+<div class="row">
+<select id="cut-axis" aria-label="section plane">
+<option value="off">off</option>
+<option value="x">cut across X</option>
+<option value="y">cut across Y</option>
+<option value="z">cut across Z</option>
+</select>
+<label><input type="checkbox" id="cut-flip" disabled> flip</label>
+<span id="cut-value"></span>
+</div>
+<input type="range" id="cut-at" aria-label="section position" disabled>
+<h2>View</h2>
+<div class="row">
+<button type="button" id="view-iso">iso</button>
+<button type="button" id="view-top">top</button>
+<button type="button" id="view-front">front</button>
+<button type="button" id="view-right">right</button>
+</div>
+<p class="hint">Drag to rotate, right-drag or shift-drag to pan, scroll or pinch to zoom. Sizes in mm, CAD axes (Z up, the bed at Z = 0).</p>
+<p class="credit">b123d-print {{VERSION}} · 3D: three.js r{{THREE_REVISION}} (MIT{{LICENSE_LINK}})</p>
+</aside>
+{{MODEL}}
+{{SCRIPTS}}
+</body>
+</html>

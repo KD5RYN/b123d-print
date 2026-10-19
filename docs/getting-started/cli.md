@@ -37,11 +37,12 @@ b123d-print check
 | --- | --- |
 | `init [dir] [--update-agents]` | create a workspace: `b123d-print.toml`, `AGENTS.md`, `parts/`; `--update-agents` replaces `AGENTS.md` with this version's text |
 | `new <name> [-d/--description text] [--from <example>]` | scaffold `parts/<name>/<name>.py` from the template, or from a bundled example |
-| `build [parts] [--variant v] [--formats f]` | export + section views, report sizes; `--formats` overrides the `formats` setting |
+| `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |
 | `metrics [parts] [--variant v] [--style s] [--up +Y] [--json]` | the [design review](../using/design-review.md) numbers and the suggestions the part's style triggers (filament roughly ±20 %, time a rough estimate); never fails |
 | `faces <part> [--variant v] [--part name] [--highlight ID] [--json]` | the part's flat faces with their ids, holes and sides, for a face template; `--highlight` draws one in red ([fit-test templates](../using/templates.md)) |
 | `template <part> --slice XY:3 \| --face ID \| --crop x,y,z:sx,sy,sz [--thickness t] [--no-label] [--no-base] [--name id] [--variant v] [--part name] [--formats f]` | make a [fit-test template](../using/templates.md), write it to `out/` and check it; exit code 1 if a check fails |
+| `view <part> [--variant v] [--parts a,b] [--assembly] [--open]` | write `out/<part>_view.html`, a self-contained [3D view](../using/formats.md#3d-view-in-the-browser) of the part (viewer and model inline: opens offline, from `file://`); the printable parts on the bed, or `--assembly`; `--open` also opens the browser |
 | `styles [name]` | list the [design styles](../using/design-review.md#custom-styles) and where each comes from (workspace, user, built-in), or show one with `based_on` applied |
 | `printer list [words]` | search the printer profiles |
 | `printer show [name]` | show a printer (default: the active one) |
@@ -83,6 +84,7 @@ uv run parts/bracket/bracket.py
 | --- | --- |
 | `--variant <key>` | build one variant (`standard` for the default); default: all |
 | `--formats <list>` | comma-separated from `step,stl,3mf,png` or `all`; default: the `formats` setting |
+| `--only <pieces>` | comma-separated piece names from `build()`: build and export only those, without the checks |
 | `--no-check` | export only, skip the checks |
 
 ## From Python

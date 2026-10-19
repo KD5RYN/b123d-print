@@ -187,9 +187,11 @@ are starting points: print the snippet.
 **Other libraries.** [bd_warehouse](https://github.com/gumyr/bd_warehouse) (Apache-2.0) has
 `HeatSetNut` and `InsertHole` for McMaster-Carr, Hilitchi, ruthex and CNC Kitchen inserts. Its
 hole is the drill-chart size (CNC Kitchen M3: 4.09 mm) and its depth is the insert length,
-where our rules use the maker's hole (4.0) and length + 1 mm [T2, T3]. For other makers, take
-the hole, length and wall from bd_warehouse's table or the datasheet and pass them to
-`Insert`. [b3dkit](https://b3dkit.readthedocs.io) (MIT) has dovetails (traditional, snug-tail,
+where our rules use the maker's hole (4.0) and length + 1 mm [T2, T3]. Part scripts can import
+it ([Threads, fasteners and gears](threads-fasteners-gears.md)). For other makers, take the
+length and wall from its table (`HeatSetNut("M3-0.5-Standard", "McMaster-Carr").nut_data["m"]`
+and `["material_thickness"]`) and the hole from the datasheet, and pass them to `Insert`.
+[b3dkit](https://b3dkit.readthedocs.io) (MIT) has dovetails (traditional, snug-tail,
 T-slot), click fits and twist snaps. Its `tolerance` is shared between tail and socket, half
 each, so its 0.025 default is about 0.0125 per side, far below a printed sliding fit. If you use
 it, pass twice your per-side `CLEARANCE`.

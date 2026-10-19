@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, metrics, styles, faces, template, compare, to-step, config, list,
+"""`b123d-print` command line: init, new, build, check, metrics, styles, faces, template, view, compare, to-step, config, list,
 and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -165,17 +165,23 @@ def cmd_styles(args) -> int:
 
 
 def cmd_build(args) -> int:
-    from .project import export_variant, load, variant_key, variants
+    from .project import export_variant, load, timing_lines, variant_key, variants
 
     for script in _targets(args):
         mod = load(script)
         for key in variants(mod):
             if args.variant and variant_key(args.variant) != key:
                 continue
-            s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None)
+            try:
+                s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None,
+                                   only=args.only)
+            except KeyError as e:
+                sys.exit(f"build: {e.args[0]}")
             for pname, r in s["parts"].items():
                 print(f"{script.stem}{'[' + key + ']' if key else ''} {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, "
                       f"volume {r['volume']:.1f} mm^3, valid={r['valid']}")
+            for line in timing_lines(s["timing"]):
+                print(f"  {line}")
             print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
     return 0
 
@@ -220,6 +226,30 @@ def cmd_faces(args) -> int:
         img = tp.highlight(part, [face], out / f"{script.stem}{'_' + key if key else ''}_face{fid}.png",
                            f"{script.stem}: face {fid} (red)")
         print(f"-> {img}")
+    return 0
+
+
+def cmd_view(args) -> int:
+    """A self-contained HTML 3D view of a part (viewer and model inline: opens from file://, offline)."""
+    from . import viewer
+    from .project import Pieces, dims, load, resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    layout = "assembly" if args.assembly else "print"
+    try:
+        glb = viewer.write_view(Pieces(mod, dims(mod, key)), "_".join(x for x in (script.stem, key) if x),
+                                script.parent / "out", layout, args.only)
+    except (KeyError, ValueError) as e:
+        sys.exit(f"view: {str(e).strip(chr(34))}")
+    page = viewer.write_offline(glb)
+    print(f"{script.stem}{'[' + key + ']' if key else ''}: {page}  ({page.stat().st_size / 1e6:.1f} MB, works offline)")
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(page.resolve().as_uri())
     return 0
 
 
@@ -427,6 +457,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--variant")
         if name == "build":
             p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
+            p.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
+                                                             "those (lazy pieces: the others are never built)")
         if name == "check":
             p.add_argument("--json", action="store_true")
             p.add_argument("-v", "--verbose", action="store_true", help="also list passing checks")
@@ -456,6 +488,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant", help="default: the first variant")
     p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
     p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
+    p = sub.add_parser("view", help="write a self-contained HTML 3D view of a part (rotate it in a browser, offline)")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--variant", help="one variant (default: the first)")
+    p.add_argument("--parts", dest="only", help="comma-separated printable parts to show (default: all)")
+    p.add_argument("--assembly", action="store_true", help="show assembly(d), stand-ins included, instead of the "
+                                                            "printable parts on the bed")
+    p.add_argument("--open", action="store_true", help="also open it in the default browser")
     p = sub.add_parser("styles", help="list the design styles (yours and the built-in ones), or show one")
     p.add_argument("name", nargs="?", help="a style to show, with based_on applied")
     p = sub.add_parser("printer", help="optional printer/material profile (default: generic)")
@@ -500,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
                                          "server, `pull` or `version` for $SSH_ORIGINAL_COMMAND, refuses anything else")
     p.add_argument("--workspace", required=True, help="the workspace this key is pinned to")
     p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
-    p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
+    p.add_argument("--timeout", type=float, help="seconds per build (default 240)")
     p.add_argument("--check-timeout", type=float, help="seconds per check run (default 300, or --timeout if longer)")
     p = sub.add_parser("pull", help="on the client: copy a part (script, out/, ref/) from an SSH server into "
                                     "parts/<part>/ of the project folder")
@@ -583,7 +622,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_faces(args) if args.cmd == "faces" else cmd_template(args)
         except (TemplateError, FileNotFoundError) as e:
             sys.exit(f"{args.cmd}: {e}")
-    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step}[args.cmd](args)
+    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step,
+            "view": cmd_view}[args.cmd](args)
 
 
 if __name__ == "__main__":

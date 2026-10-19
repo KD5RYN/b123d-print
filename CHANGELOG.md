@@ -16,6 +16,78 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
+**Big and multi-piece projects** without rebuilding everything for every step
+([docs](https://kd5ryn.github.io/b123d-print/scripts/convention/#big-and-multi-piece-projects)):
+- **Build cache.** The MCP server's sandboxed worker saves each piece it builds (and the
+  assembly) as BREP in the part's `out/.cache/`; `build_part`, `render_preview`, `section`,
+  `check`, `export` and the other tools read it back instead of building again. Keyed by every
+  `.py` file in the part's folder, the variant and its Dims, the settings a build can read, the
+  versions of b123d-print, build123d and OCP, and the hash of every other file the build read in
+  the part's folder. A miss or a broken entry rebuilds. Not cached: builds that read a file
+  elsewhere in the workspace, remixes that load a model (`import_model` has its own cache), and
+  `original(d)`. `fresh=true` on those tools rebuilds; `B123D_PRINT_NO_CACHE=1` turns it off.
+  The cache stays inside the part's `out/` folder and never widens what a script can read or
+  write.
+- **One piece at a time.** `build(d)` may return a dict of zero-argument functions (lazy
+  pieces), each built only when needed. `build_part` gained `parts=`; `parts=` on
+  `render_preview`, `section` and `export` now builds only those pieces. CLI: `b123d-print build
+  --only a,b` and `uv run parts/x/x.py --only a,b`. Plain shapes work as before.
+- **Where the time goes.** `build_part` and `b123d-print build` report each piece's face count
+  and build time (and whether it was cached), with a hint for a piece over ~1,500 faces or
+  ~10 s: dense polyline or many stacked offsets: fewer curve points, a spline, or build once and
+  mirror/copy the result.
+- **The build time limit is now 240 s** (was 120): `--timeout`, `B123D_PRINT_TIMEOUT` and the
+  compose/`.env` examples. That stays under the 300 s an MCP client waits for a result; checks
+  keep their own 300 s limit.
+- The workflow rules (`AGENTS.md`) have a "Big and multi-piece projects" section: build each
+  distinct piece once and mirror it, keep curves to the points they need, use `parts=` instead
+  of inventing variants, read the timing report, consider a script per piece.
+- `tools/bench_multi_piece.py` times build + render + export of a six-piece part with and
+  without the cache.
+
+**Threads, fasteners and gears.** Part scripts can now import two build123d part libraries
+([docs](https://kd5ryn.github.io/b123d-print/using/threads-fasteners-gears/)):
+[bd_warehouse](https://github.com/gumyr/bd_warehouse) 0.4.0 (Apache-2.0: threads including
+bottle threads, screws, nuts, heat-set inserts and their hole sizes, gears and worms, OpenBuilds
+V-slot parts) and [py_gearworks](https://github.com/GarryBGoode/py_gearworks) 0.0.24 (Apache-2.0:
+spur, helical, herringbone and bevel gears, racks). Both build inside the sandbox unchanged.
+- A sourced guide: when to model a thread (M6 and up, coarse, upright, the user's clearance,
+  faded ends) and when to use inserts, nuts or pilot holes instead; how bd_warehouse's holes
+  meet `HOLE_COMP`, so a hole is compensated once (`InsertHole` cuts its table's drill size,
+  0.19 mm over CNC Kitchen's 5.6 mm M4 hole); gears (module, backlash, profile shift, helical
+  and herringbone, orientation, materials); mounting to 2020 V-slot.
+- New examples: `jar_lid` (a 38-400 bottle thread), `insert_bracket` (M4 heat-set inserts and
+  counterbored screw holes from bd_warehouse's tables), `gear_pair` (a meshed py_gearworks pair
+  with profile shift and a backlash `Gap` check) and `vslot_mount` (a plate keyed into 2020
+  V-slot, with the rail and T-nuts as stand-ins).
+- The workflow rules (`AGENTS.md`) and the `design_part_from_photos` prompt say which library to
+  use for what, and to keep modeled threads to sizes that print.
+- bd_vslot is not included: its rails fail to build with build123d 0.13.
+
+**View in 3D**: turn a part around in the browser before printing, without a slicer
+([docs](https://kd5ryn.github.io/b123d-print/using/formats/#3d-view-in-the-browser)).
+- `export` makes a 3D view per variant (`view="print"`, the default: the printable parts on the
+  bed; `"assembly"`: `assembly(d)` with its stand-ins; `"none"`). Over HTTP it returns a signed
+  **view link** (`/view/...`: no token, bound to the workspace, expires with the download links),
+  which `download_part` lists too; locally it writes a self-contained `out/<name>_view.html`
+  (viewer and model inline: opens offline from `file://`). New CLI command `b123d-print view
+  <part>` (`--assembly`, `--variant`, `--parts`, `--open`).
+- The viewer: orbit, pan and zoom; the pieces listed with their sizes, each one to show or hide;
+  the bed grid at Z = 0; the overall size and extent in mm and a bounding box; a section plane
+  across X, Y or Z; iso, top, front and right views.
+- Security: the view page is one static file with a strict Content-Security-Policy (scripts and
+  styles from the server only, no inline script, `connect-src 'self'`, no framing),
+  `nosniff`, `no-referrer`; the model is served as `model/gltf-binary`; piece names are shown as
+  text; view signatures have their own purpose and never open other links (and the reverse).
+  The offline HTML allows only its own inline scripts, by hash, and no network.
+- New export format **`glb`** (binary glTF: one named, colored node per piece), for web and 3D
+  apps; not in the default set (`all` now includes it).
+- The viewer library, [three.js](https://threejs.org) r186 (MIT), is vendored in the package
+  (640 KB, 160 KB gzipped): the server and the browser need no internet. Its license notice heads
+  the bundle, ships as `three-LICENSE.txt` (listed in `license-files`) and travels inside every
+  view HTML; `tools/vendor_viewer.py` rebuilds it from the npm tarball (integrity-checked) and
+  records its provenance. `THIRD_PARTY.md` and the credits page list it.
+- `AGENTS.md`: offer the 3D view after an export.
 **Splitting parts**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/splitting/))
 and joint helpers for parts too big for the bed or better printed in pieces: when to split,
 where to cut, a joint selection table, clearances per fit with the test-snippet habit (a

@@ -1,0 +1,4 @@
+# Vendored three.js (tools/vendor_viewer.py): keep the bytes exactly as built, on every OS, so the
+# SHA-256 in vendor.json matches what ships and the license notice stays as written.
+src/b123d_print/data/viewer/three.bundle.min.js -text
+src/b123d_print/data/viewer/three-LICENSE.txt -text

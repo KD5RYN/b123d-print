@@ -3,6 +3,9 @@
 What the `b123d-print-mcp` server offers. The full descriptions the model sees are in the
 [Reference](../reference.md#mcp-server), generated from the server itself.
 
+Part scripts written with these tools can use build123d, bd_warehouse (threads, fasteners,
+holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fasteners-gears.md).
+
 ## Tools
 
 | Tool | What it does |
@@ -11,15 +14,15 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `new_part(name, description?, example?, show_code?)` | scaffold from the template, or copy a bundled example; returns a short confirmation (`show_code=True` also returns the new file's code; the template itself is the `b123d-print://template` resource) |
 | `read_part(name)` | the script's current code |
 | `write_part(name, code)` | replace the script (syntax-checked before saving) |
-| `build_part(name, variant?)` | run it: bounding box, volume, validity, dimensions, errors; writes no files |
-| `render_preview(name, variant?, parts?, size?, inline?)` | 6-view PNG. With several printable parts it draws `assembly()` if the script has one, else the parts side by side on the bed (also for `parts="a,b"`); `parts="assembly"` shows the fit |
-| `section(name, plane, at, variant?, parts?, size?, inline?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
-| `check(name, variant?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
+| `build_part(name, variant?, parts?, fresh?)` | run it: bounding box, volume, validity, dimensions, errors, and the [timing report](../scripts/convention.md#big-and-multi-piece-projects) (each piece's faces and seconds, with a hint for a slow or dense one); `parts="a,b"` builds only those pieces; writes no files but the [build cache](../scripts/convention.md#big-and-multi-piece-projects) |
+| `render_preview(name, variant?, parts?, size?, inline?, fresh?)` | 6-view PNG. With several printable parts it draws `assembly()` if the script has one, else the parts side by side on the bed (also for `parts="a,b"`); `parts="assembly"` shows the fit |
+| `section(name, plane, at, variant?, parts?, size?, inline?, fresh?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
+| `check(name, variant?, fresh?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
 | `design_metrics(name, variant?, style?, up?, as_json?)` | the design numbers per part: size, filament (roughly ±20 %) and cost, print time (rough), supports, shallow slopes that show layer steps, edge treatment (sharp / filleted / chamfered, radii), symmetry, screw sizes, seam corners, water traps (`up` = the side up in use); then the suggestions the part's `style` triggers, each citing its rule ([design review](design-review.md)). Changes nothing; `as_json` for the full numbers |
-| `export(name, variant?, formats?, parts?, embed?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"`; says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result |
+| `export(name, variant?, formats?, parts?, embed?, fresh?, view?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"` (only that piece is built); says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result. `view` makes a [3D view](formats.md#3d-view-in-the-browser) per variant to turn in a browser: `"print"` (default: the printable parts on the bed), `"assembly"` (`assembly(d)` with its stand-ins) or `"none"`; over HTTP a signed [view link](../getting-started/http.md#view-in-3d) (no token, expires), locally a self-contained `_view.html` that opens offline, over SSH the `.glb` (then `b123d-print view` at home) |
 | `list_faces(name, variant?, part?, highlight?, size?, inline?)` | the flat faces of a part with stable ids, normal and side, area, center, box and round holes, for a face [fit-test template](templates.md); `highlight` (an id or side) adds a picture with that face in red, to confirm it with you |
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
-| `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
+| `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result; over HTTP it also lists the [view links](../getting-started/http.md#view-in-3d) of the views `export` made. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
 | `compare(reference, candidate, thresholds?, image?, size?, inline?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
 | `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it: `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
 | `describe_model(part, file, scale?, image?, size?, inline?)` | inspect an original before remixing it: format, units, size, faces before and after merging, the curved (faceted) share, round holes, repairs, the designer and license metadata it carries, and a suggestion to modify or redraw it; `image` adds a 6-view render |
@@ -28,6 +31,11 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.
+
+`parts` names pieces from `build()`: with [lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)
+only those are built. Every tool that builds the part reads the pieces from the
+[build cache](../scripts/convention.md#big-and-multi-piece-projects) when an earlier call built
+them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
 Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part` and

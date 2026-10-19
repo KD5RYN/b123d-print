@@ -32,14 +32,15 @@ import lib3mf  # noqa: E402,F401  (3MF export)
 from b123d_print import checks as ck  # noqa: E402
 from b123d_print.config import load_settings, parse_formats  # noqa: E402
 from b123d_print.project import (  # noqa: E402
-    assembly,
+    CacheConfig,
+    ReadLog,
     before_after,
     built,
     check_share,
     dims,
     export_variant,
     load,
-    printables,
+    make_pieces,
     run_checks,
     variants,
     write_template,
@@ -51,6 +52,7 @@ from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded 
 from b123d_print import metrics  # noqa: E402
 from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
 from b123d_print import joints  # noqa: E402,F401  (split parts, joint helpers)
+from b123d_print import viewer  # noqa: E402  (the 3D view's GLB)
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (
@@ -109,6 +111,7 @@ def _norm(path) -> str:
 
 
 ALLOWED_NATIVE = _allowed_native_dirs()
+READS = ReadLog()  # what the part script reads, for the build cache (main installs it)
 
 
 def ctypes_guard(event: str, args) -> None:
@@ -157,68 +160,45 @@ def install_guard(writable: list[str]) -> None:
     sys.addaudithook(hook)
 
 
-def _parts_for(mod, d, which: str | None):
-    parts = printables(mod, d)
-    named = {(k or "part"): v for k, v in parts.items()}
+def _parts_for(pc, which: str | None):
+    """[(part, None, name)] for `which` (every piece, 'assembly' or comma-separated names); only
+    the named pieces are built (lazy pieces) or read from the build cache."""
     if which in (None, "", "all"):
-        return [(p, None, n) for n, p in named.items()]
+        return [(p, None, n or "part") for n, p in pc.parts().items()]
     if which == "assembly":
-        asm = assembly(mod, d)
+        asm = pc.assembly()
         if not asm:
             raise ValueError("this script has no assembly(d)")
         return asm
-    names = [w.strip() for w in which.split(",")]
-    missing = [n for n in names if n not in named]
-    if missing:
-        raise KeyError(f"no part(s) {missing}; parts: {sorted(named)}" + (" (or 'assembly')" if hasattr(mod, "assembly") else ""))
-    return [(named[n], None, n) for n in names]
+    try:
+        named = pc.parts(which)
+    except KeyError as e:
+        raise KeyError(e.args[0] + (" (or 'assembly')" if hasattr(pc.mod, "assembly") else "")) from None
+    return [(p, None, n or "part") for n, p in named.items()]
 
 
-def _preview_parts(mod, d, which: str | None):
+def _preview_parts(pc, which: str | None):
     """What render_preview draws: the assembly when the script has one (printable parts all sit at
     the origin in print orientation, so drawn together they overlap), else the printable parts
     side by side on the bed. Returns (items, layout)."""
     if which in (None, "", "all"):
-        asm = assembly(mod, d)
+        asm = pc.assembly()
         if asm:
             return asm, "assembly"
-        sel = _parts_for(mod, d, None)
+        sel = _parts_for(pc, None)
     elif which == "assembly":
-        return _parts_for(mod, d, which), "assembly"
+        return _parts_for(pc, which), "assembly"
     else:
-        sel = _parts_for(mod, d, which)
+        sel = _parts_for(pc, which)
     if len(sel) > 1:
         return side_by_side([(p, lbl) for p, _, lbl in sel]), "side by side"
     return sel, "single"
 
 
-class _OnlyParts:
-    """The part script, but build() returns only the named printable parts (export parts=)."""
-
-    def __init__(self, mod, names: list[str]):
-        self._mod, self._names = mod, names
-
-    def __getattr__(self, attr):
-        if attr in ("assembly", "part"):  # the assembly shows every part: not part of a filtered export
-            raise AttributeError(attr)
-        if attr == "views":
-            views = getattr(self._mod, "views", None)
-            if views is None:
-                raise AttributeError(attr)
-            return lambda d: [v for v in views(d) if v.parts and set(v.parts) <= set(self._names)]
-        if attr == "templates":
-            tf = getattr(self._mod, "templates", None)
-            if tf is None:
-                raise AttributeError(attr)
-            return lambda d: [t for t in tf(d) if (t.part or "part") in self._names]
-        return getattr(self._mod, attr)
-
-    def build(self, d=None):
-        named = {(k or "part"): (k, v) for k, v in printables(self._mod, d).items()}
-        missing = [n for n in self._names if n not in named]
-        if missing:
-            raise KeyError(f"no part(s) {missing}; parts: {sorted(named)}")
-        return dict(named[n] for n in self._names)
+def _for_pick(pc, name: str | None) -> dict:
+    """The pieces for templates.pick_part: only the named one when it exists (pick_part reports a
+    wrong name, with the list)."""
+    return pc.parts(name) if name and name in {n or "part" for n in pc.names()} else pc.parts()
 
 
 def do_compare(job: dict) -> dict:
@@ -259,56 +239,67 @@ def do(job: dict) -> dict:
     op = job["op"]
     out = Path(job["out_dir"])
     settings = load_settings(script)
+    # the build cache: only in a worker that records what the script reads (main), and only in
+    # the part's own out/ folder, which is the one folder of the part it may write
+    cache = None
+    if READS.installed and job.get("workspace") and _norm(out) == _norm(script.parent / "out"):
+        cache = CacheConfig(Path(job["workspace"]), READS, fresh=bool(job.get("fresh")))
+    only = job.get("parts") or None
 
     if op == "build":
         res = {"variants": {}}
         for k in keys if key is None else [key]:
             d = dims(mod, k)
-            parts = printables(mod, d)
-            res["variants"][k or "standard"] = {
+            pc = make_pieces(mod, k, d, settings, cache)
+            parts = pc.parts(only)
+            v = res["variants"][k or "standard"] = {
                 "parts": {(n or "part"): report(p) for n, p in parts.items()},
                 "dims": {f: getattr(d, f) for f in d.__dataclass_fields__} if d is not None else None,
-                "assembly": [lbl for _, _, lbl in (assembly(mod, d) or [])],
             }
+            if not only:  # the assembly needs every piece
+                v["assembly"] = [lbl for _, _, lbl in (pc.assembly() or [])]
+            v["timing"] = pc.timing()
         return res
 
     k = key if key is not None else keys[0]
     d = dims(mod, k)
+    pc = make_pieces(mod, k, d, settings, cache)
     tag = "_".join(x for x in (script.stem, k) if x)
     size = job.get("size", "normal")
     small = "_small" if size == "small" else ""
     if op == "render":
         which = job.get("parts")
-        sel, layout = _preview_parts(mod, d, which)
+        sel, layout = _preview_parts(pc, which)
         name = f"{tag}_{(which or 'all').replace(',', '+')}_preview{small}.png"
         title = tag + (f" ({which})" if which else "") + (f", {layout}" if layout != "single" else "")
         f = render(sel if len(sel) > 1 else sel[0][0], out / name, title, size=size)
         # report the printable parts as built (print orientation), not moved copies or stand-ins
-        reports = {lbl: report(p) for p, _, lbl in _parts_for(mod, d, None if layout == "assembly" else which)}
+        reports = {lbl: report(p) for p, _, lbl in _parts_for(pc, None if layout == "assembly" else which)}
         return {"image": str(f), "variant": k or "standard", "parts": reports, "layout": layout,
-                "drawn": [lbl for _, _, lbl in sel]}
+                "drawn": [lbl for _, _, lbl in sel], "timing": pc.timing()}
     if op == "section":
-        sel = _parts_for(mod, d, job.get("parts") or ("assembly" if hasattr(mod, "assembly") else None))
+        sel = _parts_for(pc, job.get("parts") or ("assembly" if hasattr(mod, "assembly") else None))
         plane, at = job["plane"].upper(), float(job["at"])
         f = section_view(sel, plane, at, out / f"{tag}_{plane.lower()}{round(at, 3):g}{small}.png", tag, size=size)
-        return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at}
+        return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at, "timing": pc.timing()}
     if op == "check" and job.get("share"):  # one of several workers sharing a check run (mcp_server.check)
         share = tuple(job["share"])
         return {"shares": {kk or "standard": check_share(mod, kk, settings, share, deadline=job.get("deadline"),
-                                                       started=job.get("started"))
+                                                       started=job.get("started"), cache=cache)
                            for kk in (keys if key is None else [key])}}
     if op == "check":
         res = {}
         for i, kk in enumerate(keys if key is None else [key]):
-            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0, deadline=job.get("deadline"))]
+            res[kk or "standard"] = [f.__dict__ for f in run_checks(mod, kk, settings, nudge=i == 0, deadline=job.get("deadline"),
+                                                                    cache=cache)]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
     if op == "metrics":
-        res = metrics.design_metrics(mod, d, printables(mod, d), settings, style=job.get("style") or None,
+        res = metrics.design_metrics(mod, d, pc.parts(), settings, style=job.get("style") or None,
                                      up=job.get("up") or None)
         return {"variant": k or "standard", "metrics": res, "text": metrics.text(res)}
     if op == "before_after":
-        parts, orig, _ = built(mod, d)
+        parts, orig, _ = built(mod, d, pc)
         if orig is None:
             raise ValueError("this part is not a remix: build() loads nothing with import_model and the script has no original(d)")
         r = before_after(orig, {(n or "part"): p for n, p in parts.items()}, out, tag, size)
@@ -316,7 +307,7 @@ def do(job: dict) -> dict:
     if op == "faces":
         from b123d_print import templates as tp
 
-        pname, part = tp.pick_part(printables(mod, d), job.get("part"))
+        pname, part = tp.pick_part(_for_pick(pc, job.get("part")), job.get("part"))
         res = {"variant": k or "standard", "part": pname, **tp.list_faces(part)}
         if job.get("highlight") is not None:
             face, fid = tp.find_face(part, job["highlight"])
@@ -329,11 +320,20 @@ def do(job: dict) -> dict:
 
         spec = tp.Template(**{f: v for f, v in job["spec"].items() if v is not None})
         fmts = parse_formats(job["formats"]) if job.get("formats") else settings.formats
-        return write_template(script, k, printables(mod, d), spec, out, fmts, settings)
+        return write_template(script, k, _for_pick(pc, spec.part), spec, out, fmts, settings)
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
-        src = _OnlyParts(mod, [n.strip() for n in job["parts"].split(",") if n.strip()]) if job.get("parts") else mod
-        return {"variants": [export_variant(src, script, kk, out, fmts) for kk in (keys if key is None else [key])]}
+        res = {"variants": [export_variant(mod, script, kk, out, fmts, only=only, cache=cache)
+                            for kk in (keys if key is None else [key])]}
+        if job.get("view"):  # the 3D view of each variant (export's view=), from the same (cached) pieces
+            for kk, v in zip(keys if key is None else [key], res["variants"]):
+                tag = "_".join(x for x in (script.stem, kk) if x)
+                try:
+                    pc = make_pieces(mod, kk, dims(mod, kk), settings, cache)
+                    v["view"] = str(viewer.write_view(pc, tag, out, job["view"], only))
+                except (KeyError, ValueError) as e:  # e.g. view='assembly' without assembly(d): the export still stands
+                    v["view_error"] = str(e).strip('"')
+        return res
     raise ValueError(f"unknown op {op!r}")
 
 
@@ -341,6 +341,7 @@ def main() -> int:
     job = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     result_path = Path(job["result"])
     os.chdir(job["out_dir"])
+    READS.install()  # before the guard, which refuses any later audit hook
     if job.get("guard", True):
         install_guard(job["writable"])
     try:

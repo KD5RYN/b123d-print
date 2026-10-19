@@ -27,6 +27,8 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    this goes quickly: [Measuring for the AI](measuring.md).
 2. **One script per part.** Every dimension is a named field you can change later; variants
    (a bigger one, a tilted one) live in the same script. See [The part script](../scripts/convention.md).
+   Threads, screws, inserts, gears and V-slot parts come from bd_warehouse and py_gearworks,
+   kept to what prints: [Threads, fasteners and gears](threads-fasteners-gears.md).
 3. **Verified before it reports.** Build, preview render, sections through every mating
    feature, and [the checks](checks.md) — and it fixes what fails.
 4. **A report** with the overall size, key dimensions, the clearance and hole compensation

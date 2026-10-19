@@ -90,6 +90,48 @@ pin socket, and two fit-test templates cut each piece's end around the joint. Va
 `dovetail`: one through dovetail instead (the pieces slide together along Z). An example: not
 printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/split_trim/split_trim.py)
+## `jar_lid`
+
+![Jar lid with a 38-400 bottle thread](../images/jar_lid.png)
+
+A screw cap for a 38-400 jar or bottle neck, with an internal plastic bottle thread from
+`bd_warehouse.thread.PlasticBottleThread` (ASTM D2911, buttress profile). It prints top-down:
+the thread's steep flank faces down and its flat flank faces up, so it needs no supports. The
+thread's radial clearance is your sliding fit, and both ends fade out. The faded ends are
+excluded from the thin-feature check (`ThinFeature(ignore=...)`). See
+[Threads, fasteners and gears](../using/threads-fasteners-gears.md).
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/jar_lid/jar_lid.py)
+
+## `insert_bracket`
+
+![Insert bracket](../images/insert_bracket.png)
+
+A mounting block with two CNC Kitchen M4 heat-set inserts on top and two counterbored M4 screw
+holes in its foot. The insert's length and minimum wall come from bd_warehouse's `HeatSetNut`
+table, the screw's clearance and head sizes from `SocketHeadCapScrew`. Each hole is cut once
+with `HOLE_COMP`: the insert hole at the maker's 5.6 mm, 1 mm deeper than the insert. `Wall`
+checks measure the material around the inserts and the counterbores.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/insert_bracket/insert_bracket.py)
+
+## `gear_pair`
+
+![Gear pair in mesh, with its pins](../images/gear_pair_assembly.png)
+
+A 12-tooth pinion and a 30-tooth gear, module 1.5, made with py_gearworks. The pinion gets the
+profile shift that avoids undercut, `mesh_to` sets the center distance, and 0.3 mm of backlash
+in total is measured by a `Gap` check in the assembly (0.15 mm at the closest point). Both print
+flat, with free-fit bores on 5 mm pins.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/gear_pair/gear_pair.py)
+
+## `vslot_mount`
+
+![V-slot mount on a 2020 rail](../images/vslot_mount_assembly.png)
+
+A plate that bolts onto 2020 V-slot extrusion with two M5 screws into T-nuts. A V-shaped key
+with 45° sides sits in the slot's groove and keeps the plate square. The rail and T-nuts are
+stand-ins from `bd_warehouse.open_builds`, so the `Gap` checks prove the key clears the
+groove's flanks (your sliding fit) and the T-nuts' necks.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/vslot_mount/vslot_mount.py)
 
 ## `testblock`
 

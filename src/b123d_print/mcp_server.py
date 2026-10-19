@@ -9,7 +9,7 @@ workspace with `/mcp?workspace=<name>` (or the header `X-B123D-Workspace`), whic
 <workspace>/workspaces/<name>; without one, clients share <workspace> itself. Files the server
 writes come back as signed download links (GET /files/..., no token, they expire) and as
 b123d-print://files/ resources; download_part gives one signed link (GET /zip/...) to a zip of a
-whole part. A named workspace nobody uses for --retention-days (default 30) is removed.
+whole part, and export a signed 3D view link (GET /view/..., viewer.py). A named workspace nobody uses for --retention-days (default 30) is removed.
 """
 
 from __future__ import annotations
@@ -29,22 +29,26 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import handoff, jobqueue, links, sandbox, tokens
+from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
-from .project import find_parts
+from .project import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
 
 INSTRUCTIONS = """\
 Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export. To remix an existing STL/3MF/STEP: upload_reference ->
+check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export (it returns a
+3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
 describe_model -> import_model in the script (prompt remix_part). Read the resource
 b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
 before reporting. render_preview and section return PNG images.
+Several pieces: return lazy pieces from build(d) ({"name": lambda: piece(d)}) and pass parts= to
+build_part, render_preview, section and export to work on one; built pieces are cached, so later
+calls reuse them (fresh=True rebuilds). build_part reports each piece's time and faces.
 When this server is remote (HTTP or SSH), it is a workbench, not storage: what it writes is a
 temporary working copy, deleted after some days unused. Use ONLY these MCP tools and the links they
 return; the server gives no shell, ssh or scp access. Last step, before reporting: download_part
@@ -111,7 +115,7 @@ def _in_use(name: str | None, start: bool) -> None:
 # version: what initialize reports as serverInfo.version (the SDK default is "")
 mcp = MCPServer("b123d-print", version=_dist_version("b123d-print"), instructions=INSTRUCTIONS,
                 middleware=[_request_workspace])
-STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
+STATE: dict = {"root": Path.cwd(), "timeout": sandbox.DEFAULT_TIMEOUT, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
@@ -485,11 +489,16 @@ def write_part(name: str, code: str) -> str:
 
 
 @mcp.tool()
-async def build_part(name: str, variant: str | None = None) -> str:
+async def build_part(name: str, variant: str | None = None, parts: str | None = None, fresh: bool = False) -> str:
     """Run the part script (sandboxed, with a timeout) and report, per variant and part: bounding
     box size and min/max (mm), volume (mm^3), solid count, is_valid, the Dims values, and any
-    error with its traceback. Writes no files. variant: key from VARIANTS ('standard' = '')."""
-    res = await _job(name, "build", variant=variant)
+    error with its traceback; and under "timing" each piece's face count and build time, with a
+    hint for a piece that is slow or dense. variant: key from VARIANTS ('standard' = '').
+    parts: comma-separated piece names from build(): build only those (lazy pieces: the others
+    are never built). Built pieces are cached in out/.cache/, so render_preview, section, check
+    and export reuse them while the script, its Dims and the settings stay the same; fresh=True
+    builds again and replaces the cached pieces. Writes no other files."""
+    res = await _job(name, "build", variant=variant, parts=parts, fresh=fresh or None)
     if not res.get("ok"):
         return _error_text(res)
     res.pop("ok", None)
@@ -499,51 +508,56 @@ async def build_part(name: str, variant: str | None = None) -> str:
 @mcp.tool(structured_output=False)
 @_files_doc
 async def render_preview(name: str, variant: str | None = None, parts: str | None = None,
-                         size: str = "normal", inline: bool = True) -> list:
+                         size: str = "normal", inline: bool = True, fresh: bool = False) -> list:
     """Render six views (iso, top, front, right, iso from below, bottom) as a PNG image.
-    parts: comma-separated part names from build() (several are laid out side by side), 'assembly'
-    (assembled position with stand-ins), or omit: the assembly if the script has one, else every
-    printable part side by side. One variant (default: the first). size: 'normal' or 'small'
-    (~800 px wide, cheaper). inline=False returns only the file (over HTTP: its download link),
-    not the image itself."""
+    parts: comma-separated part names from build() (several are laid out side by side; only those
+    are built), 'assembly' (assembled position with stand-ins), or omit: the assembly if the
+    script has one, else every printable part side by side. One variant (default: the first).
+    size: 'normal' or 'small' (~800 px wide, cheaper). inline=False returns only the file (over
+    HTTP: its download link), not the image itself. Uses the pieces cached by an earlier build;
+    fresh=True builds them again."""
     _image_options(size)
-    res = await _job(name, "render", variant=variant, parts=parts, size=size)
+    res = await _job(name, "render", variant=variant, parts=parts, size=size, fresh=fresh or None)
     if not res.get("ok"):
         return [_error_text(res)]
     summary = {"variant": res["variant"], "layout": res["layout"], "drawn": res["drawn"], "parts": res["parts"],
-               "file": _show(res["image"])}
+               "timing": res["timing"], "file": _show(res["image"])}
     return _with_note(_with_image(json.dumps(summary, indent=1), res["image"], inline), name)
 
 
 @mcp.tool(structured_output=False)
 @_files_doc
 async def section(name: str, plane: str, at: float, variant: str | None = None, parts: str | None = None,
-                  size: str = "normal", inline: bool = True) -> list:
+                  size: str = "normal", inline: bool = True, fresh: bool = False) -> list:
     """Cross-section as a PNG image, each part in its own color. plane: 'XY' (at = Z height),
     'XZ' (at = Y) or 'YZ' (at = X), in mm. parts: default the assembly if the script has one
-    (shows fit and clearances), else all printable parts; or comma-separated names.
-    size: 'normal' or 'small' (~800 px wide). inline=False returns only the file (over HTTP: its
-    download link), not the image itself."""
+    (shows fit and clearances), else all printable parts; or comma-separated names (only those
+    are built). size: 'normal' or 'small' (~800 px wide). inline=False returns only the file (over
+    HTTP: its download link), not the image itself. Uses the pieces cached by an earlier build;
+    fresh=True builds them again."""
     if plane.upper() not in ("XY", "XZ", "YZ"):
         return ["plane must be XY, XZ or YZ"]
     _image_options(size)
-    res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at, size=size)
+    res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at, size=size, fresh=fresh or None)
     if not res.get("ok"):
         return [_error_text(res)]
-    return _with_note(_with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}",
+    hints = "".join(f"\nhint: {h}" for h in res["timing"]["hints"])
+    return _with_note(_with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}{hints}",
                                   res["image"], inline), name)
 
 
-async def _check(name: str, variant: str | None) -> dict:
+async def _check(name: str, variant: str | None, fresh: bool = False) -> dict:
     """Run a check over up to --max-builds workers at once: each builds the part (import_model's
     conversion is cached and shared) and runs its share of the check items (project.partition);
     the findings are merged back in order. Each worker takes a build slot like any build, so on
     a busy server the shares simply take turns; with one slot it is one worker, as before.
     All shares stop at the same soft deadline, so a check that runs out of time still returns
-    every finding that finished."""
+    every finding that finished. fresh: build again instead of reading the build cache (every
+    share then rebuilds; they write the same cache entries)."""
     count = max(1, STATE["max_builds"])
+    extra = {"fresh": True} if fresh else {}
     if count == 1:
-        return await _job(name, "check", variant=variant)
+        return await _job(name, "check", variant=variant, **extra)
     from .project import merge_shares
 
     timeout = STATE["check_timeout"]
@@ -552,7 +566,8 @@ async def _check(name: str, variant: str | None) -> dict:
     results: list = [None] * count
 
     async def one(i: int) -> None:
-        results[i] = await _job(name, "check", variant=variant, share=[i, count], deadline=deadline, started=started)
+        results[i] = await _job(name, "check", variant=variant, share=[i, count], deadline=deadline, started=started,
+                                **extra)
 
     async with anyio.create_task_group() as tg:
         for i in range(count):
@@ -571,14 +586,15 @@ async def _check(name: str, variant: str | None) -> dict:
 
 
 @mcp.tool()
-async def check(name: str, variant: str | None = None) -> str:
+async def check(name: str, variant: str | None = None, fresh: bool = False) -> str:
     """Run the print checks: validity, overlap between assembly parts (incl. stand-ins),
     overhangs > 45 deg from vertical in print orientation (bed face ignored) and bridge spans,
     thin features (walls under one line width fail), round-topped horizontal holes, fillets on
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
     around deep cuts) and Probes. Fix every FAIL; report every WARN. On a remote server (HTTP/SSH)
-    the part is not on the user's machine until download_part brings it home."""
-    res = await _check(name, variant)
+    the part is not on the user's machine until download_part brings it home. Uses the pieces
+    cached by an earlier build; fresh=True builds them again."""
+    res = await _check(name, variant, fresh)
     if not res.get("ok"):
         return _error_text(res)
     lines = [f"{'PASSED' if res['passed'] else 'FAILED'}"]
@@ -622,12 +638,18 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
 @mcp.tool(structured_output=False)
 @_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
-                 embed: bool = False) -> list:
+                 embed: bool = False, fresh: bool = False, view: str = "print") -> list:
     """Export printable parts to parts/<name>/out/. Default: every part, all variants.
-    parts: comma-separated part names from build() to export only those; variant: one variant.
+    parts: comma-separated part names from build() to build and export only those; variant: one
+    variant. Uses the pieces cached by an earlier build; fresh=True builds them again.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
-    (slicers; 3MF keeps units), png (6-view preview + section views), or 'all'. Omit to use the
-    user's `formats` setting (default: all four). Ask the user which they want if unclear.
+    (slicers; 3MF keeps units), png (6-view preview + section views), glb (binary glTF, for web
+    and 3D apps), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
+    png). Ask the user which they want if unclear.
+    view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
+    parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
+    signed link (no token, expires like the downloads); locally a self-contained HTML file next to
+    the outputs (works offline). Offer it to the user after an export.
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
     and a b123d-print://files/ resource link; download_part gets the whole part (script, out/,
     ref/) in one zip. embed=True also puts files up to 2 MB into the result itself, for clients
@@ -637,7 +659,11 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
             parse_formats(formats)
         except ValueError as e:
             raise ToolError(str(e)) from None
-    res = await _job(name, "export", variant=variant, formats=formats, parts=parts)
+    try:
+        layout = viewer.parse_layout(view)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    res = await _job(name, "export", variant=variant, formats=formats, parts=parts, fresh=fresh or None, view=layout)
     if not res.get("ok"):
         return [_error_text(res)]
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
@@ -651,6 +677,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         out.append(f"[{v['variant']}]")
         for pname, r in v["parts"].items():
             out.append(f"  {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, valid={r['valid']}")
+        out += [f"  {line}" for line in timing_lines(v["timing"])]
         for f in v["files"]:
             info = _file_info(Path(f)) if (_http() or embed) else None
             if not info:
@@ -667,11 +694,56 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
                 budget -= info["size"]
     if expires:
         out.append("\n" + _expiry_note(expires))
+    views = _view_lines(name, res["variants"])
+    if views:
+        out.append("\n" + "\n".join(views))
     if STATE["ssh_dest"]:
         out.append("\n" + _pull_note(name, formats, None))
     if _remote():
         out.append("\n" + _home_note(name))
     return ["\n".join(out), *extra]
+
+
+def _view_link(part: str, glb: Path) -> tuple[str, int]:
+    """HTTP: the signed /view/ link of out/<stem>.glb (the page; the model sits behind the same token)."""
+    url, expires = links.sign_view(STATE["link_secret"], _ws_name(), part, glb.stem, STATE["link_ttl"])
+    return _base_url() + url, expires
+
+
+def _view_glb(name: str, path: str) -> Path | None:
+    """The view GLB a build reported, if it really is a regular <parts_dir>/<name>/out/*_view.glb in
+    this workspace (the report comes from the process that ran the part script: never trust a path in it)."""
+    root = _root()
+    try:
+        rel = Path(path).resolve().relative_to(root.resolve()).as_posix()
+        f = links.servable(root, load_settings(root).parts_dir, rel)
+    except (ValueError, OSError, links.LinkError):
+        return None
+    return f if f.parent.parent.name == name and f.name.endswith("_view.glb") else None
+
+
+def _view_lines(name: str, variants: list[dict]) -> list[str]:
+    """What export says about the 3D views it wrote: a link (HTTP), a file (stdio) or how to make one (SSH)."""
+    lines = [f"  [{v['variant']}] no 3D view: {v['view_error']}" for v in variants if v.get("view_error")]
+    glbs = [(v["variant"], g) for v in variants if v.get("view") and (g := _view_glb(name, str(v["view"])))]
+    if not glbs:
+        return ["3D view:", *lines] if lines else []
+    if _http():
+        expires = 0
+        for var, glb in glbs:
+            url, expires = _view_link(name, glb)
+            lines.append(f"  [{var}] {url}")
+        when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
+        return [f"3D view (give the user these links: they open in a browser, need no token and expire {when}; "
+                "rotate, hide pieces, measure the bounding box, cut a section):", *lines]
+    if STATE["ssh_dest"]:
+        return [f"3D view: written as out/{glbs[0][1].name} on the server. After `b123d-print pull {name}`, "
+                f"`b123d-print view {name}` on the user's machine writes a self-contained HTML view of it "
+                "(opens offline in a browser).", *lines]
+    for var, glb in glbs:
+        lines.append(f"  [{var}] {viewer.write_offline(glb)}")
+    return ["3D view (self-contained HTML files, no server needed: tell the user to open them in a browser; "
+            "they work offline):", *lines]
 
 
 def _triple(v, what: str) -> list[float] | None:
@@ -829,7 +901,8 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
     files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
-    = ''); formats: only those out/ files (step, stl, 3mf, png); the script and ref/ always come.
+    = ''); formats: only those out/ files (step, stl, 3mf, png, glb); the script and ref/ always come.
+    Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
     embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
     URLs nor read resources. Call it as the last step of remote work, before reporting."""
     files = _part_files(name, variant, formats)
@@ -848,13 +921,17 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
     url = _base_url() + url
     when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
+    views = [f"  {_view_link(name, p)[0]}" for rel, p in _part_files(name, variant, "glb")
+             if rel.startswith("out/") and p.name.endswith("_view.glb")]
     text = (f"{head}\n"
             f"Download it (one zip, no token needed; the link expires {when}; after that call download_part again):\n"
             f"  curl -fLo {name}.zip '{url}'\n"
             f"Then, in the project folder: unzip -o {name}.zip   (Windows: tar -xf {name}.zip)\n"
             f"It creates the same layout as a local install (paths relative to the project folder):\n{listing}\n"
-            f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n\n"
-            + _home_note(name))
+            f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n"
+            + (f"3D view in a browser (no token, same expiry; offer it to the user):\n" + "\n".join(views) + "\n"
+               if views else "")
+            + "\n" + _home_note(name))
     from mcp_types import ResourceLink
 
     uri = f"b123d-print://download/{_ws_name()}/{name}"
@@ -1126,7 +1203,8 @@ Work in these steps:
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a comment on its source and accuracy). Mating features get CLEARANCE (0.2 mm
    default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
-   HOLE_COMP_H). Model in print orientation, bed at Z=0.
+   HOLE_COMP_H). Model in print orientation, bed at Z=0. Threads, screws, inserts, gears and
+   V-slot parts: use bd_warehouse and py_gearworks, kept to sizes that print (the rules below).
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.
@@ -1388,6 +1466,48 @@ async def download_zip(request):
                                       "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
+@mcp.custom_route("/view/{workspace}/{token}/{part}/{file}", methods=["GET"])
+async def view_link(request):
+    """A signed 3D view link (export's view): needs no bearer token. .../<stem> is the viewer page
+    (the same static page for every part), .../<stem>.glb the model, which must be
+    <parts_dir>/<part>/out/<stem>.glb in the workspace the link was signed for; until it expires."""
+    from starlette.responses import FileResponse, PlainTextResponse, Response
+
+    ws, token, part, file = (request.path_params[k] for k in ("workspace", "token", "part", "file"))
+    is_model = file.endswith(".glb")
+    stem = file[:-4] if is_model else file
+    try:
+        if not NAME_RE.match(part) or not stem:
+            raise links.LinkError(404, "not found")
+        links.check_path(f"{part}/{stem}.glb")
+        links.verify_view(STATE["link_secret"], ws, token, part, stem)
+        root = _ws_dir(ws)
+        if root is None:
+            raise links.LinkError(404, "not found")
+        parts_dir = load_settings(root).parts_dir
+        glb = links.servable(root, parts_dir, f"{parts_dir}/{part}/out/{stem}.glb")
+    except links.LinkError as e:
+        return PlainTextResponse(str(e) + "\n", status_code=e.status,
+                                 headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+    if ws != links.ROOT_WS:
+        handoff.touch(root)  # a view is a use too
+    if is_model:
+        return FileResponse(glb, media_type=viewer.GLB_MIME, filename=glb.name, content_disposition_type="attachment",
+                            headers=viewer.MODEL_HEADERS)
+    return Response(viewer.served_page(), media_type="text/html; charset=utf-8", headers=viewer.PAGE_HEADERS)
+
+
+@mcp.custom_route("/view-assets/{name}", methods=["GET"])
+async def view_asset(request):
+    """The viewer page's static files: a fixed list of package files (viewer.ASSETS), no token."""
+    from starlette.responses import PlainTextResponse, Response
+
+    name = request.path_params["name"]
+    if name not in viewer.ASSETS:
+        return PlainTextResponse("not found\n", status_code=404, headers={"X-Content-Type-Options": "nosniff"})
+    return Response(viewer.asset_bytes(name), media_type=viewer.ASSETS[name], headers=viewer.ASSET_HEADERS)
+
+
 @mcp.custom_route("/upload/{workspace}/{token}/{path:path}", methods=["PUT"])
 async def upload(request):
     """A signed upload link (upload_reference): needs no bearer token, stores one reference file in
@@ -1494,7 +1614,7 @@ async def _deny(send, status: int, error: str, description: str) -> None:
 
 def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
     path = scope["path"]
-    if path.startswith(("/files/", "/upload/", "/zip/")):  # never log the signature: a log line must not be a working link
+    if path.startswith(("/files/", "/upload/", "/zip/", "/view/")):  # never log the signature: a log line must not be a working link
         parts = path.split("/", 4)
         path = f"/{parts[1]}/{parts[2] if len(parts) > 2 else '?'}/.../{parts[4] if len(parts) > 4 else ''}"
     client = (scope.get("client") or ("-",))[0]
@@ -1503,8 +1623,8 @@ def _log(scope, who: str, status: int, workspace: str | None = None) -> None:
 
 
 class TokenAuth:
-    """ASGI wrapper: every HTTP request except /health and the signed /files/, /zip/ and /upload/ links (which carry
-    their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
+    """ASGI wrapper: every HTTP request except /health, the viewer's static /view-assets/ and the signed /files/,
+    /zip/, /upload/ and /view/ links (which carry their own HMAC, see download) needs `Authorization: Bearer <token>` of a known named token, and
     may use only that token's workspaces (403 otherwise). A request without ?workspace= gets the
     token's single workspace if it has exactly one, else the shared root workspace. Every request
     is logged with the token's name. No reply starts before the request body is in (_BodyGuard).
@@ -1536,7 +1656,7 @@ class TokenAuth:
         path = scope["path"]
         if path == "/health":
             return await self.app(scope, receive, send)
-        if path.startswith(("/files/", "/upload/", "/zip/")):
+        if path.startswith(("/files/", "/upload/", "/zip/", "/view/", "/view-assets/")):
             await self.app(scope, receive, send_logged)
             return _log(scope, "link", status["code"])
         if self.store is None:  # --insecure-no-auth
@@ -1603,8 +1723,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="b123d-print-mcp", description=" ".join(__doc__.split("\n\n")[0].split()))
     ap.add_argument("--workspace", default=env("B123D_PRINT_WORKSPACE"),
                     help="folder with b123d-print.toml / parts/ (default: $B123D_PRINT_WORKSPACE, else the cwd)")
-    ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", 120)),
-                    help="seconds per build, render, section or export (default 120; $B123D_PRINT_TIMEOUT)")
+    ap.add_argument("--timeout", type=float, default=float(env("B123D_PRINT_TIMEOUT", sandbox.DEFAULT_TIMEOUT)),
+                    help=f"seconds per build, render, section or export (default {sandbox.DEFAULT_TIMEOUT:g}; $B123D_PRINT_TIMEOUT)")
     ap.add_argument("--check-timeout", type=float, default=float(env("B123D_PRINT_CHECK_TIMEOUT", 0)) or None,
                     help="seconds per check run, which builds the part and runs every check (on a remix, on the original "
                          "too); near the limit it stops and returns the findings it has (default: 300, or --timeout if "

@@ -184,7 +184,7 @@ writes your user config, as before.)
 **Builds take turns.** `--max-builds N` (default: half the CPU cores) caps how many build,
 render, section, check, export and compare processes run at once across all clients; further
 calls wait; a `check` uses up to N of them at once, split by check, and gives them up as its
-shares finish. Each one keeps its own time limit once it starts: `--timeout` (default 120 s), or
+shares finish. Each one keeps its own time limit once it starts: `--timeout` (default 240 s), or
 `--check-timeout` for a check (default 300 s; a check returns a little before it, with what it
 found). A long queue can outlast a client's read timeout (300 s by default in the MCP Python
 SDK), so size N and the number of clients together. `list_parts` reports the limit.
@@ -239,6 +239,48 @@ Single files, too:
 The per-file links serve only the files in `parts/<part>/out/`; the script and `ref/` come only
 in `download_part`'s zip. Nothing outside the workspace is ever served. Agents never need a shell
 on the server.
+
+### View in 3D
+
+`export` also returns a **view link** per variant (`view="print"` by default, `"assembly"`, or
+`"none"`), and `download_part` lists them again:
+
+```text
+https://cad.example.com/view/<workspace>/<expires>.<signature>/bracket/bracket_view
+```
+
+Open it in a browser to turn the part around before printing: orbit, zoom and pan, show or hide
+each piece, the bed at Z = 0, the size in mm and a section plane
+([what the viewer shows](../using/formats.md#3d-view-in-the-browser)). Like a download link it
+needs no token, is signed for one model of one part in one workspace, and expires with the others
+(`--link-ttl`; an expired one answers 410). The page loads the model,
+`parts/<part>/out/<part>_view.glb`, through the same signed link (`.../bracket_view.glb`), and
+its scripts from `/view-assets/`, a fixed list of files from the package that needs no token
+(they hold nothing of anyone's). The viewer library, three.js, ships inside the package: the
+browser loads nothing from the internet, so it works on a lab network without internet access.
+
+How the view is kept safe:
+
+- the same HMAC signature, workspace binding and expiry as the download links, under its own
+  purpose, so a view signature never opens a download, a zip or an upload, nor the other way
+  round; the model must be a regular file in that part's `out/` (no symlinks, no `..`);
+- the page is one static file, the same for every part: nothing from the request or the model
+  is written into it. Its headers: `Content-Security-Policy: default-src 'none'; script-src 'self';
+  style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none';
+  form-action 'none'; frame-ancestors 'none'` (no inline script at all),
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (the link is the
+  credential), `X-Frame-Options: DENY` and `Cache-Control: no-store`;
+- the model is served as `model/gltf-binary`, `nosniff`, as an attachment; the viewer treats it
+  as data: piece names are shown as text, and the loader fetches nothing the model names;
+- like the other links, the signature never appears in the server's log
+  (`GET /view/<workspace>/.../<part>/<stem>`).
+
+**Caddy (or another reverse proxy).** Nothing to change if it forwards everything to the server,
+as `caddy reverse-proxy --to b123d-print:8000` and the [Compose](#compose) block do. A
+Caddyfile that forwards only some paths needs `/view/*` and `/view-assets/*` next to `/mcp`,
+`/files/*`, `/zip/*` and `/upload/*`. Do not let the proxy replace the server's
+`Content-Security-Policy` header. `encode gzip` is worth having: the viewer's script is 640 KB,
+160 KB compressed.
 
 ### Workspace retention
 
@@ -346,7 +388,7 @@ shipped and `git pull` updates it cleanly (`deploy/.env.example` lists them with
 | `B123D_PRINT_IMAGE` | `ghcr.io/kd5ryn/b123d-print-mcp:latest` | the image; `b123d-print-mcp` for one [built from a clone](#from-a-clone) |
 | `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together |
 | `B123D_PRINT_RETENTION_DAYS` | `30` | remove a workspace nobody used for this many days ([retention](#workspace-retention)); `0` = never |
-| `B123D_PRINT_TIMEOUT` | `120` | seconds per build, render, section or export |
+| `B123D_PRINT_TIMEOUT` | `240` | seconds per build, render, section or export (under the 300 s a client waits for a result) |
 | `B123D_PRINT_CHECK_TIMEOUT` | `300` | seconds per `check` (a big remix on a slow CPU needs more); it returns a little before, with the findings it has |
 | `B123D_PRINT_PARTS`, `B123D_PRINT_CONFIG` | `./parts`, `./config` | the parts folder and the tokens folder |
 | `B123D_PRINT_UID`, `B123D_PRINT_GID` | `1000` | the user the containers run as |
