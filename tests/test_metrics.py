@@ -140,6 +140,68 @@ def test_water_traps():
     assert M.water_traps(closed)["cm3"] == 0  # a sealed void holds no rain
 
 
+# --- M12 inside corners, M13 walls, M14 hole edge distance, M15 slenderness ------------------
+
+MIN = (Align.MIN, Align.MIN, Align.MIN)
+
+
+def ell(r: float = 0.0, t: float = 5.0):  # an L: 40 x 20 base and a 40 tall upright, both t thick
+    p = Box(40, 20, t, align=MIN) + Box(t, 20, 40, align=MIN)
+    if r:
+        p = fillet(p.edges().filter_by(Axis.Y).filter_by_position(Axis.X, t - 0.01, t + 0.01)
+                   .filter_by_position(Axis.Z, t - 0.01, t + 0.01), r)
+    return p
+
+
+def test_inside_corner_is_not_an_outside_edge():
+    concave = [row for row in M._edge_info(ell()) if row[3] > 20 and not row[4]]
+    assert len(concave) == 1 and concave[0][0].length == pytest.approx(20)
+    assert M.edges(ell())["outside_mm"] == pytest.approx(300)  # the 13 convex edges off the bed; not the inside one
+
+
+def test_inside_corners():
+    sharp = M.inside_corners(ell())
+    assert sharp["inside_mm"] == pytest.approx(20) and sharp["sharp_share"] == 1.0 and sharp["worst_ratio"] is None
+    assert sharp["sharp"][0]["at"] == [5.0, 10.0, 5.0]
+    f = M.inside_corners(ell(r=3))
+    assert f["fillet_share"] == 1.0 and f["radii"] == [3.0]
+    assert f["worst_ratio"]["wall"] == pytest.approx(5, abs=0.01) and f["worst_ratio"]["ratio"] == pytest.approx(0.6)
+    assert M.inside_corners(box())["inside_mm"] == 0.0
+    # a counterbored hole and a teardrop are holes, not inside corners
+    holed = box() - Cylinder(2, 40) - Cylinder(4, 5).moved(Location((0, 0, 17.5)))
+    assert M.inside_corners(holed)["inside_mm"] == 0.0
+
+
+def test_walls():
+    thin = Box(40, 20, 1.0, align=BED)
+    three = M.Params(wall_lines=3)
+    w = M.walls(thin, three)
+    assert w["thinnest_mm"] == pytest.approx(1.0, abs=0.05) and w["lines"] == pytest.approx(2.2, abs=0.15)
+    assert "thinnest_mm" not in M.walls(box(), three) and M.walls(box(), three)["below_mm"] == pytest.approx(1.35)
+    assert M.walls(thin, P)["skipped"]  # only for a style with min_wall_lines: the sections take seconds
+
+
+def test_hole_edge_distance():
+    plate = Box(40, 20, 4, align=MIN) - Cylinder(1.7, 10).moved(Location((5, 10, 0)))  # M3, 5 mm from the end
+    plate -= Cylinder(1.7, 10).moved(Location((25, 10, 0)))  # 10 mm from the sides
+    he = M.hole_edges(plate, P)
+    assert [(h["size"], h["edge_mm"]) for h in he["holes"]] == [("M3", pytest.approx(5, abs=0.02)), ("M3", pytest.approx(10, abs=0.02))]
+    assert he["worst"]["ratio"] == pytest.approx(5 / 3.4, abs=0.01)
+    boss = Cylinder(4, 10, align=BED) - Cylinder(2, 10, align=BED)  # an insert boss: BP-T4's Wall check, not an edge
+    assert M.hole_edges(boss, P)["holes"] == []
+    big = Box(40, 20, 4, align=MIN) - Cylinder(6, 10).moved(Location((20, 10, 0)))  # not a screw hole
+    assert M.hole_edges(big, P)["holes"] == []
+
+
+def test_slenderness():
+    post = Cylinder(3, 30, align=BED) + Box(30, 30, 3, align=BED)  # 27 mm of 6 mm post above a plate: 1.13 x 27 / 6
+    s = M.slenderness(post, M._sections(post, 0.2))
+    assert s["run_mm"] == pytest.approx(27, abs=0.5) and s["value"] == pytest.approx(27 / 3 / math.sqrt(math.pi), rel=0.03)
+    assert M.slenderness(box(), M._sections(box(), 0.2))["value"] < 1
+    dome = Sphere(10) & Box(30, 30, 10, align=BED)  # a tapering tip: a short run on a small section
+    assert M.slenderness(dome, M._sections(dome, 0.2))["value"] < 2
+
+
 # --- M9 economy, styles and findings -----------------------------------------------------------
 
 
@@ -185,6 +247,16 @@ def test_findings_fire_at_the_thresholds():
     assert "DS-C4" in _rules(M.design_metrics(None, None, {"": tee()}, s, style="least_cost"), "suggest")
     soft = M.design_metrics(None, None, {"": fillet(box().edges(), 2)}, s, style="soft")
     assert "DS-G8" not in _rules(soft)
+    sharp_l = M.design_metrics(None, None, {"": ell()}, s, style="structural")
+    assert _rules(sharp_l) == ["DS-T3"] and "inside corner length is sharp" in sharp_l["findings"][0]["message"]
+    small_r = M.design_metrics(None, None, {"": ell(r=1)}, s, style="structural")
+    assert _rules(small_r, "suggest") == ["DS-T3"] and "r/wall 0.20" in small_r["findings"][0]["message"]
+    assert _rules(M.design_metrics(None, None, {"": ell(r=3)}, s, style="structural")) == []
+    thin = M.design_metrics(None, None, {"": Box(40, 20, 1.0, align=BED)}, s, style="structural")
+    assert _rules(thin, "suggest") == ["DS-T4"]
+    pin = Cylinder(3, 40, align=BED) + Box(30, 30, 3, align=BED)
+    assert "DS-T1" in _rules(M.design_metrics(None, None, {"": pin}, s, style="structural"), "note")
+    assert "DS-T1" not in _rules(M.design_metrics(None, None, {"": pin}, s, style="functional"))
 
 
 def test_edges_preference():

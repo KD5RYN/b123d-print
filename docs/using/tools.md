@@ -46,7 +46,7 @@ carries the full [workflow rules](../scripts/rules.md).
 | `modify_part(name, change)` | change a part, keeping its conventions, and re-verify |
 | `verify_part(name)` | review a part against the rules before printing; changes nothing |
 | `remix_part(name, source?, change?)` | remix someone else's model: inspect it, choose modify or redraw, confirm the changes, then verify with inherited and new findings told apart ([remixing](remix.md)) |
-| `design_review(name, style?)` | after the print checks pass: review the design for its style (functional, modern, least_cost, rugged, soft) with `design_metrics` and renders; 3-7 suggestions with rule IDs; changes nothing without your OK ([design review](design-review.md)) |
+| `design_review(name, style?)` | after the print checks pass: review the design for its style (functional, modern, least_cost, rugged, soft, structural) with `design_metrics` and renders; 3-7 suggestions with rule IDs; changes nothing without your OK ([design review](design-review.md)) |
 | `fit_test(name, what?)` | propose, confirm and make [fit-test templates](templates.md) of a part before the full print |
 | `calibrate_hole_comp` | walk through printing and measuring the [hole coupon](hole-compensation.md) |
 

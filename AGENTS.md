@@ -283,8 +283,9 @@ The rules and their sources are in
 
 - Every part has a **style**: `STYLE` in `Dims`, else the workspace `style` setting, else
   `functional`. The styles are `functional`, `modern` (minimal), `least_cost`, `rugged`
-  (outdoor) and `soft` (handheld). For a new part, if the user has said nothing about looks,
-  ask once. The industrial look is functional with `EDGES = "chamfer"` and exposed standard
+  (outdoor), `soft` (handheld) and `structural` (load-bearing: brackets, mounts, clamps, hooks).
+  For a new part, if the user has said nothing about looks, ask once; for a part that carries
+  load, suggest `structural`. The industrial look is functional with `EDGES = "chamfer"` and exposed standard
   screws.
 - Optional script fields: `SHOW = ["+Y", "+Z"]` (sides seen in use, in print orientation) limits
   the surface findings to those sides; `UP = "+Y"` is the side up in use (water traps);

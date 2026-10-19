@@ -433,7 +433,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("metrics", help="design metrics and the style's suggestions (filament, time, edges, ...)")
     p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
     p.add_argument("--variant")
-    p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft")
+    p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft, structural")
     p.add_argument("--up", help="the side that points up in use, for water traps: +X, -Y, ... (default: UP, else +Z)")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("faces", help="list a part's flat faces with their ids (for a face template)")

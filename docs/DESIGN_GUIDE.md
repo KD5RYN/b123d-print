@@ -10,9 +10,13 @@ by itself.
 `DS-*`), the metrics and the review flow. The decisions of the 2026-10-18 review are in
 [§9](#9-decisions-review-of-2026-10-18); how to use it is on [Design review](using/design-review.md).
 
-Every source was fetched on 2026-10-18; claims come from the fetched page, PDF or source file,
-never from memory. The raw notes (one claim per source, with what each page says) are kept with
-the research, outside the repository.
+Every source in §2–§3.3 was fetched on 2026-10-18; claims come from the fetched page, PDF or
+source file, never from memory. The raw notes (one claim per source, with what each page says)
+are kept with the research, outside the repository. The structural rules (§3.4, 2026-10-19)
+lean on the sourced rules of [BEST_PRACTICES](BEST_PRACTICES.md) (fetched earlier); the sources
+they add could only be read as search-result text, not fetched, and are marked
+*(search, not fetched)*: they support a claim the BEST_PRACTICES sources already make, or the
+claim is labeled provisional.
 
 ## 1. How to read this
 
@@ -81,7 +85,7 @@ Source keys are listed under [Sources](#sources).
 
 ---
 
-## 3. Cost, rugged and handheld rules
+## 3. Cost, rugged, handheld and structural rules
 
 ### 3.1 Least cost (filament and time)
 
@@ -119,11 +123,33 @@ Source keys are listed under [Sources](#sources).
 | DS-H2 | **Soft forms on FDM: avoid gently domed tops** (DS-S1), or tilt the part / use variable layer height; organic supports leave fewer scars. | CURVI19, LIV17, 3DJAKE-VLH, PRUSA-ORG **(1 src for the scar claim)**. | evidence | **m** + **r** | M6 on the up-facing curved area. |
 | DS-H3 | **Curvature-continuous (G2) blends only matter on glossy or finished parts**; a circular fillet shows a highlight break. | AUTODESK-G2, MCNEEL-G2. | evidence | **i** | Note when the user will sand/paint; build123d has no G2 fillet, so no suggestion otherwise. |
 
+### 3.4 Structural / load-bearing
+
+Parts that carry a load: brackets, mounts, clamps, hooks, hinges, gears, tool holders. These
+rules gather the strength rules of BEST_PRACTICES (BP-*) into one place, add the measurements
+behind the `structural` style's thresholds, and say where the evidence is thin. Kt values and
+the inside-radius rule come from injection molding; FDM has its own weak direction (DS-T1) on
+top of them, which makes a sharp inside corner across the layers worse, not better.
+
+| # | Rule | Evidence | Kind | Class | Proposed behavior |
+|---|---|---|---|---|---|
+| DS-T1 | **Load along the layers, not across them.** Across the layers (Z) a desktop print has about 30–60 % of its in-plane strength (PLA 31 vs 63 MPa); orient or split the part so bending and tension run in XY (a shelf bracket lies on its side, a hook lies flat, a pin lies down). 45° is a compromise when no orientation fits every load (PLA 40 MPa at 45° vs 31 upright, 1 src). | BP-S4, BP-S5 (DUTY2018, CNCK-45, CNCK-MAT, AHN2002, STRATASYS-WP), BP-W6 (MF, XOM-WEB: posts H ≤ 5 D shear on layer lines). ORNL-ZPIN *(search, not fetched)*: 50–75 % lower in Z. MDPI24 *(search, not fetched)*: orientation 98 % of the variance in UTS. 45° curve: CNCK-45 only *(the 40 MPa figure: search text)*. | evidence | **m** + **r** | Metric: slenderness across the layers (M15). Note when a long run stands on a small section; rubric: ask the load direction and state it in the report. |
+| DS-T2 | **Strength comes from walls, not infill: 4–6 walls for loaded parts, 3–4+ around screws; 15–30 % gyroid or cubic infill** (more infill gives diminishing returns). | BP-W4 (PRUSA-INFILL: "mostly" perimeters, 10–15 % usual; CNCK-BEG/CNCK-EW: hook 2 → 4 perimeters 20 → 33 kg; HUBS-SHELL), BP-T8 (QIDI-BRACKET 4–6 walls; SOVOL 3–6; UWM 4). PRUSA-LP *(this claim: search text)*: "strength … is mostly defined by the number of perimeters". PRUSA-INFILL *(these claims: search text, incl. the infill-patterns page)*: gyroid and cubic for mechanical parts, rarely over 30 %. | evidence | **r** | Report the wall count for the slicer, and which features need more. |
+| DS-T3 | **No sharp inside corners on a loaded path: fillet them, radius ≥ 0.5 × the wall they join.** The stress concentration is high below r/t = 0.5 and falls off above; injection-molding guides set the inside radius at ≥ 0.5 × wall (outside radius = inside + wall, BP-R2). | BP-R1 (SSD-2025, SSD-2017, HUBS-THIN ≥ 0.5 mm, HUBS-ENCL, BIGREP, MF). PL-CORNER: inside radius ≥ 0.5 × the adjacent wall. RJC (molding fillet guide). EFUNDA *(search, not fetched)*: Kt "quite high" below R/T 0.5. XOM-RIBS *(search, not fetched)*: rib-root radius 0.5–1 × wall. | evidence | **m** + **r** | Metric: inside corners, sharp share and smallest radius / wall (M12). The 0.5 ratio is sourced (molding); the share allowed sharp is *proposed (ours)*. |
+| DS-T4 | **Walls ≥ 3 lines (≈ 1.2–1.35 mm at 0.4) where strength matters, in whole multiples of the line width**; a one- or two-line wall is brittle. | BP-W2 (PL-FDM, HUBS-KEY, XOM-PRO 1.5 recommended, HLH, UZH), BP-W3 (PRUSA-MODEL, PRUSA-LP), BP-W4. SSD-FDM *(search, not fetched)*: a single-contour 0.5 mm wall is brittle, ~1.0 mm recommended. | evidence | **m** | Metric: the thinnest walls (M13), from the ThinFeature sections. |
+| DS-T5 | **Ribs and gussets instead of bulk, as thick as the wall** (≥ 1.5 mm). The molding rule (ribs 40–75 % of the wall) prevents sink marks, which FDM does not have. *Disagree:* molding guides and Hubs say 50–80 %; Stratasys Direct says FDM need not thin them. | BP-R4, BP-R5 (SSD-2025, XOM-MINI, XOM-WEB; *disagree* HUBS-ENCL, HUBS-THIN, Protolabs molding). | evidence | **r** | Rubric: a gusset rather than a thicker plate; ribs at wall thickness. |
+| DS-T6 | **Bolted joints:** heat-set inserts or nuts where torque or reuse matters (a screw in plastic strips at ~1 Nm, an insert holds ~3 Nm; pull-out is similar); the insert maker's hole and wall (BP-T2..T4); a washer or flanged head spreads the load; clamp the layers together (a bolt along Z presses layers on each other) rather than pulling them apart. | BP-T2..T5, BP-T8 (CNCK-INS1, CNCK-INS2, CNCK-HELI, FTC, HUBS-FAST). Washers / compression limiters against creep: SPIROL *(search, not fetched; molded plastics)* **(1 src)**. Clamping across layers: synthesis of DS-T1, no source says it outright. | evidence | **r** | Rubric; the Wall check measures boss walls (BP-T4). |
+| DS-T7 | **Holes away from edges.** Metal and composite practice keeps fastener holes ≥ 1.5–3 diameters from an edge (centre to edge); no FDM source with a number was found (Stratasys gives an absolute 0.8 mm for SLS). | SSD-SLS *(search, not fetched)* **(1 src, no ratio)**. | normative | **i** | M14 reports the edge distance of each screw hole in diameters; no threshold until a source is found. |
+| DS-T8 | **Material for load and heat:** PLA is the stiffest common filament but softens at 52–60 °C (HDT); PETG ~68–78 °C and tougher; ASA/ABS ~87–103 °C; PC ~99–114 °C; nylon and PA-CF higher, after annealing. Pick by the temperature the part sees under load. Creep under a sustained load is real (two open papers on PLA and PETG) but no source compares filaments: DS-R9 stays dropped. | DS-R1 sources (BAMBU-PLA, PM-PLA, PRUSA-MAT, PRUSAMENT-PETG, PM-ASA). CNCK-MAT *(these figures: search text)*: PLA ~3.3 GPa, ASA 2.3, PETG 1.9; heat: PLA gives at 60 °C, PETG 80, ASA 110. PM-TDS *(search, not fetched)*: PETG 72–78 °C, PC 99–114 °C. Creep: MDPI-PLA-CREEP, MDPI-PETG-CREEP *(search, not fetched)*. | evidence | **i** | Rubric: ask about heat and sustained load; name the material in the report. |
+| DS-T9 | **Annealing** raises heat resistance (PLA much more than strength: +7.5 % tensile, layer adhesion unchanged) but warps and shrinks the part; PA-CF makers prescribe it. | CNCK-ANNEAL *(search, not fetched)*, PM-PA6CF *(search, not fetched; nylon only)* **(1 src for PLA)**. | evidence | **i** | Provisional note when the user asks about heat. |
+| DS-T10 | **Snap arms and living hinges bend in XY**, never along Z (a Z arm loses about half its elongation); hinges in nylon, PP or TPU. | BP-N1..N9 (FICTIV-SNAP, FORMLABS-SNAP, HUBS-SNAP, HUBS-HINGE, 3ERP, SOVOL). | evidence | **r** | Rubric. |
+| DS-T11 | **Slicer for strength:** a nozzle near the top of the material's range and less part cooling bond layers better (PLA layer strength 20 MPa at 190 °C, ~40 at 230 °C); wider lines (to ~150 % of the nozzle) are stronger; layers up to half the nozzle; for ABS/ASA an enclosure. | CNCK-EW, CNCK-NOZ (BP-W4). CNCK-TEMP, CNCK-LAYERH, CNCK-CHAMBER *(search, not fetched)*. ADDMA18 *(search, abstract)*: higher nozzle temperature raised ABS bond strength. | evidence | **r** | Report the settings with the wall count (DS-T2). |
+
 ---
 
 ## 4. The styles
 
-A **style** is a short name the user picks for a part; there are five. It decides which metrics the review
+A **style** is a short name the user picks for a part; there are six. It decides which metrics the review
 highlights, which rubric questions it asks and which thresholds produce a **suggest**. All
 styles also apply the general rules (§2) at **note** level. The definitions are ours (§1); the
 rules they cite are sourced.
@@ -227,7 +253,31 @@ plus two choices the script can state:
 - **Typical suggestions:** "The handle is 26 mm across: 32–36 mm is more comfortable"; "The
   dome steps visibly at 0.2 mm layers: print it on its side or use variable layer height".
 
-### 4.7 Where the style lives
+### 4.7 structural / load-bearing
+
+*Carries load without breaking or creeping: brackets, mounts, clamps, hooks, hinges, gears,
+tool holders.* Not `rugged` (sun, water, heat: the environment) and not `functional` (prints well
+and looks deliberate): this style is about the load path. The name follows the industry's word
+for load-bearing parts (Bambu Lab's "Structural Parts" filament collection: "load-bearing parts,
+frames …", *search, not fetched*); `strong`, `load_bearing` and `heavy_duty` are accepted too.
+
+- **Looks for:** the load direction against the layers (DS-T1); inside corners and their radii
+  (DS-T3); wall thickness and wall count (DS-T2, DS-T4); ribs and gussets (DS-T5); screws,
+  inserts, washers and edge distance (DS-T6, DS-T7); material and heat (DS-T8); snap arms and
+  hinges (DS-T10); slicer settings for layer adhesion (DS-T11).
+- **Metrics:** M12 inside corners, M13 walls, M14 hole edge distance, M15 slenderness across
+  the layers; M5 and M7 as usual.
+- **Suggest when** *(proposed, ours, except the 0.5 ratio)*: more than 10 % of the inside
+  corner length is sharp (M12; a few labels or pockets are fine, the message lists the longest
+  so the reviewer can tell); an inside fillet is under 0.5 × the thinner wall it joins (M12,
+  DS-T3); a wall is under 3 lines (M13). **Note when** a run stands on a section with
+  slenderness over 5.6, a round post 5 diameters tall (M15, BP-W6). M14 is reported, not judged.
+- **Typical suggestions:** "Lay the bracket on its side: the shelf's load then bends it along the
+  layers"; "The inside corner is r 1 on a 6 mm arm: make it r 3 or more"; "Print it with 5 walls
+  and 20 % gyroid; 4 walls round the screw holes"; "Use heat-set inserts: a screw straight into
+  PLA strips at about 1 Nm".
+
+### 4.8 Where the style lives
 
 1. **Part script:** `STYLE` in `Dims` (a variant can override it:
    `VARIANTS = {"outdoor": dict(STYLE="rugged")}`). The template has `STYLE: str = ""`, which
@@ -235,8 +285,9 @@ plus two choices the script can state:
 2. **Workspace:** `style = "modern"` in `b123d-print.toml` for a project whose parts share a look.
 3. **Default:** `functional`.
 
-Names: `functional`, `modern`, `least_cost`, `rugged`, `soft` (also accepted: `minimal`,
-`least cost`, `outdoor`, `handheld`, and `industrial`, which means functional). Anything else
+Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` (also accepted:
+`minimal`, `least cost`, `outdoor`, `handheld`, `strong`, `load_bearing`, `heavy_duty`, and
+`industrial`, which means functional). Anything else
 is an error that lists them. When a user starts a new part and has said nothing about looks,
 the AI asks **once**; a blank answer means functional. One style per part, no modifiers; the
 cost numbers are always shown (decision 2).
@@ -267,7 +318,7 @@ design_metrics(name, variant=None, style="", up="", as_json=False)     # MCP
 b123d-print metrics [parts...] [--variant K] [--style S] [--up +Y] [--json]   # CLI
 ```
 
-It builds the part (in the sandbox, over MCP), computes M1–M11 for each printable part, then
+It builds the part (in the sandbox, over MCP), computes M1–M15 for each printable part, then
 the findings the style's thresholds trigger (§4), each citing its rule. It never fails and
 changes nothing.
 
@@ -372,7 +423,27 @@ in mind for remixes.
   down. Air that cannot drain but is open to the top is a trap (volume, centre, low point);
   sealed voids are not (DS-R3).
 
-### 5.8 Tests
+### 5.8 M12–M15: strength
+
+- **M12 inside corners** (DS-T3): concave edges by length, the M7 way: filleted (concave
+  cylinder or torus blend faces), chamfered (narrow planar faces between two 20–70° concave
+  turns), sharp (other concave edges turning more than 20°). Hole walls, rims and teardrop roofs
+  are not counted. For each inside fillet, a ray from its tangent edge straight through each of
+  the two faces it joins measures their walls; the smallest radius / thinner wall is reported.
+  Convex and concave are told apart by a probe along n1 − n2 from the edge (it leaves the solid
+  at a convex edge); before 0.3.3 M7 counted concave edges as sharp outside edges.
+- **M13 walls** (DS-T4): the ThinFeature check's sections (XY, XZ, YZ at every flat face and
+  every 2 mm), looking for walls under the style's `min_wall_lines` × the line width; knife
+  edges and tapers apart. Only for a style that sets `min_wall_lines` (it takes seconds).
+- **M14 hole edge distance** (DS-T7): for each round hole along X, Y or Z that M9 takes for a
+  screw, a section through its middle; the distance from its axis to the nearest edge of the
+  material around it, over its printed diameter. Other round holes do not count as edges, and a
+  hole in a boss (an outline round about the hole) is the Wall check's job (BP-T4).
+- **M15 slenderness** (DS-T1): at each XY section (M10's), the run of neighbouring sections no
+  bigger than 1.5 × its area, divided by the square root of its area. A round post of height H
+  and diameter D scores 1.13 H / D; a tapering tip scores low.
+
+### 5.9 Tests
 
 `tests/test_metrics.py`, on shapes with known answers: a 60 × 40 × 20 box is all sharp,
 symmetric, with seam corners on every layer; filleted vertical edges give exactly their 80 mm
@@ -380,7 +451,9 @@ of fillet and radius 3; all edges filleted is all rounded; a top chamfer gives s
 not a radius; a cylinder has no seam corner; a cup holds its inner volume of water and does not
 with a drain hole or turned over; a T on a post has the analytic support column; the filament
 estimate equals the shell formula for a cube and grows with infill; the time rule is the stated
-formula; the findings fire at the thresholds; styles and directions parse. Sanity tests only:
+formula; the findings fire at the thresholds; styles and directions parse; an L has one inside edge, and its sharp, filleted and wall
+measurements are exact; a hole 5 mm from an end and a boss; a post on a plate has the analytic
+slenderness. Sanity tests only:
 no slicer fixtures.
 
 ---
@@ -427,7 +500,7 @@ carries is `src/b123d_print/data/design_review.md`.
 
 ## 8. Implementation
 
-- `src/b123d_print/metrics.py`: M1–M11, the style findings and the text report (cites `DS-*`).
+- `src/b123d_print/metrics.py`: M1–M15, the style findings and the text report (cites `DS-*`).
 - `src/b123d_print/styles.py` and `data/styles/*.toml`: the style files, their lookup
   (workspace, user, built-in), `based_on`, and errors for unknown fields; `b123d-print styles`.
 - Settings: `style`, `filament_price`, `print_flow`; `density` in material profiles. Printer
@@ -441,7 +514,7 @@ carries is `src/b123d_print/data/design_review.md`.
 ## 9. Decisions (review of 2026-10-18)
 
 1. **Industrial** is folded into functional as `EDGES = "chamfer"` with exposed standard
-   fasteners. Five styles.
+   fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19).
 2. **One style per part**, no modifiers; the cost numbers are always shown.
 3. **STYLE lives in `Dims`** (variants can override it), then the workspace, then functional.
 4. **No speed classes**, and printer profiles stay as they come from OrcaSlicer; one optional
@@ -575,6 +648,31 @@ BEST_PRACTICES.
 - PRUSA-ORG: https://help.prusa3d.com/article/organic-supports_480131
 - AUTODESK-G2: https://help.autodesk.com/cloudhelp/2014/ENU/Alias/files/GUID-9DD73E22-A5EF-4952-BB84-2CEE2109993C.htm
 - MCNEEL-G2 *(community)*: https://discourse.mcneel.com/t/blendedge-or-filletedge/159197
+
+**Structural / load-bearing** (2026-10-19). The pages below could not be fetched from the
+research environment (its network policy denied them); what is cited is the search result's
+text for that URL, and each one only adds to a claim BEST_PRACTICES already sources, or is
+labeled (1 src) or provisional. BEST_PRACTICES keys (CNCK-*, HUBS-*, SSD-*, PRUSA-*, MF, QIDI-*,
+FICTIV-SNAP, …) are listed on that page.
+
+- ORNL-ZPIN *(government lab; search, not fetched)*: Z-pinning to reduce FFF anisotropy, https://www.osti.gov/servlets/purl/1808415
+- MDPI24 *(peer-reviewed; search, not fetched)*: Materials 17(23):5951 (2024), https://www.mdpi.com/1996-1944/17/23/5951
+- EFUNDA *(reference; search, not fetched)*: plastic design, corner radius, https://www.efunda.com/designstandards/plastic_design/radius.cfm
+- XOM-RIBS *(vendor; search, not fetched)*: Xometry, ribs for injection molding, https://www.xometry.com/resources/injection-molding/plastic-ribs-for-injection-molding-design/
+- SSD-FDM *(vendor; search, not fetched)*: Stratasys Direct FDM design guide, https://info.stratasysdirect.com/rs/626-SBR-192/images/FDM_Design_Guide_Stratasys_Direct.pdf
+- SSD-SLS *(vendor; search, not fetched)*: Stratasys Direct, SLS design tips: holes, https://www.stratasys.com/en/stratasysdirect/resources/articles/ls-design-tips-holes/
+- SPIROL *(vendor; search, not fetched)*: bolted joint integrity with compression limiters, https://img.oemoffhighway.com/files/base/acbm/ooh/document/2015/08/How_to_Ensure_Bolted_Joint_Integrity_When_Using_Compression_Limiter.pdf
+- PM-TDS *(primary datasheets; search, not fetched)*: Polymaker PolyMax PETG and PC, https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/petg-pet/polymax-tm-petg , https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/polycarbonate/polymax-tm-pc
+- PM-PA6CF *(primary; search, not fetched)*: Polymaker PolyMide PA6-CF, https://polymaker.com/wp-content/tech-docs/PolyMide_PA6-CF_PIS_EN_V1.4.pdf
+- MDPI-PLA-CREEP *(peer-reviewed; search, not fetched)*: tensile creep of FDM PLA, Polymers 12(12):2962 (2020), https://www.mdpi.com/2073-4360/12/12/2962
+- MDPI-PETG-CREEP *(peer-reviewed; search, not fetched)*: creep of FFF PETG, Polymers 17(15):2075 (2025), https://www.mdpi.com/2073-4360/17/15/2075
+- CNCK-ANNEAL *(community, measured; search, not fetched)*: https://cnckitchen.com/blog/better-performing-3d-prints-with-annealing-but-part-1-pla
+- CNCK-TEMP *(community, measured; search, not fetched)*: https://www.cnckitchen.com/blog/the-influence-of-extrusion-temperature-on-layer-adhesion
+- CNCK-LAYERH *(community, measured; search, not fetched)*: https://www.cnckitchen.com/blog/the-influence-of-layer-height-on-the-strength-of-fdm-3d-prints
+- CNCK-CHAMBER *(community, measured; search, not fetched)*: https://www.cnckitchen.com/blog/does-a-heated-chamber-make-your-3d-prints-stronger
+- ADDMA18 *(peer-reviewed, abstract; search, not fetched)*: ABS interlayer bond strength, Additive Manufacturing, https://doi.org/10.1016/j.addma.2017.11.002
+- 3ERP *(vendor; search, not fetched)*: living hinges, https://www.3erp.com/design-tips/how-to-design-living-hinges-for-injection-molding-or-3d-printing/
+- BAMBU-STRUCT *(vendor; search, not fetched)*: Bambu Lab "Structural Parts" filament collection (the style's name), https://bambulab.com/en/filament/collections/structural-parts
 
 **Unreachable or gated** (not used): Thompson et al. 2016 full text (403); Diegel, Nordin &
 Motte book (login); Kumke et al. 2016 (not found); Markowsky 1992 and Green 1995 (bot check /

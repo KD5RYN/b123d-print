@@ -2,8 +2,10 @@
 
 M1 size and proportions, M2 filament mass (and M4 cost), M3 print time, M5 supports, M6
 stair-stepping, M7 edge treatment, M8 mirror symmetry, M9 economy (parts, fastener sizes),
-M10 seam corners, M11 water traps. Then the style findings: the thresholds of the chosen style
-turned into "suggest" and "note" lines that cite their rule. Nothing here fails a build.
+M10 seam corners, M11 water traps, and for load-bearing parts M12 inside corners, M13 walls,
+M14 hole edge distance, M15 slenderness across the layers. Then the style findings: the
+thresholds of the chosen style turned into "suggest" and "note" lines that cite their rule.
+Nothing here fails a build.
 
 Filament (M2), time (M3) and supports (M5) are simple estimates from the solid alone (no slicer):
 filament roughly +-20 %, time and supports rough. Good for comparing two versions of a part, not
@@ -48,16 +50,21 @@ class Params:
     max_overhang: float = 45.0
     max_bridge: float = 10.0
     material: str = ""
+    line_width: float = 0.45  # the printer profile's, else a 0.4 mm nozzle's (checks.line_width)
+    wall_lines: float | None = None  # M13 looks for walls under this many lines: the style's min_wall_lines
+    hole_comp: float = 0.0
+    hole_comp_h: float = 0.0
 
     @classmethod
     def from_settings(cls, s) -> "Params":
         p = cls(price=s.filament_price, flow=s.print_flow or FLOW, max_overhang=s.max_overhang,
-                max_bridge=s.max_bridge, material=s.material)
+                max_bridge=s.max_bridge, material=s.material, hole_comp=s.hole_comp,
+                hole_comp_h=s.hole_comp if s.hole_comp_h is None else s.hole_comp_h)
         if s.printer:
             from .profiles import load_printer
 
             pr = load_printer(s.printer)
-            p.nozzle, p.layer = pr.nozzle, pr.layer_height
+            p.nozzle, p.layer, p.line_width = pr.nozzle, pr.layer_height, pr.line_width
         if s.material:
             from .profiles import load_material
 
@@ -275,10 +282,13 @@ class _Inside:
         return self.c.State() == TopAbs_IN
 
 
-def _probe_inside(inside: _Inside, p, n1, n2) -> bool:
-    d = n1 + n2
+def _probe_convex(inside: _Inside, p, n1, n2) -> bool:
+    """Seen across the edge, the solid fills less than half a turn at a convex edge and more at a
+    concave one; the direction n1 - n2 is a quarter turn from the middle of the solid's side, so
+    it leaves the solid at a convex edge and stays in it at a concave one."""
+    d = n1 - n2
     L = float(np.linalg.norm(d))
-    return L > 1e-9 and inside(p - d / L * 0.01)
+    return L > 1e-9 and not inside(p + d / L * 0.01)
 
 
 def _vec3(v) -> np.ndarray:
@@ -312,12 +322,12 @@ def _edge_info(part: Part) -> list[tuple]:
         except Exception:  # noqa: BLE001 - a degenerate face: skip the edge
             continue
         turn = math.degrees(math.acos(max(-1.0, min(1.0, float(n1 @ n2)))))
-        convex = turn >= 5 and _probe_inside(inside, _vec3(pm), n1, n2)
+        convex = turn >= 5 and _probe_convex(inside, _vec3(pm), n1, n2)
         out.append((e, fl[0], fl[1], turn, convex))
     return out
 
 
-def edges(part: Part, max_overhang: float = 45.0) -> dict:
+def edges(part: Part, max_overhang: float = 45.0, info: list | None = None) -> dict:
     """M7 (DS-G1, DS-S4): outside (convex) edges by length: filleted (convex cylinder/torus blend
     faces, by spine length), chamfered (narrow planar faces between two 20-70 deg convex turns),
     sharp (other convex edges turning > 20 deg). Bed edges (on the lowest Z) are counted apart;
@@ -325,7 +335,7 @@ def edges(part: Part, max_overhang: float = 45.0) -> dict:
     from OCP.BRepTools import BRepTools
 
     zmin = part.bounding_box().min.Z
-    info = _edge_info(part)
+    info = _edge_info(part) if info is None else info
     by_face: dict = {}
     for row in info:
         for f in (row[1], row[2]):
@@ -434,6 +444,222 @@ def _cluster(vals: list[float], tol: float = 0.05) -> list[float]:
 def _families(radii: list[float]) -> dict:
     """DS-S9 (1 src): edge breaks (<= 1 mm) read as crisp edges, larger radii as styling."""
     return {"edge_break": [r for r in radii if r <= 1.0], "styling": [r for r in radii if r > 1.0]}
+
+
+# ---------------------------------------------------------------------------------------------
+# M12 inside corners, M13 walls, M14 hole edge distance, M15 slenderness (load-bearing parts)
+
+
+def _ray_depth(inside: _Inside, part: Part, p, d) -> float | None:
+    """How far a ray from just inside the surface at p, along d (into the solid), travels before
+    it leaves the solid; None when it does not start inside."""
+    from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
+    from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+    d = d / np.linalg.norm(d)
+    q = p + d * 0.02
+    if not inside(q):
+        return None
+    it = BRepIntCurveSurface_Inter()
+    it.Init(part.wrapped, gp_Lin(gp_Pnt(*map(float, q)), gp_Dir(*map(float, d))), 1e-6)
+    hits = []
+    while it.More():
+        if it.W() > 1e-6:
+            hits.append(it.W())
+        it.Next()
+    return min(hits) + 0.02 if hits else None
+
+
+def _near_hole(pt, hole_list: list) -> bool:
+    """On a hole's wall or roof: within 1.5 radii of its axis (a teardrop's tip is at 1.41) and
+    along its length."""
+    for h in hole_list:
+        ax, c = np.array(h["axis"], float), np.array(h["center"], float)
+        v = np.asarray(pt, float) - c
+        along = float(v @ ax)
+        if abs(along) <= h["length"] / 2 + 0.1 and np.linalg.norm(v - along * ax) <= 0.75 * h["d"] + 0.05:
+            return True
+    return False
+
+
+def inside_corners(part: Part, info: list | None = None, hole_list: list | None = None) -> dict:
+    """M12 (DS-T3): inside (concave) edges by length: filleted (concave cylinder/torus blend faces,
+    by spine length), chamfered (narrow planar faces between two 20-70 deg concave turns), sharp
+    (other concave edges turning > 20 deg). Holes, their rims and teardrop roofs are not counted.
+    Per inside fillet: radius / the thinner of the two walls it joins, each measured by a ray
+    from the fillet's tangent edge straight through that wall."""
+    from OCP.BRepTools import BRepTools
+
+    info = _edge_info(part) if info is None else info
+    hole_list = ck.holes(part) if hole_list is None else hole_list
+    hole_faces = {hash(f) for h in hole_list for f in h["faces"]}
+    by_face: dict = {}
+    for row in info:
+        for f in (row[1], row[2]):
+            by_face.setdefault(hash(f), []).append(row)
+    inside = _Inside(part)
+    fil = cha = 0.0
+    radii, ratios, chamfer_faces = [], [], set()
+    for f in part.faces():
+        rows = by_face.get(hash(f), [])
+        r = _blend_radius(f)
+        if r is not None and hash(f) not in hole_faces:
+            tangent = [x for x in rows if x[3] < 5]
+            if not tangent or _blend_convex(f):
+                continue
+            u0, u1, v0, v1 = BRepTools.UVBounds_s(f.wrapped)
+            span = (u1 - u0) if f.geom_type.name == "CYLINDER" else (v1 - v0)
+            if span >= math.radians(180) or _near_hole(_vec3(f.center()), hole_list):
+                continue
+            fil += f.area / (r * span) if span > 0 else 0.0
+            radii.append(round(r, 2))
+            walls = []
+            for e, a, b, _, _ in tangent:
+                other = b if hash(a) == hash(f) else a
+                pm = e.position_at(0.5)
+                try:
+                    n = _vec3(other.normal_at(pm))
+                except Exception:  # noqa: BLE001 - a degenerate face: skip it
+                    continue
+                t = _ray_depth(inside, part, _vec3(pm), -n)
+                if t is not None:
+                    walls.append(t)
+            if walls:
+                c = f.center()
+                ratios.append({"r": round(r, 2), "wall": round(min(walls), 2), "ratio": round(r / min(walls), 2),
+                               "at": [round(c.X, 1), round(c.Y, 1), round(c.Z, 1)]})
+        elif f.geom_type.name == "PLANE" and rows:
+            long = sorted(rows, key=lambda x: -x[0].length)[:2]
+            if len(long) < 2:
+                continue
+            L = long[0][0].length
+            width = 2 * f.area / (L + long[1][0].length) if L > 0 else 1e9
+            if width <= 3.0 and all(not x[4] and 20 <= x[3] <= 70 for x in long):
+                cha += L
+                chamfer_faces.add(hash(f))
+    sharp = []
+    for e, a, b, turn, convex in info:
+        if convex or turn <= 20 or {hash(a), hash(b)} & (chamfer_faces | hole_faces):
+            continue
+        pm = e.position_at(0.5)
+        if _near_hole(_vec3(pm), hole_list):
+            continue
+        sharp.append({"length": round(e.length, 1), "at": [round(pm.X, 1), round(pm.Y, 1), round(pm.Z, 1)],
+                      "turn": round(turn)})
+    total = sum(x["length"] for x in sharp) + fil + cha
+    sharp.sort(key=lambda x: -x["length"])
+    ratios.sort(key=lambda x: x["ratio"])
+    return {
+        "inside_mm": round(total, 1),
+        "sharp_share": round(sum(x["length"] for x in sharp) / total, 3) if total else 0.0,
+        "fillet_share": round(fil / total, 3) if total else 0.0,
+        "chamfer_share": round(cha / total, 3) if total else 0.0,
+        "sharp": sharp[:5],
+        "radii": _cluster(sorted(set(radii))),
+        "worst_ratio": ratios[0] if ratios else None,
+    }
+
+
+def walls(part: Part, p: Params) -> dict:
+    """M13 (DS-T4): the thinnest walls under p.wall_lines line widths, from the thin-feature
+    sections the ThinFeature check uses (knife edges and tapers apart: they are edges, not walls).
+    Those take seconds, so only for a style that sets min_wall_lines."""
+    if not p.wall_lines:
+        return {"below_mm": None, "line_width": p.line_width, "count": 0, "skipped": "the style sets no min_wall_lines"}
+    limit = p.wall_lines * p.line_width
+    spots = [s for s in ck.thin_features(part, limit) if not s["taper"]]
+    out = {"below_mm": round(limit, 2), "line_width": p.line_width, "count": len(spots)}
+    if spots:
+        out.update(thinnest_mm=round(spots[0]["min"], 2), lines=round(spots[0]["min"] / p.line_width, 1),
+                   at=spots[0]["at"], spots=[{"mm": round(s["min"], 2), "at": s["at"]} for s in spots[:4]])
+    return out
+
+
+def _seg_dist(c: np.ndarray, lp: np.ndarray) -> float:
+    """Distance from a point to a closed polyline."""
+    a, b = lp, np.roll(lp, -1, 0)
+    ab = b - a
+    t = np.clip(np.sum((c - a) * ab, 1) / np.maximum(np.sum(ab * ab, 1), 1e-12), 0, 1)
+    return float(np.min(np.linalg.norm(a + t[:, None] * ab - c, axis=1)))
+
+
+def _round_about(lp: np.ndarray, c: np.ndarray, tol: float = 0.05) -> bool:
+    """Is the loop a circle (within tol of its mean radius) about c?"""
+    r = np.linalg.norm(lp - c, axis=1)
+    return bool(r.mean() > 0 and r.std() / r.mean() < tol)
+
+
+def hole_edges(part: Part, p: Params, hole_list: list | None = None) -> dict:
+    """M14 (DS-T7): for each fastener hole (M9's screw sizes) along X, Y or Z, the distance from its
+    axis to the nearest edge of the material around it, in a section through the middle of the
+    hole, over the hole's (as printed) diameter. Other round holes and bosses (an outline round
+    about the hole: the Wall check measures those, BP-T4) are not edges."""
+    from matplotlib.path import Path as MPath
+
+    sl = None
+    rows = []
+    for h in ck.holes(part) if hole_list is None else hole_list:
+        k = int(np.argmax(np.abs(h["axis"])))
+        if abs(h["axis"][k]) < 0.999:
+            continue
+        d = h["d"] - (p.hole_comp if h["vertical"] else p.hole_comp_h)
+        fc = fastener_class(d)
+        if not fc:
+            continue
+        sl = sl or ck.MeshSlicer(part)
+        plane = ("YZ", "XZ", "XY")[k]
+        c = np.array([h["center"][i] for i in range(3) if i != k], float)
+        best = None
+        for loops in sl.section(plane, float(h["center"][k]), 1e9):
+            own = [i for i, lp in enumerate(loops[1:], 1) if MPath(lp).contains_point(c)
+                   and np.linalg.norm(lp - c, axis=1).max() <= 0.75 * h["d"] + 0.1]
+            if not own:
+                continue
+            if _round_about(loops[0], c):
+                break  # a boss: its wall is BP-T4's Wall check
+            edges_ = [loops[0]] + [lp for i, lp in enumerate(loops[1:], 1)
+                                   if i not in own and not _round_about(lp, lp.mean(0))]
+            best = min(_seg_dist(c, lp) for lp in edges_)
+            break
+        if best is not None:
+            rows.append({"size": fc[0], "d": round(d, 2), "edge_mm": round(best, 2), "ratio": round(best / d, 2),
+                         "at": h["center"]})
+    rows.sort(key=lambda x: x["ratio"])
+    return {"holes": rows, "worst": rows[0] if rows else None}
+
+
+def slenderness(part: Part, faces_per_level: list) -> dict:
+    """M15 (DS-T1): a part standing tall on a small section breaks along a layer when it is pulled
+    or bent. At each XY section (M10's), the run of neighbouring sections no more than 1.5 x its
+    area (the post, wall or arm it belongs to), as long as the run is tall, over the square
+    root of the section's area. A post of height H and diameter D scores 1.13 H / D; a tapering
+    tip scores low (its run is short)."""
+    bb = part.bounding_box()
+    n = len(faces_per_level)
+    dz = (bb.max.Z - bb.min.Z) / n if n else 0.0
+    areas = []
+    for faces in faces_per_level:
+        area = 0.0
+        for loops in faces:
+            for j, lp in enumerate(loops):
+                a = 0.5 * abs(float(np.sum(lp[:, 0] * np.roll(lp[:, 1], -1) - np.roll(lp[:, 0], -1) * lp[:, 1])))
+                area += a if j == 0 else -a
+        areas.append(area)
+    best = {"value": 0.0, "z": None, "area_mm2": None, "run_mm": None}
+    for i, a in enumerate(areas):
+        if a <= 1e-6:
+            continue
+        lo = hi = i
+        while lo > 0 and 0 < areas[lo - 1] <= 1.5 * a:
+            lo -= 1
+        while hi < n - 1 and 0 < areas[hi + 1] <= 1.5 * a:
+            hi += 1
+        run = (hi - lo + 1) * dz
+        v = run / math.sqrt(a)
+        if v > best["value"]:
+            best = {"value": round(v, 2), "z": round(bb.min.Z + (i + 0.5) * dz, 2), "area_mm2": round(a, 1),
+                    "run_mm": round(run, 1)}
+    return best
 
 
 # ---------------------------------------------------------------------------------------------
@@ -613,10 +839,15 @@ def part_metrics(part: Part, p: Params, show: list[str] | None = None, up: str =
     if p.price and m["supports"].get("grams"):
         m["supports"]["cost"] = round(m["supports"]["grams"] * p.price / 1000, 2)
     m["stepping"] = stepping(mesh, p, show)
-    m["edges"] = edges(part, p.max_overhang)
+    info, hole_list = _edge_info(part), ck.holes(part)
+    m["edges"] = edges(part, p.max_overhang, info)
     m["symmetry"] = symmetry(part)
     m["seam_corners"] = seam_corners(faces)
     m["water"] = water_traps(part, up)
+    m["inside_corners"] = inside_corners(part, info, hole_list)
+    m["walls"] = walls(part, p)
+    m["hole_edges"] = hole_edges(part, p, hole_list)
+    m["slenderness"] = slenderness(part, faces)
     return m
 
 
@@ -704,6 +935,28 @@ def findings(style: Style, m: dict, eco: dict, p: Params, show: list[str], edges
                              f"{t['lowest_z']}): add a drain at the low point or slope the floor")
     if s.curved_supports_note and sup.get("grams"):
         add("curved_supports_note", "supports on curved faces: organic/tree supports scar less")
+    ic = m["inside_corners"]
+    if s.max_sharp_inside_share is not None and ic["inside_mm"] and ic["sharp_share"] > s.max_sharp_inside_share:
+        where = "; ".join(f"{x['length']:g} mm at {tuple(x['at'])}" for x in ic["sharp"][:3])
+        add("max_sharp_inside_share", f"{ic['sharp_share']:.0%} of inside corner length is sharp (target <= "
+                                      f"{s.max_sharp_inside_share:.0%}), longest: {where}: fillet the loaded ones, "
+                                      "radius at least half the wall")
+    wr = ic["worst_ratio"]
+    if s.min_inside_radius_ratio is not None and wr and wr["ratio"] < s.min_inside_radius_ratio:
+        add("min_inside_radius_ratio", f"inside fillet r {wr['r']:g} on a {wr['wall']:g} mm wall at {tuple(wr['at'])}: "
+                                       f"r/wall {wr['ratio']:.2f} (target >= {s.min_inside_radius_ratio:g}): "
+                                       f"r {s.min_inside_radius_ratio * wr['wall']:.1f} or more")
+    wl = m["walls"]
+    if s.min_wall_lines is not None and wl.get("thinnest_mm") is not None and wl["lines"] < s.min_wall_lines:
+        add("min_wall_lines", f"thinnest wall {wl['thinnest_mm']:g} mm = {wl['lines']:g} lines of {wl['line_width']:g} at "
+                              f"{tuple(wl['at'])} (target >= {s.min_wall_lines:g} lines, "
+                              f"{s.min_wall_lines * wl['line_width']:.2f} mm) where it carries load; "
+                              f"{wl['count']} spot(s)")
+    sl = m["slenderness"]
+    if s.max_z_slenderness is not None and sl["value"] > s.max_z_slenderness:
+        add("max_z_slenderness", f"{sl['run_mm']:g} mm stands on a {sl['area_mm2']:g} mm2 section (z {sl['z']:g}; "
+                                 f"slenderness {sl['value']:g} > {s.max_z_slenderness:g}): if it is pulled or bent "
+                                 "there, it breaks along a layer; lay it down so the load runs along the layers")
     return out
 
 
@@ -730,6 +983,8 @@ def design_metrics(mod, d, parts: dict, settings, style: str | None = None, up: 
     p = Params.from_settings(settings)
     name, src = (normalize(style), "argument") if style else resolve_style(mod, d, settings)
     sty = load_style(name, settings.root)
+    if sty.min_wall_lines is not None:
+        p.wall_lines = sty.min_wall_lines
     show = parse_dirs(script_attr(mod, d, "SHOW", []))
     upd = parse_dirs(up or script_attr(mod, d, "UP", "+Z"))[0]
     edges_pref = str(script_attr(mod, d, "EDGES", "") or sty.edges or "").lower()
@@ -737,7 +992,7 @@ def design_metrics(mod, d, parts: dict, settings, style: str | None = None, up: 
         raise ValueError(f"EDGES={edges_pref!r}: use 'chamfer', 'fillet' or leave it empty")
     named = {(k or "part"): v for k, v in parts.items()}
     per = {n: part_metrics(v, p, show, upd) for n, v in named.items()}
-    eco = economy(named, settings.hole_comp, settings.hole_comp_h)
+    eco = economy(named, p.hole_comp, p.hole_comp_h)
     found, seen = [], set()
     for n, m in per.items():
         for f in findings(sty, m, eco, p, show, edges_pref):
@@ -752,9 +1007,22 @@ def design_metrics(mod, d, parts: dict, settings, style: str | None = None, up: 
         "assumptions": {"walls": p.walls, "top_layers": p.top_layers, "bottom_layers": p.bottom_layers,
                         "infill": p.infill, "layer": p.layer, "nozzle": p.nozzle, "density": p.density,
                         "density_note": "material not set: PLA assumed" if p.density_assumed else p.material,
-                        "print_flow": p.flow, "filament_price": p.price},
+                        "print_flow": p.flow, "filament_price": p.price, "line_width": p.line_width},
         "parts": per, "economy": eco, "findings": found,
     }
+
+
+def _strength_line(m: dict) -> str:
+    ic, wl, he, sl = m["inside_corners"], m["walls"], m["hole_edges"], m["slenderness"]
+    wr = ic["worst_ratio"]
+    return (f"  inside corners: sharp {ic['sharp_share']:.0%}, filleted {ic['fillet_share']:.0%}, chamfered "
+            f"{ic['chamfer_share']:.0%} of {ic['inside_mm']} mm"
+            + (f", smallest r/wall {wr['ratio']:g} (r {wr['r']:g} / {wr['wall']:g})" if wr else "")
+            + ("" if wl.get("skipped") else "; walls " + (
+                f"{wl['thinnest_mm']:g} mm thinnest ({wl['lines']:g} lines)" if wl.get("thinnest_mm") is not None
+                else f"none under {wl['below_mm']:g} mm"))
+            + "; hole edge distance " + (f"{he['worst']['ratio']:g} d ({he['worst']['size']})" if he["worst"] else "-")
+            + f"; slenderness {sl['value']:g}")
 
 
 def text(res: dict) -> str:
@@ -780,6 +1048,7 @@ def text(res: dict) -> str:
             f"{m['stepping']['scope']})",
             f"  symmetry: x {m['symmetry']['x']}, y {m['symmetry']['y']}; seam corners on "
             f"{m['seam_corners']['share']:.0%} of layers; water traps {m['water']['cm3']} cm3 ({m['water']['up']} up)",
+            _strength_line(m),
         ]
     eco = res["economy"]
     lines.append(f"\neconomy: {eco['parts']} part(s), {eco['faces']} faces, screw sizes "
