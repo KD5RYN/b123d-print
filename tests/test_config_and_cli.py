@@ -96,3 +96,39 @@ def test_human_size():
     from b123d_print.mcp_server import _human_size
 
     assert (_human_size(512), _human_size(34_000), _human_size(2_500_000)) == ("512 B", "34 KB", "2.5 MB")
+
+
+def test_mcp_subcommand_starts_the_server_cli(capsys):
+    """`b123d-print mcp ...` is the MCP server (what `uvx b123d-print mcp` runs for registry clients)."""
+    import pytest
+
+    with pytest.raises(SystemExit) as e:
+        main(["mcp", "--help"])
+    assert e.value.code == 0 and "b123d-print-mcp" in capsys.readouterr().out
+
+
+def test_server_json_matches_the_package():
+    """The MCP Registry entry, the package and the plugin always carry the same version and name."""
+    import json
+    import tomllib
+
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    plugin = json.loads((ROOT / "plugin/.claude-plugin/plugin.json").read_text(encoding="utf-8"))
+    assert server["version"] == server["packages"][0]["version"] == version == plugin["version"]
+    assert server["packages"][0]["identifier"] == "b123d-print"
+    assert f"mcp-name: {server['name']}" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def test_plugin_pins_the_released_package():
+    """The Claude plugin starts the server from PyPI at exactly this version (the directory requires a
+    pinned launcher), ships its own LICENSE, and contains no OS junk files."""
+    import json
+    import tomllib
+
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    mcp = json.loads((ROOT / "plugin/.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["b123d-print"]
+    assert mcp["command"] == "uvx" and mcp["args"] == ["--from", f"b123d-print=={version}", "b123d-print-mcp"]
+    assert (ROOT / "plugin/LICENSE").read_text(encoding="utf-8") == (ROOT / "LICENSE").read_text(encoding="utf-8")
+    junk = [p for p in (ROOT / "plugin").rglob("*") if p.name in (".DS_Store", "Thumbs.db", "desktop.ini")]
+    assert not junk, junk

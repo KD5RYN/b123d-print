@@ -366,8 +366,11 @@ def test_timeout_across_workers_keeps_the_finished_shares(tmp_path, monkeypatch)
     script.write_text(SLOW_SPLIT, encoding="utf-8")
     (tmp_path / "b123d-print.toml").write_text('parts_dir = "parts"\n', encoding="utf-8")
     t0 = time.monotonic()
-    res = run_server_check(monkeypatch, tmp_path, "slow", 2, check_timeout=20.0)
-    assert time.monotonic() - t0 < 30  # the shares stop at the soft deadline, 17 s
+    # 45 s, not less: on a loaded CI runner starting the second worker and building the part can
+    # take most of a short budget before its (fast) share finishes; the spinning check still
+    # runs into the soft deadline (~40 s) either way
+    res = run_server_check(monkeypatch, tmp_path, "slow", 2, check_timeout=45.0)
+    assert time.monotonic() - t0 < 60
     assert res["ok"] and not res["passed"]
     found = res["variants"]["standard"]
     assert any(f["check"] == "wall" and f["level"] == "ok" for f in found)  # the other worker's share

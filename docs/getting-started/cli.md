@@ -55,6 +55,7 @@ b123d-print check
 | `config` | the settings in effect, and which config files were found |
 | `list` | parts in the workspace |
 | `examples` | the bundled example parts |
+| `mcp [options]` | run the MCP server, the same as `b123d-print-mcp` with all its options; lets `uvx b123d-print mcp` start it |
 
 Global options, before the command: `--root <folder>` (the workspace; default the nearest
 folder with a `b123d-print.toml`, else the current folder) and `--version`.

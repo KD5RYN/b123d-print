@@ -61,12 +61,18 @@ found", use the full path from `which uvx` (Windows: `where.exe uvx`) as `comman
 claude mcp add b123d-print -- uvx --from b123d-print b123d-print-mcp --workspace ~/parts
 ```
 
-Or the plugin (MCP server + skill; uses the project folder as workspace), inside Claude Code:
+Or the plugin (MCP server + skill; uses the project folder as workspace), in one command:
 
-```text
-/plugin marketplace add KD5RYN/b123d-print
-/plugin install b123d-print@b123d-print
+```bash
+claude plugin install b123d-print --marketplace KD5RYN/b123d-print
 ```
+
+Inside a Claude Code session the same works as `/plugin install b123d-print --marketplace KD5RYN/b123d-print`.
+On older Claude Code versions use two steps: `/plugin marketplace add KD5RYN/b123d-print`, then
+`/plugin install b123d-print@b123d-print`. Update later with `claude plugin update b123d-print@b123d-print`.
+
+The server is also listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as
+`io.github.KD5RYN/b123d-print`; clients that read the registry start it with `uvx b123d-print mcp`.
 
 ## Gemini CLI
 

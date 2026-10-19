@@ -6,8 +6,9 @@
   "plugins": [
     {
       "name": "b123d-print",
-      "source": "./",
+      "source": "./plugin",
       "description": "build123d part design workflow: MCP tools (build, render, section, check, export) + skill"
     }
-  ]
+  ],
+  "description": "Vibe CAD for 3D printing: an MCP server and skill that let Claude design, check and export printable parts with build123d."
 }
