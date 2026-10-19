@@ -1117,12 +1117,14 @@ Work in these steps:
 1. From my photos and text, LIST EVERY DIMENSION you read, the feature it belongs to and its
    source (typed by me / read from a photo / estimate). List features you can see that have no
    dimension. Flag any conflict between a photo and a typed number (typed wins). Ask about
-   anything missing or ambiguous. If I have said nothing about how it should look, ask once
-   for a style: functional (default), modern/minimal, least cost, rugged/outdoor,
+   anything missing or ambiguous: ask for my units, the datum I measured from and how accurate
+   each value is; for a large or curved part propose a table of offsets (stations at a fixed
+   spacing along a datum line), and ask for a scale reference in photos. If I have said
+   nothing about how it should look, ask once for a style: functional (default), modern/minimal, least cost, rugged/outdoor,
    soft/handheld or structural/load-bearing (it goes in Dims as STYLE). Then STOP and wait for my confirmation. Do not
    model yet.
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
-   of the Dims dataclass (mm, with a source comment). Mating features get CLEARANCE (0.2 mm
+   of the Dims dataclass (mm, with a comment on its source and accuracy). Mating features get CLEARANCE (0.2 mm
    default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
    HOLE_COMP_H). Model in print orientation, bed at Z=0.
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating

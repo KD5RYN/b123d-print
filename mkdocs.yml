@@ -55,6 +55,7 @@ nav:
       - Docker: getting-started/docker.md
   - Using it:
       - How a session goes: using/workflow.md
+      - Measuring for the AI: using/measuring.md
       - MCP tools and prompts: using/tools.md
       - Output formats: using/formats.md
       - Settings: using/settings.md

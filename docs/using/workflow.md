@@ -22,6 +22,9 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
 
 1. **Dimensions first.** The model lists every dimension it read from your photos and text, the
    features that have none, and any conflicts, then waits. Typed numbers win over photo readings.
+   It asks for your units, the datum you measured from and how accurate each value is; for a
+   large or curved part it suggests a table of offsets. How to measure and photograph a part so
+   this goes quickly: [Measuring for the AI](measuring.md).
 2. **One script per part.** Every dimension is a named field you can change later; variants
    (a bigger one, a tilted one) live in the same script. See [The part script](../scripts/convention.md).
 3. **Verified before it reports.** Build, preview render, sections through every mating
