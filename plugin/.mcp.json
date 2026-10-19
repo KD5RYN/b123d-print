@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "b123d-print": {
-      "command": "uv",
-      "args": ["run", "--frozen", "--quiet", "--project", "${CLAUDE_PLUGIN_ROOT}", "b123d-print-mcp"]
+      "command": "uvx",
+      "args": ["b123d-print==0.3.2", "mcp"]
     }
   }
 }
