@@ -60,7 +60,7 @@ a missing anchor or a page left out of the navigation fails it.
 
 | You changed | Update | Drift test |
 | --- | --- | --- |
-| an MCP tool, prompt or resource (`mcp_server.py`) | `docs/using/tools.md` (one table row each, every parameter named) and `plugin/skills/cad-parts/SKILL.md`'s tool list | `test_mcp_*` |
+| an MCP tool, prompt or resource (`mcp_server.py`) | `docs/using/tools.md` (one table row each, every parameter named); the plugin's skill need not list it (it points to the guide, and `plugin/` changes wait for the Claude directory's review) | `test_mcp_*` |
 | a CLI command or flag (`cli.py`) | `docs/getting-started/cli.md` | `test_cli_documented` |
 | a server flag (`b123d-print-mcp`) | `docs/getting-started/mcp-clients.md` | `test_mcp_server_flags_documented` |
 | a setting (`config.Settings`) | the Keys table in `docs/using/settings.md` | `test_settings_documented` |
