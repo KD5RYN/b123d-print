@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.4 — unreleased
+
+**Measuring for the AI**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/measuring/)):
+how to measure a real object and hand the numbers over, especially large, complex or curved
+parts. Which method for which part (calipers, a flatbed scan or a photo on a grid, profile
+gauges and bent wire for curves, a **table of offsets** at fixed stations along a datum for large
+parts), the common errors (Abbe error, the tape's hook, level vs along the surface, parallax and
+lens distortion), how to photograph with a scale reference, a copy-paste measurement sheet and
+offsets table (units, datum, accuracy, CONFIRMED or estimated, a `MEASURE.md` as the source of
+truth), checking with a fit-test template, a 1:1 print-out or a test section, and worked
+examples including a 1.5 m curved trim. Sourced.
+- The workflow rules (`AGENTS.md`), the `design_part_from_photos` prompt and the skill: ask for
+  units, a datum, the critical dimensions and their accuracy; suggest the method for the part's
+  size and shape and an offsets table for large or curved ones; ask for a scale in photos;
+  record confirmed values in `Dims` with their source and accuracy.
+
 ## 0.3.3 — unreleased
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,

@@ -34,6 +34,10 @@ cut from the real part.
   assistant shows you the face in red, asks you to confirm, and gives you a 1.2 mm plate with the
   part's exact holes: minutes to print instead of hours.
 
+Measuring something big, curved or awkward? [Measuring for the AI](using/measuring.md) shows which tool
+to use, how to photograph it with a scale, and a copy-paste measurement sheet and table of
+offsets (stations along a datum) that hand the numbers over without ambiguity.
+
 And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
 part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
 screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short

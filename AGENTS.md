@@ -221,6 +221,23 @@ printer only when the user asks.
 - **Missing or ambiguous dimension → ask. Don't guess.** If you must assume something to make
   progress, name it as an estimate in its comment and in your report.
 
+**Getting measurements** (the user's guide: [Measuring for the AI](https://kd5ryn.github.io/b123d-print/using/measuring/))
+
+- **Ask for what decides the model:** the units (confirm every converted inch value in mm), the
+  **datum** every value is measured from, the critical dimensions (what must fit what, and how:
+  press, sliding, free) and the **accuracy** of each value. Measuring from one datum beats
+  chaining; ~0.1 mm is plenty for FDM.
+- **Suggest the method for the part:** calipers for small precise parts; a flatbed scan (known
+  DPI) or a square-on photo on a grid mat for flat outlines; a profile gauge, radius gauge, bent
+  wire or tracing for curves; a **table of offsets** (stations at a fixed spacing along a datum
+  line, one height or width per station, level or along the surface stated) for large or curved
+  parts, plus a test section.
+- **Photos:** ask for a scale reference (ruler, grid, card) in the same plane as the feature,
+  shot square on from a distance; size readings from photos stay estimates.
+- **Record** each confirmed value as a named `Dims` field whose comment gives its source, method
+  and accuracy, and mark estimates as estimates. If the user keeps a `MEASURE.md` next to the
+  script, treat it as the source of truth and keep the script in step with it.
+
 ## Verify before reporting
 
 Do all of this every time you change geometry, before telling the user the part is done:
