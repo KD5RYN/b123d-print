@@ -16,6 +16,11 @@ bolted joints, hole edge distance, material and heat, annealing, snap fits, slic
   `min_wall_lines` and `max_z_slenderness`; `structural` uses them (0.1, 0.5, 3 lines, 5.6).
 - New example `shelf_bracket`: an L with a brace, lying on its side, filleted and clean under
   the new style.
+- The structural sources first read only as search text were fetched and checked: PETG's HDT
+  is 72–76 °C (not 78), Prusa does not single out cubic infill, a washer gives bearing area (a
+  compression limiter is what fights creep), and "less part cooling" was dropped (CNC Kitchen:
+  PLA wants part cooling; too hot a nozzle hurts as much as too cold). MDPI, Xometry, Stratasys
+  and Bambu Lab pages block automated access and stay marked *search, not fetched*.
 - **Fixed:** the edge metric (M7) counted inside (concave) edges as sharp outside edges, so
   `max_sharp_edge_share` and `min_treated_edge_share` (rugged, soft, modern) over-reported parts
   with inside corners.
