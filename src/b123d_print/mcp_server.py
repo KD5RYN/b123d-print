@@ -594,9 +594,11 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     overhangs > 45 deg from vertical in print orientation (bed face ignored) and bridge spans,
     thin features (walls under one line width fail), round-topped horizontal holes, fillets on
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
-    around deep cuts) and Probes. Fix every FAIL; report every WARN. On a remote server (HTTP/SSH)
-    the part is not on the user's machine until download_part brings it home. Uses the pieces
-    cached by an earlier build; fresh=True builds them again."""
+    around deep cuts) and Probes. The fit between an assembly's pieces (hole alignment, gaps) is
+    a separate tool, check_fit, unless the script lists Mates() in checks(d). Fix every FAIL;
+    report every WARN. On a remote server (HTTP/SSH) the part is not on the user's machine until
+    download_part brings it home. Uses the pieces cached by an earlier build; fresh=True builds
+    them again."""
     res = await _check(name, variant, fresh)
     if not res.get("ok"):
         return _error_text(res)

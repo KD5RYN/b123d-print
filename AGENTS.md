@@ -304,8 +304,10 @@ Do all of this every time you change geometry, before telling the user the part 
    show what the 3D render hides.
 4. **Run the checks** and fix every failure; mention every warning you leave. Every part gets
    the overhang (with bridges), thin-feature, holes, bed-edge and gap checks automatically.
-   For several pieces with an `assembly(d)`, also run the fit check (`check_fit`): overlaps,
-   gaps under the clearance and screw holes that do not line up between pieces.
+   For several pieces with an `assembly(d)`, also run the fit check (`check_fit`, CLI
+   `b123d-print fit`): overlaps, gaps under the clearance and screw holes that do not line up
+   between pieces. It is not part of `check` unless the script lists `Mates()` in `checks(d)`;
+   do that for parts that are always checked as an assembly.
 5. **Wall check around deep cuts:** wherever a cut goes deeper than the wall it starts in
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.
@@ -377,7 +379,7 @@ The rules and their sources are in
 ## Checks reference
 
 ```python
-from b123d_print import Gap, Overhang, Probe, ThinFeature, Wall
+from b123d_print import Gap, Mates, Overhang, Probe, ThinFeature, Wall
 
 def checks(d):
     # Part names: a single Part returned by build() is "part" (the script's own name also works);
@@ -397,5 +399,7 @@ def checks(d):
         ThinFeature("lid", ignore=[((0, 20, 0.25), (40, 2, 0.6))]),
         # gap between two assembly parts (or part names) inside a box: the lid's sliding fit
         Gap("lid", "base", min=d.CLEARANCE, max=d.CLEARANCE + 0.1, within=((0, 0, 30), (60, 60, 4))),
+        # opt-in: fit between the assembly's pieces (overlaps, gaps, hole alignment) inside `check`
+        Mates(hole_tol=0.2, ignore=[("box", "screw (stand-in)")]),
     ]
 ```

@@ -2,8 +2,21 @@
 
 A part with several pieces, or with an `assembly(d)` that places them with
 [stand-ins](../scripts/convention.md#what-a-script-defines) for what they mate with, can be
-checked for how the pieces meet: `check_fit(name)` (MCP), `b123d-print fit <name>` (CLI), or a
-`Mates()` in the script's `checks(d)` so that `check` runs it too.
+checked for how the pieces meet: `check_fit(name)` (MCP) or `b123d-print fit <name>` (CLI).
+
+!!! note "Opt-in"
+    `check` does not run the fit check on its own (its automatic **overlap** check already fails
+    intersecting pieces). To make `check` run it too, list it in the script:
+
+    ```python
+    from b123d_print import Mates
+
+    def checks(d):
+        return [Mates()]   # or Mates(hole_tol=0.3, joints=[("peg", "socket", d.CLEARANCE)])
+    ```
+
+    `check_fit` and `b123d-print fit` use that `Mates(...)` and its arguments when the script
+    has one.
 
 It looks at the pieces **as placed in `assembly(d)`**, so build the assembly the way the part
 goes together: the lid on the box, the screws' parts lined up.
