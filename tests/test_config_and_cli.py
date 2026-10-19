@@ -121,14 +121,29 @@ def test_server_json_matches_the_package():
 
 
 def test_plugin_pins_the_released_package():
-    """The Claude plugin starts the server from PyPI at exactly this version (the directory requires a
-    pinned launcher), ships its own LICENSE, and contains no OS junk files."""
+    """The Claude plugin runs the server from its own lockfile (exact versions and hashes, which the
+    directory wants), pinned to a released version no newer than this one; it ships its own LICENSE,
+    an icon, and no OS junk files."""
     import json
     import tomllib
 
+    def ver(s):
+        return tuple(int(x) for x in s.split("."))
+
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     mcp = json.loads((ROOT / "plugin/.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["b123d-print"]
-    assert mcp["command"] == "uvx" and mcp["args"] == ["--from", f"b123d-print=={version}", "b123d-print-mcp"]
+    assert mcp["command"] == "uv"
+    assert mcp["args"] == ["run", "--frozen", "--quiet", "--project", "${CLAUDE_PLUGIN_ROOT}", "b123d-print-mcp"]
+    deps = tomllib.loads((ROOT / "plugin/pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    assert len(deps) == 1 and deps[0].startswith("b123d-print==")
+    pin = deps[0].removeprefix("b123d-print==")
+    assert ver(pin) <= ver(version)  # the plugin moves to a release after it is on PyPI
+    lock = tomllib.loads((ROOT / "plugin/uv.lock").read_text(encoding="utf-8"))
+    locked = [p for p in lock["package"] if p["name"] == "b123d-print"]
+    assert [p["version"] for p in locked] == [pin], "run `uv lock --directory plugin` after changing the pin"
+    assert locked[0]["source"] == {"registry": "https://pypi.org/simple"}
+    assert (ROOT / "plugin/uv.lock").stat().st_size < 256 * 1024  # the directory reads files up to 256 KiB
     assert (ROOT / "plugin/LICENSE").read_text(encoding="utf-8") == (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert (ROOT / "plugin/.claude-plugin/icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     junk = [p for p in (ROOT / "plugin").rglob("*") if p.name in (".DS_Store", "Thumbs.db", "desktop.ini")]
     assert not junk, junk
