@@ -48,6 +48,9 @@ before reporting. render_preview and section return PNG images.
 Several pieces: return lazy pieces from build(d) ({"name": lambda: piece(d)}) and pass parts= to
 build_part, render_preview, section and export to work on one; built pieces are cached, so later
 calls reuse them (fresh=True rebuilds). build_part reports each piece's time and faces.
+Pieces with an assembly(d): check_fit (overlaps, gaps, hole alignment). A flat outline from a scan
+or grid photo: upload_reference, then trace_outline. Common features (teardrop holes, nut traps,
+snap arms, hinges, lids, text, bed chamfers): read the recipe tool before improvising one.
 When this server is remote (HTTP or SSH), it is a workbench, not storage: what it writes is a
 temporary working copy, deleted after some days unused. Use ONLY these MCP tools and the links they
 return; the server gives no shell, ssh or scp access. Last step, before reporting: download_part
@@ -969,7 +972,8 @@ def _ref_file(part: str, file: str) -> Path:
 @mcp.tool()
 def upload_reference(part: str, filename: str, data_base64: str = "", overwrite: bool = False) -> str:
     """Get an original model (STL, 3MF or STEP) onto the server, into parts/<part>/ref/<filename>,
-    to remix it (the part folder may not exist yet). With data_base64 (the whole file, base64) it
+    to remix it, or a scan or photo (PNG, JPEG, TIFF, BMP) to trace with trace_outline (the part
+    folder may not exist yet). With data_base64 (the whole file, base64) it
     is stored now, up to 50 MB; that is only practical for small files, since the model has to
     write out every byte. Without it, the result says how the USER copies the file: over HTTP a
     signed upload link for `curl -fT <file> '<link>'` (no token needed, expires), over SSH the
@@ -997,9 +1001,9 @@ def upload_reference(part: str, filename: str, data_base64: str = "", overwrite:
             refs.store(root, parts_dir, part, filename, data, overwrite)
         except refs.RefError as e:
             raise ToolError(str(e)) from None
-        return f"Stored {rel} ({len(data):,} bytes). Next: describe_model('{part}', '{filename}')."
+        return f"Stored {rel} ({len(data):,} bytes). Next: {_ref_next(part, filename)}."
     if os.path.lexists(target) and not overwrite:
-        return f"{rel} is already there. Next: describe_model('{part}', '{filename}') (overwrite=True to replace it)."
+        return f"{rel} is already there. Next: {_ref_next(part, filename)} (overwrite=True to replace it)."
     if _http():
         url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"],
                                   purpose="put-overwrite" if overwrite else "put")
@@ -1007,14 +1011,22 @@ def upload_reference(part: str, filename: str, data_base64: str = "", overwrite:
                 f"{refs.MAX_BYTES // 1_000_000} MB; the link expires "
                 f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))}):\n"
                 f"  curl -fT <path/to/{filename}> '{_base_url()}{url}'\n"
-                f"Then describe_model('{part}', '{filename}').")
+                f"Then {_ref_next(part, filename)}.")
     if STATE["ssh_dest"]:
         return (f"Ask the user to run this on their machine (the same SSH key as this MCP connection):\n"
                 f"  b123d-print push <path/to/{filename}> --part {part} --to {STATE['ssh_dest']}"
                 f"{' --overwrite' if overwrite else ''}\n"
-                f"Then describe_model('{part}', '{filename}').")
+                f"Then {_ref_next(part, filename)}.")
     return (f"This server runs locally: copy the file to {target} (create the folder if needed; you may do it "
-            f"yourself if you can write files). Then describe_model('{part}', '{filename}').")
+            f"yourself if you can write files). Then {_ref_next(part, filename)}.")
+
+
+def _ref_next(part: str, filename: str) -> str:
+    from .refs import IMAGE_SUFFIXES
+
+    if Path(filename).suffix.lower() in IMAGE_SUFFIXES:
+        return f"trace_outline('{part}', '{filename}', <scale: dpi, grid, reference or points + distance>)"
+    return f"describe_model('{part}', '{filename}')"
 
 
 @mcp.tool(structured_output=False)
@@ -1029,6 +1041,10 @@ async def describe_model(part: str, file: str, scale: str = "", image: bool = Tr
     (saved as parts/<part>/out/<file>_original.png)."""
     _image_options(size)
     path = _ref_file(part, file)
+    from .refs import IMAGE_SUFFIXES
+
+    if path.suffix.lower() in IMAGE_SUFFIXES:
+        raise ToolError(f"{file} is an image: trace_outline('{part}', '{file}', ...) traces a flat object in it")
     sc: object = 1.0
     if scale:
         from .remix import UNITS
@@ -1062,6 +1078,106 @@ async def before_after(name: str, variant: str | None = None, size: str = "norma
 
 
 # ---------------------------------------------------------------------------------------------
+# Fit between pieces, outline tracing, recipes
+
+
+@mcp.tool()
+async def check_fit(name: str, variant: str | None = None, hole_tol: float | None = None, verbose: bool = False,
+                    fresh: bool = False) -> str:
+    """How the pieces of assembly(d) fit together, as placed (stand-ins count as obstacles):
+    interference (pairs that overlap: the volume and where; pairs closer than the clearance
+    without touching: the gap and where; faces resting on each other are contact) and hole
+    alignment (round holes of two pieces on one axis are partners: offset beyond hole_tol mm,
+    default 0.2, fails; their diameters read as screw holes, clearance + pilot / insert / nut,
+    and a pair no single screw explains warns; a hole whose axis runs into solid material of the
+    next piece has no partner). Male/female joint pairs from the script's joints(d) (or a
+    Mates(joints=...) in checks(d)) are intentional fits measured against their own clearance.
+    Stand-ins: labels saying stand-in or dummy, or matching no piece of build(). verbose: list
+    the passing pairs too. One variant, or all. Uses the build cache (fresh=True rebuilds)."""
+    res = await _job(name, "fit", variant=variant, hole_tol=hole_tol, verbose=verbose or None, fresh=fresh or None)
+    if not res.get("ok"):
+        return _error_text(res)
+    head = "PASSED" if res["passed"] else "FAILED"
+    return _scrub(head + "\n" + "\n\n".join(v["text"] for v in res["variants"]))
+
+
+def _numbers(v, n: int, what: str) -> list[float] | None:
+    if v in (None, "", []):
+        return None
+    try:
+        vals = [float(x) for x in (v.replace(";", ",").split(",") if isinstance(v, str) else v)]
+    except (TypeError, ValueError):
+        raise ToolError(f"{what}: {n} numbers") from None
+    if len(vals) != n:
+        raise ToolError(f"{what}: {n} numbers, got {len(vals)}")
+    return vals
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def trace_outline(part: str, file: str, dpi: float | None = None, grid: float | None = None, reference: str = "",
+                        points: str = "", distance: float | None = None, tolerance: float = 0.2, smooth: bool = False,
+                        pick: str = "", threshold: float | None = None, invert: bool | None = None,
+                        inline: bool = True) -> list:
+    """Trace a flat object in a scan or photo (parts/<part>/ref/<file>, from upload_reference) into a
+    2D outline in mm for a part script: the largest object's outline and its holes, simplified to
+    `tolerance` mm (few points: dense polylines build slowly), or with smooth=True through-points
+    for a periodic spline. Scale, one of: dpi (a flatbed scan; omit everything to read it from the
+    file), grid (cell size in mm of a grid or cutting mat under the object), reference ('card' =
+    a credit card 85.60 x 53.98 mm beside the object, or 'L,S' mm of another rectangle), or points
+    ('x1,y1,x2,y2' pixels, origin top left) with distance (mm between them). pick: 'x,y' pixel
+    inside the object to trace when it is not the largest. threshold (0..1) and invert (object
+    lighter than the background) override the automatic threshold. Writes out/<file>_outline.json
+    (the points), out/<file>_outline.py (a snippet with OUTLINE, OUTLINE_HOLES and a face function)
+    and out/<file>_trace.png (the outline on the image: show it to the user to confirm). A scan is
+    accurate to about a pixel; a photo only as far as it is square-on, flat and undistorted:
+    check a known dimension before trusting it."""
+    path = _ref_file(part, file)
+    from .refs import IMAGE_SUFFIXES
+
+    if path.suffix.lower() not in IMAGE_SUFFIXES:
+        raise ToolError(f"{file}: trace_outline reads images ({', '.join(IMAGE_SUFFIXES)}); describe_model is for models")
+    scale: dict = {}
+    if dpi:
+        scale["dpi"] = dpi
+    if grid:
+        scale["grid"] = grid
+    if reference:
+        scale["reference"] = reference if "," not in reference else _numbers(reference, 2, "reference")
+    if points:
+        scale["points"] = _numbers(points, 4, "points")
+        scale["distance"] = distance
+    args = {"tolerance": tolerance, "smooth": smooth, "threshold": threshold, "invert": invert,
+            "pick": _numbers(pick, 2, "pick")}
+    res = await _run({"op": "trace", "file": str(path), "scale": scale, "args": args}, _parts_dir() / part / "out")
+    if not res.get("ok"):
+        return [_error_text(res)]
+    t = res["trace"]
+    files = ", ".join(_show(f) for f in t["files"].values())
+    text = (f"{res['text']}\nfiles: {files}\n\nShow the overlay to the user and confirm the outline and one known "
+            f"dimension before modeling with it.\n\n```python\n{res['snippet']}```")
+    return _with_note(_with_image(text, t["image"], inline), part)
+
+
+@mcp.tool()
+def recipe(name: str = "") -> str:
+    """Tested build123d recipes for common printable features, with printing notes and sources:
+    teardrop holes, counterbores and countersinks, nut traps, magnet pockets, snap arms (with
+    strain sizing), living hinges, print-in-place hinges, lids with a lip, text, bed-edge
+    chamfers, zip-tie and cable slots, ribs and gussets. name: '' lists them; a recipe (or one of
+    its function names) gives its code, an example and the notes. Use one before improvising the
+    feature; part scripts import them: from b123d_print.recipes import snap_arm."""
+    from . import recipes
+
+    if not name:
+        return recipes.index()
+    try:
+        return recipes.get(name).text()
+    except KeyError as e:
+        raise ToolError(e.args[0]) from None
+
+
+# ---------------------------------------------------------------------------------------------
 # Resources and prompts (the workflow, model-neutral)
 
 
@@ -1075,6 +1191,27 @@ def guide() -> str:
 def template() -> str:
     """The part-script template new_part starts from."""
     return data("part_template.py")
+
+
+@mcp.resource("b123d-print://recipes", mime_type="text/markdown")
+def recipes_index() -> str:
+    """The recipe library: tested build123d functions for common printable features."""
+    from . import recipes
+
+    return recipes.index()
+
+
+@mcp.resource("b123d-print://recipes/{name}", mime_type="text/markdown")
+def recipe_text(name: str) -> str:
+    """One recipe: its code, a tested example, printing notes and sources."""
+    from mcp.server.mcpserver.exceptions import ResourceError
+
+    from . import recipes
+
+    try:
+        return recipes.get(name).text()
+    except KeyError as e:
+        raise ResourceError(e.args[0]) from None
 
 
 @mcp.resource("b123d-print://files/{workspace}/{+path}", mime_type="application/octet-stream")

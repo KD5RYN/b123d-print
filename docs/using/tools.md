@@ -21,9 +21,12 @@ What the `b123d-print-mcp` server offers. The full descriptions the model sees a
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
 | `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
 | `compare(reference, candidate, thresholds?, image?, size?, inline?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
-| `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it: `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
+| `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it, or a scan or photo (PNG, JPEG, TIFF, BMP) to [trace](tracing.md): `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
 | `describe_model(part, file, scale?, image?, size?, inline?)` | inspect an original before remixing it: format, units, size, faces before and after merging, the curved (faceted) share, round holes, repairs, the designer and license metadata it carries, and a suggestion to modify or redraw it; `image` adds a 6-view render |
 | `before_after(name, variant?, size?, inline?)` | for a remix: the original and the remix side by side, and the original colored where the remix differs, with `compare`'s score |
+| `check_fit(name, variant?, hole_tol?, verbose?, fresh?)` | [fit between the pieces](fit.md) of `assembly(d)` as placed, stand-ins included: pairs that overlap (volume and where), pairs closer than the clearance without touching, and hole alignment across pieces (partner holes off-axis by more than `hole_tol`, default 0.2 mm; diameters that no one screw explains; holes whose axis runs into solid material); male/female joint pairs are measured against their own clearance. `verbose` lists the pairs that fit too |
+| `trace_outline(part, file, dpi?, grid?, reference?, points?, distance?, tolerance?, smooth?, pick?, threshold?, invert?, inline?)` | [trace a flat object](tracing.md) in a scan or photo from `parts/<part>/ref/` into an outline in mm with its holes: scale from `dpi` (or the file's metadata), a `grid` cell size, a `reference` object (`card`, or its sides in mm) or two `points` a known `distance` apart; simplified to `tolerance` mm (or `smooth` spline points); `pick` chooses the object. Writes the points (JSON), a Python snippet and an overlay PNG to confirm with the user |
+| `recipe(name?)` | the [recipe library](recipes.md): tested build123d functions for common printable features; no `name` lists them, a name gives the code, a tested example, printing notes and sources |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP and SSH it is saved per workspace |
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
@@ -35,10 +38,11 @@ only those are built. Every tool that builds the part reads the pieces from the
 them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part` and
-`upload_reference` runs in the
-[sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
-the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
+Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`,
+`upload_reference` and `recipe` runs in the
+[sandbox](sandbox.md): the part script, or for `compare`, `describe_model` and `trace_outline`
+the parsing of the model and image files (they may come from model-written scripts or from the
+internet). `trace_outline` reads only the part's own reference files. `compare` only takes files inside the workspace.
 
 ## Prompts
 
@@ -61,6 +65,8 @@ carries the full [workflow rules](../scripts/rules.md).
 | --- | --- |
 | `b123d-print://guide` | the workflow and print rules (the same text as [`AGENTS.md`](../scripts/rules.md)) |
 | `b123d-print://template` | the part-script template `new_part` starts from |
+| `b123d-print://recipes` | the [recipe library](recipes.md): every recipe with its functions |
+| `b123d-print://recipes/{name}` | one recipe: its code, a tested example, printing notes and sources (the same text as `recipe(name)`) |
 | `b123d-print://files/{workspace}/{+path}` | a file the server wrote (`parts/<part>/out/...`), only in the session's own workspace (`_` = the root workspace). Tool results link to these |
 | `b123d-print://download/{workspace}/{part}` | a whole part as a zip in the local layout (`parts/<part>/<part>.py`, `out/`, `ref/`), only in the session's own workspace; `download_part` links to it |
 

@@ -188,7 +188,7 @@ def test_check_api_documented():
     import b123d_print as bp
 
     text = page("scripts/checks-api.md")
-    for cls in (bp.Wall, bp.Overhang, bp.ThinFeature, bp.Holes, bp.BedEdge, bp.Gap, bp.Probe, bp.Overlap, bp.Fit, bp.View, bp.Template):
+    for cls in (bp.Wall, bp.Overhang, bp.ThinFeature, bp.Holes, bp.BedEdge, bp.Gap, bp.Probe, bp.Overlap, bp.Fit, bp.Mates, bp.View, bp.Template):
         assert f"## `{cls.__name__}`" in text, f"no section for {cls.__name__} in docs/scripts/checks-api.md"
         documented = table_keys(text, f"`{cls.__name__}`")
         assert documented == {f.name for f in dataclasses.fields(cls)}, f"{cls.__name__} arguments"
@@ -199,7 +199,17 @@ def test_check_classes_are_all_covered():
     import b123d_print as bp
 
     checks = {n for n in bp.__all__ if dataclasses.is_dataclass(getattr(bp, n)) and hasattr(getattr(bp, n), "run")}
-    assert checks == {"Wall", "Overhang", "ThinFeature", "Holes", "BedEdge", "Gap", "Probe", "Overlap", "Fit"}
+    assert checks == {"Wall", "Overhang", "ThinFeature", "Holes", "BedEdge", "Gap", "Probe", "Overlap", "Fit", "Mates"}
+
+
+def test_recipes_documented():
+    """Every recipe and each of its functions is on the recipes page."""
+    from b123d_print.recipes import RECIPES
+
+    names = code_names(page("using/recipes.md"))
+    for r in RECIPES.values():
+        missing = {r.name, *(f.__name__ for f in r.functions)} - names
+        assert not missing, f"docs/using/recipes.md does not mention {missing}"
 
 
 def test_examples_documented():

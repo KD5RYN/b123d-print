@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .refs import REF_DIR, SHARED_DIR, SUFFIXES
+from .refs import MODEL_SUFFIXES as SUFFIXES, REF_DIR, SHARED_DIR
 
 CONVERTER = 1  # bump when the mesh conversion changes, to invalidate cached results
 SMALL_HOLE = 8  # open loops of up to this many edges are closed (a missing triangle or a sliver gap)

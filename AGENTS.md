@@ -8,13 +8,17 @@ actually printed; several rules exist because a print failed without them.
 ## Tools
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
-`build_part`, `render_preview`, `section`, `check`, `export`, `list_faces`, `make_template`). Otherwise
+`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `make_template`,
+`trace_outline`, `recipe`). Otherwise
 use the CLI:
 
 - `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
 - `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png] [--only <pieces>]` or
   `b123d-print build <name> [--only <pieces>]` — export to `parts/<name>/out/` and run the checks
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
+- `b123d-print fit [<name>]` — fit between the pieces of `assembly(d)`: overlaps, gaps, hole alignment
+- `b123d-print trace <image> --dpi N | --grid MM | --reference card` — a scan or grid photo to an outline in mm
+- `b123d-print recipes [<name>]` — tested snippets for common features (teardrop, nut trap, snap arm, ...)
 - `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
 - `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
 - `b123d-print faces <name>` / `b123d-print template <name> --slice XY:3 | --face ID | --crop x,y,z:sx,sy,sz`
@@ -137,6 +141,8 @@ as a starting point, say so in the report, and never turn it into a default or a
 
 **Snap fits and living hinges**
 
+- Use a recipe (`recipe` tool, `b123d_print.recipes`) before improvising a snap arm, hinge, nut
+  trap, teardrop hole, lid lip, text or bed chamfer: they are tested and cite their numbers.
 - Snap arms: lie flat (bend in XY), root fillet ≥ 0.5 × arm thickness, taper the arm toward
   the tip. [N1, N2, N3]
 - Provisional (one source, Fictiv): size the arm with the cantilever strain formula and an
@@ -257,6 +263,9 @@ printer only when the user asks.
   wire or tracing for curves; a **table of offsets** (stations at a fixed spacing along a datum
   line, one height or width per station, level or along the surface stated) for large or curved
   parts, plus a test section.
+- **Trace a scan instead of measuring a flat outline point by point:** `upload_reference` the
+  image, `trace_outline` it (scale from the scan's DPI, a grid, a card or two points), show the
+  overlay and confirm one known dimension; photo traces stay estimates.
 - **Photos:** ask for a scale reference (ruler, grid, card) in the same plane as the feature,
   shot square on from a distance; size readings from photos stay estimates.
 - **Record** each confirmed value as a named `Dims` field whose comment gives its source, method
@@ -273,6 +282,8 @@ Do all of this every time you change geometry, before telling the user the part 
    show what the 3D render hides.
 4. **Run the checks** and fix every failure; mention every warning you leave. Every part gets
    the overhang (with bridges), thin-feature, holes, bed-edge and gap checks automatically.
+   For several pieces with an `assembly(d)`, also run the fit check (`check_fit`): overlaps,
+   gaps under the clearance and screw holes that do not line up between pieces.
 5. **Wall check around deep cuts:** wherever a cut goes deeper than the wall it starts in
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.

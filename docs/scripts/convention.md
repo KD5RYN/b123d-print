@@ -46,7 +46,8 @@ if __name__ == "__main__":
 | `Dims` | by convention | frozen dataclass; every dimension an UPPER_CASE field in mm with a comment saying where it came from; derived values as `@property` |
 | `VARIANTS` | no (default: only the standard part) | `{"": {}, "140": dict(PLATE_W=140.0)}` — overrides only; `""` is the standard part; output files get the key as a suffix |
 | `build(d)` | yes | the printable part, or `{"name": part}` for several, in print orientation, bottom face on Z=0; for several, the values may be zero-argument functions ([lazy pieces](#big-and-multi-piece-projects)) |
-| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw); the overlap check uses it |
+| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw), labeled `"... (stand-in)"`; the overlap check and the [fit check](../using/fit.md) use it |
+| `joints(d)` | no | `[("peg", "socket", clearance), ...]`: male/female pairs of `assembly(d)` labels that are intentional fits; the [fit check](../using/fit.md) measures them against their own clearance |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
 | `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md) |

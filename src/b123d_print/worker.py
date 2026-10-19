@@ -52,6 +52,11 @@ from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded 
 from b123d_print import metrics  # noqa: E402
 from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
+from b123d_print import fit  # noqa: E402  (fit between pieces)
+from b123d_print import trace as tr  # noqa: E402  (outline tracing)
+import scipy.interpolate  # noqa: E402,F401  (trace's spline fit, loaded before the guard)
+import contourpy  # noqa: E402,F401  (trace's contours)
+import PIL.Image  # noqa: E402,F401  (trace reads the image)
 
 BLOCKED_EVENTS = (
     "socket.",  # connect, bind, getaddrinfo, ...
@@ -222,11 +227,25 @@ def do_describe(job: dict) -> dict:
     return res
 
 
+def do_trace(job: dict) -> dict:
+    """Trace the outline of a flat object in a reference image (an untrusted file for the parsers)."""
+    a = job.get("args", {})
+    scale = tr.Scale(**job.get("scale", {}))
+    res = tr.trace(job["file"], scale, tolerance=a.get("tolerance", 0.2), smooth=bool(a.get("smooth")),
+                   threshold=a.get("threshold"), invert=a.get("invert"), clean=a.get("clean"),
+                   min_hole=a.get("min_hole", 1.0), pick=a.get("pick"))
+    stem = Path(job["file"]).stem
+    tr.write(res, job["out_dir"], stem, title=Path(job["file"]).name)
+    return {"text": tr.text(res), "trace": res.as_dict(), "snippet": tr.snippet(res)}
+
+
 def do(job: dict) -> dict:
     if job["op"] == "compare":
         return do_compare(job)
     if job["op"] == "describe":
         return do_describe(job)
+    if job["op"] == "trace":
+        return do_trace(job)
     script = Path(job["script"])
     mod = load(script)
     keys = list(variants(mod))
@@ -292,6 +311,14 @@ def do(job: dict) -> dict:
                                                                     cache=cache)]
         failed = any(f["level"] == ck.FAIL for v in res.values() for f in v)
         return {"passed": not failed, "variants": res}
+    if op == "fit":
+        out = []
+        for kk in keys if key is None else [key]:
+            r = fit.run_fit(mod, kk, settings, cache, job.get("hole_tol"))
+            out.append({"text": fit.text(r, script.stem, bool(job.get("verbose"))),
+                        "passed": not any(f.level == ck.FAIL for f in r["findings"]),
+                        "findings": [f.__dict__ for f in r["findings"]], "variant": r["variant"]})
+        return {"variants": out, "passed": all(v["passed"] for v in out)}
     if op == "metrics":
         res = metrics.design_metrics(mod, d, pc.parts(), settings, style=job.get("style") or None,
                                      up=job.get("up") or None)

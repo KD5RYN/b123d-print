@@ -2,6 +2,38 @@
 
 ## 0.3.4 — unreleased
 
+**Fit between pieces** ([docs](https://kd5ryn.github.io/b123d-print/using/fit/)): `check_fit`
+(MCP), `b123d-print fit` (CLI) and the `Mates` check for `checks(d)`, on the pieces of
+`assembly(d)` as placed, stand-ins included.
+- **Interference:** pairs that overlap (FAIL, with the volume, center and extent of the overlap)
+  and pairs closer than the clearance without touching (WARN, with the gap and where); faces
+  resting on each other are contact. Male/female joint pairs (a script's `joints(d)`, or
+  `Mates(joints=...)`) are measured against their own clearance.
+- **Hole alignment:** round holes of two pieces on one axis are partners (a counterbore and its
+  clearance hole count as one hole); partners further than `hole_tol` (0.2 mm) apart fail, and
+  their diameters are read as M2-M6 screw holes (ISO 273 clearance, pilot, CNC Kitchen insert):
+  a pair no single screw explains warns, as does a hole whose axis runs into solid material of
+  the next printed piece. Bounding-box pre-filter and a pair cap keep it fast.
+
+**Outline tracing** ([docs](https://kd5ryn.github.io/b123d-print/using/tracing/)): `trace_outline`
+(MCP) and `b123d-print trace` turn a flatbed scan or a photo on a grid into a 2D outline in mm,
+with its holes. Scale from the scan's DPI (read from the file), a grid's cell size, a credit card
+or other rectangle of known size, or two points a known distance apart. Otsu threshold, grid
+lines cleaned away, sub-pixel contour, simplified to a tolerance in mm (or spline through-points);
+writes the points (JSON), a snippet for the part script and an overlay PNG to confirm. Uses only
+what was already installed (numpy, scipy, Pillow and contourpy via matplotlib) and runs in the
+sandbox. `upload_reference` and `b123d-print push` now also take PNG, JPEG, TIFF and BMP images.
+
+**Recipe library** ([docs](https://kd5ryn.github.io/b123d-print/using/recipes/)): twelve tested
+build123d recipes in `b123d_print.recipes`, served by the `recipe` tool, the
+`b123d-print://recipes` resources and `b123d-print recipes`: teardrop / flat-roof holes,
+counterbores and countersinks, hex nut traps, magnet pockets, snap arms with strain sizing,
+living hinges, print-in-place hinges, lids with a lip, embossed and debossed text, a fillet-safe
+bed chamfer, zip-tie and cable slots, ribs and gussets. Each has printing notes and sources, and
+its demo part is built and passes `check` in the tests.
+- `AGENTS.md`: trace a scan instead of measuring an outline point by point, use a recipe before
+  improvising a feature, run the fit check on assemblies.
+
 **Measuring for the AI**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/measuring/)):
 how to measure a real object and hand the numbers over, especially large, complex or curved
 parts. Which method for which part (calipers, a flatbed scan or a photo on a grid, profile
