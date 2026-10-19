@@ -14,6 +14,8 @@ they are installed as dependencies, under their own licenses. Versions are the o
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) 2.3 | the MCP server | MIT |
 | [uv](https://github.com/astral-sh/uv) | install / run (`uvx`), build backend `uv_build` | Apache-2.0 or MIT |
 | [lib3mf](https://github.com/3MFConsortium/lib3mf) (via build123d) | 3MF export | BSD |
+| [bd_warehouse](https://github.com/gumyr/bd_warehouse) 0.4.0 | threads, fasteners and their hole sizes, heat-set inserts, gears, V-slot parts for part scripts | Apache-2.0 |
+| [py_gearworks](https://github.com/GarryBGoode/py_gearworks) 0.0.24 | involute gears for part scripts | Apache-2.0 |
 | [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) printer profiles | source of the printer table (`data/printers_orca.json`) | AGPL-3.0 — see below |
 
 build123d also pulls in ocpsvg (Apache-2.0), ocp-gordon (Apache-2.0),
@@ -34,4 +36,9 @@ ezdxf (MIT), sympy (BSD), scipy (BSD), anytree (Apache-2.0), svgpathtools (MIT) 
   `tools/sync_orca_printers.py`; the OrcaSlicer commit is recorded in the file. No OrcaSlicer
   files, text or code are included. Thanks to the OrcaSlicer project and the printer makers who
   maintain those profiles.
-- **Example parts** in `src/b123d_print/examples/` are original designs, MIT like the rest.
+- **Example parts** in `src/b123d_print/examples/` are original designs, MIT like the rest. Some
+  call bd_warehouse or py_gearworks at build time; they copy no code from them.
+- **bd_warehouse and py_gearworks** (Apache-2.0) are dependencies, not bundled: they ship no
+  NOTICE file, and the Docker image keeps their license files in `*.dist-info/`, which is what
+  Apache-2.0 asks of a redistribution. bd_warehouse's data tables (fastener, insert and thread
+  sizes from published standards and makers' datasheets) are read from the installed package.

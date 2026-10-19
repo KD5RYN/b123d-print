@@ -16,6 +16,25 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
+**Threads, fasteners and gears.** Part scripts can now import two build123d part libraries
+([docs](https://kd5ryn.github.io/b123d-print/using/threads-fasteners-gears/)):
+[bd_warehouse](https://github.com/gumyr/bd_warehouse) 0.4.0 (Apache-2.0: threads including
+bottle threads, screws, nuts, heat-set inserts and their hole sizes, gears and worms, OpenBuilds
+V-slot parts) and [py_gearworks](https://github.com/GarryBGoode/py_gearworks) 0.0.24 (Apache-2.0:
+spur, helical, herringbone and bevel gears, racks). Both build inside the sandbox unchanged.
+- A sourced guide: when to model a thread (M6 and up, coarse, upright, the user's clearance,
+  faded ends) and when to use inserts, nuts or pilot holes instead; how bd_warehouse's holes
+  meet `HOLE_COMP`, so a hole is compensated once (`InsertHole` cuts its table's drill size,
+  0.19 mm over CNC Kitchen's 5.6 mm M4 hole); gears (module, backlash, profile shift, helical
+  and herringbone, orientation, materials); mounting to 2020 V-slot.
+- New examples: `jar_lid` (a 38-400 bottle thread), `insert_bracket` (M4 heat-set inserts and
+  counterbored screw holes from bd_warehouse's tables), `gear_pair` (a meshed py_gearworks pair
+  with profile shift and a backlash `Gap` check) and `vslot_mount` (a plate keyed into 2020
+  V-slot, with the rail and T-nuts as stand-ins).
+- The workflow rules (`AGENTS.md`) and the `design_part_from_photos` prompt say which library to
+  use for what, and to keep modeled threads to sizes that print.
+- bd_vslot is not included: its rails fail to build with build123d 0.13.
+
 ## 0.3.3 — 2026-10-19
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,

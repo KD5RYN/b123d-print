@@ -5,6 +5,8 @@ b123d-print is a thin layer over:
 - [build123d](https://github.com/gumyr/build123d) — the Python CAD API every part is written in (Apache-2.0)
 - [Open CASCADE Technology](https://dev.opencascade.org), via [OCP](https://github.com/CadQuery/OCP) — the geometry kernel (LGPL-2.1 with exception; bindings Apache-2.0)
 - [lib3mf](https://github.com/3MFConsortium/lib3mf) — 3MF export (BSD)
+- [bd_warehouse](https://github.com/gumyr/bd_warehouse) — threads, fasteners, inserts, gears and V-slot parts for part scripts (Apache-2.0)
+- [py_gearworks](https://github.com/GarryBGoode/py_gearworks) — involute gears for part scripts (Apache-2.0)
 - [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer) — printer dimensions for the optional printer profiles (AGPL-3.0; facts only, no files copied)
 - [matplotlib](https://matplotlib.org) and [NumPy](https://numpy.org) — renders, sections, check math
 - [Model Context Protocol](https://modelcontextprotocol.io) and its [Python SDK](https://github.com/modelcontextprotocol/python-sdk) (MIT)

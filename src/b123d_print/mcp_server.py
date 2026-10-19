@@ -1126,7 +1126,8 @@ Work in these steps:
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a comment on its source and accuracy). Mating features get CLEARANCE (0.2 mm
    default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
-   HOLE_COMP_H). Model in print orientation, bed at Z=0.
+   HOLE_COMP_H). Model in print orientation, bed at Z=0. Threads, screws, inserts, gears and
+   V-slot parts: use bd_warehouse and py_gearworks, kept to sizes that print (the rules below).
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.
