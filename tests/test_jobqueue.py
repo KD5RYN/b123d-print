@@ -73,3 +73,15 @@ def test_cancel_stops_running_builds(tmp_path, worker):
 def test_health_check(tmp_path, worker):
     assert jobqueue.main(worker, 1, check=True) == 0
     assert jobqueue.main(tmp_path / "nothing", 1, check=True) == 1
+
+
+def test_cancel_before_the_build_starts(tmp_path):
+    """A build claimed before a cancel never starts its process (the race the cancel test hit)."""
+    from b123d_print import sandbox
+
+    script = part(tmp_path, "while True:\n    pass\n")
+    epoch = sandbox.current_epoch()
+    sandbox.kill_all()  # the cancel lands between claiming the job and starting its process
+    t0 = time.monotonic()
+    res = sandbox.run_job({"op": "build", "script": str(script)}, tmp_path / "ws", script.parent / "out", 60, epoch=epoch)
+    assert not res["ok"] and "cancelled" in res["error"] and time.monotonic() - t0 < 5

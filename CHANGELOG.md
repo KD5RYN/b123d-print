@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — unreleased
+
+**Fixed:** a server shutdown that arrived just after a build was claimed but before its process
+started no longer lets that build run on until its timeout (also fixes a flaky CI test).
+
 ## 0.3.1 — 2026-10-18
 
 **Bringing parts home from a remote server.** Over HTTP and SSH the server is a workbench, not

@@ -91,10 +91,11 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
     slots = threading.Semaphore(max_jobs)
     print(f"b123d-print worker: queue {queue}, {max_jobs} job(s) at once, sandbox: {sandbox.describe()}", file=sys.stderr)
 
-    def run(running: Path) -> None:
+    def run(running: Path, epoch: int) -> None:
         try:
             spec = json.loads(running.read_text(encoding="utf-8"))
-            res = sandbox.run_job(spec["job"], Path(spec["workspace"]), Path(spec["out_dir"]), float(spec["timeout"]))
+            res = sandbox.run_job(spec["job"], Path(spec["workspace"]), Path(spec["out_dir"]), float(spec["timeout"]),
+                                  epoch=epoch)
         except Exception as e:  # never leave the front waiting
             res = {"ok": False, "error": f"worker: {type(e).__name__}: {e}"}
         _write(running.with_suffix(".result"), res)
@@ -122,7 +123,7 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
                 except OSError:
                     slots.release()
                     continue
-                threading.Thread(target=run, args=(running,), daemon=True).start()
+                threading.Thread(target=run, args=(running, sandbox.current_epoch()), daemon=True).start()
             if now - last_sweep > 60:  # results nobody collected (the front restarted)
                 last_sweep = now
                 for p in queue.glob("*.result"):
