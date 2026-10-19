@@ -85,12 +85,13 @@ def test_mcp_prompts_and_resources_documented(server):
     assert documented == registered, "resources table vs registered resources and resource templates"
 
 
-def test_skill_lists_every_tool_and_prompt(server):
-    """The Claude Code skill names the tools and prompts too; keep it complete."""
-    tools, prompts, _ = server
-    skill = code_names((ROOT / "plugin/skills/cad-parts/SKILL.md").read_text(encoding="utf-8"))
-    missing = {t.name for t in tools} | {p.name for p in prompts}
-    assert not (missing - skill), f"plugin/skills/cad-parts/SKILL.md does not mention {missing - skill}"
+def test_skill_points_to_the_guide():
+    """The Claude plugin's skill is a thin pointer to the shared workflow guide. It need not list
+    every tool: clients get the full tool list from the server, docs/using/tools.md must document
+    each one (test above), and plugin/ changes wait for the Claude directory's review of each
+    plugin version, so a new tool must not have to touch plugin/."""
+    skill = (ROOT / "plugin/skills/cad-parts/SKILL.md").read_text(encoding="utf-8")
+    assert "b123d-print://guide" in skill
 
 
 def _flags(parser: argparse.ArgumentParser) -> set[str]:

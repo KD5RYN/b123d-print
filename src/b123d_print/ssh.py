@@ -39,7 +39,7 @@ from .config import FORMATS, load_settings, parse_formats
 KEY_RE = re.compile(r"^(?P<type>(?:ssh|ecdsa|sk)-[\w@.-]+)\s+(?P<blob>[A-Za-z0-9+/]+={0,3})(?:\s+(?P<comment>.*))?$")
 WORKSPACE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 PART_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")  # = cli.NAME_RE
-SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png"}
+SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb"}
 MARK = "ssh-serve"  # how setup-ssh recognizes its own lines
 
 

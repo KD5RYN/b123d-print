@@ -28,7 +28,8 @@ BED = (Align.CENTER, Align.CENTER, Align.MIN)
 TOP = (Align.CENTER, Align.CENTER, Align.MAX)  # cutters that open on Z=0 and go down
 
 # ISO 273 medium clearance holes; ISO 4762 socket head (head d, head height); ISO 10642 / ISO 7046
-# countersunk head d; ISO 4032 hex nut (across flats, thickness). mm.
+# countersunk head d; ISO 4032 hex nut (across flats, thickness). mm. screw_hole reads the screw
+# sizes from bd_warehouse's tables when it has them (_screw); these are the fallback.
 SCREW = {
     "M2": {"clearance": 2.4, "head_d": 3.8, "head_h": 2.0, "csk_d": 3.8, "nut_af": 4.0, "nut_h": 1.6},
     "M2.5": {"clearance": 2.9, "head_d": 4.5, "head_h": 2.5, "csk_d": 4.7, "nut_af": 5.0, "nut_h": 2.0},
@@ -42,11 +43,27 @@ SCREW = {
 SNAP_STRAIN = {"pla": (0.04, 0.08), "abs": (0.07, 0.07), "nylon": (0.04, 0.15)}
 
 
+COARSE = {"M2": "M2-0.4", "M2.5": "M2.5-0.45", "M3": "M3-0.5", "M4": "M4-0.7", "M5": "M5-0.8", "M6": "M6-1"}
+
+
 def _screw(size: str) -> dict:
+    """The SCREW row for a size, with the clearance hole and the head sizes read from bd_warehouse's
+    fastener tables (ISO 4762 socket head, ISO 10642 countersunk) where it has them."""
+    key = size.upper()
+    if key not in SCREW:
+        raise ValueError(f"screw size {size!r}: one of {', '.join(SCREW)}")
+    row = dict(SCREW[key])
     try:
-        return SCREW[size.upper()]
-    except KeyError:
-        raise ValueError(f"screw size {size!r}: one of {', '.join(SCREW)}") from None
+        from bd_warehouse.fastener import CounterSunkScrew, SocketHeadCapScrew
+
+        shc = SocketHeadCapScrew(COARSE[key], 10, "iso4762", simple=True)
+        row.update(clearance=shc.clearance_hole_diameters["Normal"], head_d=round(shc.head_diameter, 2),
+                   head_h=round(shc.head_height, 2))
+        csk = CounterSunkScrew(COARSE[key], 10, "iso10642", simple=True)
+        row.update(csk_d=round(csk.head_diameter, 2))
+    except Exception:  # noqa: BLE001 - no bd_warehouse, or a size its tables lack: the table above
+        pass
+    return row
 
 
 # ---------------------------------------------------------------------------------------------
@@ -79,8 +96,9 @@ def demo_teardrop_hole() -> Part:
 
 def screw_hole(size: str = "M3", depth: float = 10.0, head: str = "counterbore", hole_comp: float = 0.0,
                head_depth: float | None = None) -> Part:
-    """A vertical screw clearance hole (ISO 273 medium) with a counterbore for a socket head
-    (ISO 4762; head d + 1 mm, head height + 0.4 mm deep) or a 90-degree countersink (ISO 10642).
+    """A vertical screw clearance hole (ISO 273 normal) with a counterbore for a socket head
+    (ISO 4762; head d + 1 mm, head height + 0.4 mm deep) or a 90-degree countersink (ISO 10642),
+    sized from bd_warehouse's fastener tables (the SCREW table without it).
     Opens on Z=0, goes down `depth`. head: "counterbore", "countersink" or "none". Open the head
     side upward in print orientation; on the bed side the counterbore floor is a ceiling (print a
     sacrificial bridge, BP-O5, or turn the part)."""
@@ -422,13 +440,16 @@ RECIPES = {r.name: r for r in [
 """, ["[BP-H3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) teardrop roof at 45 degrees",
       "[BP-H4](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) horizontal and vertical holes need separate compensation"]),
     Recipe("screw_hole", "Counterbore and countersink", [screw_hole], demo_screw_hole, """
-- Clearance hole ISO 273 medium (M3: 3.4 mm). Counterbore: socket head (ISO 4762) diameter + 1 mm,
-  head height + 0.4 mm deep. Countersink: 90 degrees to the ISO 10642 head diameter + 0.4 mm.
+- Sizes from bd_warehouse's fastener tables (`SocketHeadCapScrew`, `CounterSunkScrew`), else the
+  table in the recipe: clearance hole ISO 273 normal (M3: 3.4 mm); counterbore: the ISO 4762 head
+  diameter + 1 mm, head height + 0.4 mm deep; countersink: 90 degrees to the ISO 10642 head
+  diameter + 0.4 mm. bd_warehouse's own `ClearanceHole` / `CounterBoreHole` take no hole
+  compensation; this recipe adds `hole_comp` once.
 - Add HOLE_COMP to the diameters (`hole_comp=d.HOLE_COMP`).
 - Open the head upward in print orientation. A counterbore opening downward is a ceiling: print it
   over a one-layer sacrificial bridge and drill it out (BP-O5, provisional) or turn the part.
 - Screws into plastic: give the boss 3-4 perimeters (BP-T8).
-""", ["ISO 273 (clearance holes), ISO 4762 (socket head cap screws), ISO 10642 (countersunk heads)",
+""", ["ISO 273 (clearance holes), ISO 4762 (socket head cap screws), ISO 10642 (countersunk heads), via bd_warehouse.fastener",
       "[BP-O5, BP-T8](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"]),
     Recipe("nut_trap", "Hex nut trap", [nut_trap], demo_nut_trap, """
 - Across flats + 0.2 mm total (0.1 per side) holds an ISO 4032 nut captive (BP-T7; up to +0.3 on a

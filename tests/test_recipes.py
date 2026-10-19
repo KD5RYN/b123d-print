@@ -57,7 +57,8 @@ def test_sizes_follow_the_tables():
     bb = nut.bounding_box()
     assert bb.size.Y == pytest.approx(5.7, abs=1e-3)  # across flats 5.5 + 0.2 total (BP-T7)
     hole = R.screw_hole("M3", 10, "counterbore", hole_comp=0.2)
-    assert hole.bounding_box().size.X == pytest.approx(6.7, abs=1e-3)  # 5.5 head + 1 + hole_comp
+    assert hole.bounding_box().size.X == pytest.approx(R._screw("M3")["head_d"] + 1.2, abs=1e-3)  # head + 1 + hole_comp
+    assert R._screw("M3")["head_d"] == pytest.approx(5.68, abs=0.2) and R._screw("M3")["clearance"] == 3.4
     mag = R.magnet_pocket(10, 3, fit=0.05)
     assert mag.bounding_box().size.X == pytest.approx(10.1) and mag.bounding_box().size.Z == pytest.approx(3.1)
     lid = R.lid_with_lip(50, 35, wall=2, clearance=0.2)

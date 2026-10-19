@@ -257,7 +257,7 @@ def export_3mf(part: Part, path: Path) -> Path:
 
 
 def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf", "png")) -> list[Path]:
-    """Write <name>.<fmt> into `out` for each of formats: step, stl, 3mf, png (6-view preview)."""
+    """Write <name>.<fmt> into `out` for each of formats: step, stl, 3mf, png (6-view preview), glb."""
     out.mkdir(parents=True, exist_ok=True)
     files = []
     if "step" in formats:
@@ -270,6 +270,10 @@ def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf"
         files.append(export_3mf(part, out / f"{name}.3mf"))
     if "png" in formats:
         files.append(render(part, out / f"{name}.png", name))
+    if "glb" in formats:
+        from .viewer import write_glb
+
+        files.append(write_glb([(part, None, name)], out / f"{name}.glb"))
     return files
 
 

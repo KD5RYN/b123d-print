@@ -33,7 +33,7 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | Recipe | What | Functions | Summary |
 | --- | --- | --- | --- |
 | `teardrop_hole` | Teardrop / flat-roof horizontal hole | `teardrop_hole` | A horizontal hole along Y, centered on the origin, that prints without support: a circle |
-| `screw_hole` | Counterbore and countersink | `screw_hole` | A vertical screw clearance hole (ISO 273 medium) with a counterbore for a socket head |
+| `screw_hole` | Counterbore and countersink | `screw_hole` | A vertical screw clearance hole (ISO 273 normal) with a counterbore for a socket head |
 | `nut_trap` | Hex nut trap | `nut_trap` | A captive hex nut pocket (ISO 4032 across flats + 2 x clearance; 0.1 per side, BP-T7) with |
 | `magnet_pocket` | Magnet pocket | `magnet_pocket` | A round magnet pocket: diameter d + 2 x fit (per side; the user's press_fit, BP-F1) plus |
 | `snap_arm` | Snap-fit cantilever | `snap_arm`, `snap_strain`, `snap_length` | A cantilever snap arm lying flat (it bends in XY, along the layers, BP-N1), tapered from |
@@ -50,6 +50,8 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 The printing numbers come from the [sourced design rules](../BEST_PRACTICES.md) (holes BP-H,
 overhangs BP-O, fits BP-F, snap fits and hinges BP-N, screws and nuts BP-T, text BP-X, ribs
 BP-R, bed edges BP-B), and for screw and nut sizes from ISO 273 (clearance holes), ISO 4762
-(socket head cap screws), ISO 10642 (countersunk screws) and ISO 4032 (hex nuts). The snap-arm
+(socket head cap screws), ISO 10642 (countersunk screws) and ISO 4032 (hex nuts); the screw
+hole recipe reads its sizes from bd_warehouse's fastener tables (see
+[Threads, fasteners and gears](threads-fasteners-gears.md)). The snap-arm
 strain formulas are from Bayer MaterialScience's *Snap-Fit Joints for Plastics* design guide;
 the allowable strains are provisional (one source, BP-N4): say they are estimates.

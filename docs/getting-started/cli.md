@@ -45,6 +45,7 @@ b123d-print check
 | `recipes [name]` | list the [recipe library](../using/recipes.md), or print one recipe's code, example, printing notes and sources |
 | `faces <part> [--variant v] [--part name] [--highlight ID] [--json]` | the part's flat faces with their ids, holes and sides, for a face template; `--highlight` draws one in red ([fit-test templates](../using/templates.md)) |
 | `template <part> --slice XY:3 \| --face ID \| --crop x,y,z:sx,sy,sz [--thickness t] [--no-label] [--no-base] [--name id] [--variant v] [--part name] [--formats f]` | make a [fit-test template](../using/templates.md), write it to `out/` and check it; exit code 1 if a check fails |
+| `view <part> [--variant v] [--parts a,b] [--assembly] [--open]` | write `out/<part>_view.html`, a self-contained [3D view](../using/formats.md#3d-view-in-the-browser) of the part (viewer and model inline: opens offline, from `file://`); the printable parts on the bed, or `--assembly`; `--open` also opens the browser |
 | `styles [name]` | list the [design styles](../using/design-review.md#custom-styles) and where each comes from (workspace, user, built-in), or show one with `based_on` applied |
 | `printer list [words]` | search the printer profiles |
 | `printer show [name]` | show a printer (default: the active one) |

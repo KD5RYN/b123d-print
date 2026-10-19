@@ -27,7 +27,7 @@ sandbox. `upload_reference` and `b123d-print push` now also take PNG, JPEG, TIFF
 **Recipe library** ([docs](https://kd5ryn.github.io/b123d-print/using/recipes/)): twelve tested
 build123d recipes in `b123d_print.recipes`, served by the `recipe` tool, the
 `b123d-print://recipes` resources and `b123d-print recipes`: teardrop / flat-roof holes,
-counterbores and countersinks, hex nut traps, magnet pockets, snap arms with strain sizing,
+counterbores and countersinks (sized from bd_warehouse's fastener tables), hex nut traps, magnet pockets, snap arms with strain sizing,
 living hinges, print-in-place hinges, lids with a lip, embossed and debossed text, a fillet-safe
 bed chamfer, zip-tie and cable slots, ribs and gussets. Each has printing notes and sources, and
 its demo part is built and passes `check` in the tests.
@@ -76,6 +76,50 @@ examples including a 1.5 m curved trim. Sourced.
   of inventing variants, read the timing report, consider a script per piece.
 - `tools/bench_multi_piece.py` times build + render + export of a six-piece part with and
   without the cache.
+
+**Threads, fasteners and gears.** Part scripts can now import two build123d part libraries
+([docs](https://kd5ryn.github.io/b123d-print/using/threads-fasteners-gears/)):
+[bd_warehouse](https://github.com/gumyr/bd_warehouse) 0.4.0 (Apache-2.0: threads including
+bottle threads, screws, nuts, heat-set inserts and their hole sizes, gears and worms, OpenBuilds
+V-slot parts) and [py_gearworks](https://github.com/GarryBGoode/py_gearworks) 0.0.24 (Apache-2.0:
+spur, helical, herringbone and bevel gears, racks). Both build inside the sandbox unchanged.
+- A sourced guide: when to model a thread (M6 and up, coarse, upright, the user's clearance,
+  faded ends) and when to use inserts, nuts or pilot holes instead; how bd_warehouse's holes
+  meet `HOLE_COMP`, so a hole is compensated once (`InsertHole` cuts its table's drill size,
+  0.19 mm over CNC Kitchen's 5.6 mm M4 hole); gears (module, backlash, profile shift, helical
+  and herringbone, orientation, materials); mounting to 2020 V-slot.
+- New examples: `jar_lid` (a 38-400 bottle thread), `insert_bracket` (M4 heat-set inserts and
+  counterbored screw holes from bd_warehouse's tables), `gear_pair` (a meshed py_gearworks pair
+  with profile shift and a backlash `Gap` check) and `vslot_mount` (a plate keyed into 2020
+  V-slot, with the rail and T-nuts as stand-ins).
+- The workflow rules (`AGENTS.md`) and the `design_part_from_photos` prompt say which library to
+  use for what, and to keep modeled threads to sizes that print.
+- bd_vslot is not included: its rails fail to build with build123d 0.13.
+
+**View in 3D**: turn a part around in the browser before printing, without a slicer
+([docs](https://kd5ryn.github.io/b123d-print/using/formats/#3d-view-in-the-browser)).
+- `export` makes a 3D view per variant (`view="print"`, the default: the printable parts on the
+  bed; `"assembly"`: `assembly(d)` with its stand-ins; `"none"`). Over HTTP it returns a signed
+  **view link** (`/view/...`: no token, bound to the workspace, expires with the download links),
+  which `download_part` lists too; locally it writes a self-contained `out/<name>_view.html`
+  (viewer and model inline: opens offline from `file://`). New CLI command `b123d-print view
+  <part>` (`--assembly`, `--variant`, `--parts`, `--open`).
+- The viewer: orbit, pan and zoom; the pieces listed with their sizes, each one to show or hide;
+  the bed grid at Z = 0; the overall size and extent in mm and a bounding box; a section plane
+  across X, Y or Z; iso, top, front and right views.
+- Security: the view page is one static file with a strict Content-Security-Policy (scripts and
+  styles from the server only, no inline script, `connect-src 'self'`, no framing),
+  `nosniff`, `no-referrer`; the model is served as `model/gltf-binary`; piece names are shown as
+  text; view signatures have their own purpose and never open other links (and the reverse).
+  The offline HTML allows only its own inline scripts, by hash, and no network.
+- New export format **`glb`** (binary glTF: one named, colored node per piece), for web and 3D
+  apps; not in the default set (`all` now includes it).
+- The viewer library, [three.js](https://threejs.org) r186 (MIT), is vendored in the package
+  (640 KB, 160 KB gzipped): the server and the browser need no internet. Its license notice heads
+  the bundle, ships as `three-LICENSE.txt` (listed in `license-files`) and travels inside every
+  view HTML; `tools/vendor_viewer.py` rebuilds it from the npm tarball (integrity-checked) and
+  records its provenance. `THIRD_PARTY.md` and the credits page list it.
+- `AGENTS.md`: offer the 3D view after an export.
 
 ## 0.3.3 — 2026-10-19
 

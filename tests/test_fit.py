@@ -95,7 +95,7 @@ def test_counterbore_and_clearance_are_one_bore():
 
     p = Box(20, 20, 6, align=BED) - Pos(0, 0, 6) * screw_hole("M3", 10)
     (b,) = bores(p)
-    assert b["d"] == pytest.approx(3.4) and sorted(b["ds"]) == pytest.approx([3.4, 6.5])
+    assert b["d"] == pytest.approx(3.4) and sorted(b["ds"]) == pytest.approx([3.4, 6.68], abs=0.05)
 
 
 def test_joint_pairs_use_their_own_clearance():

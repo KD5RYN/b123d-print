@@ -10,6 +10,10 @@ Zip links (`download_part`) are  <base>/zip/<workspace>/<expires>.<signature>/<p
 with the purpose "zip" and the filter in the signature: one opens a zip of that one part (script,
 out/, ref/; see handoff.py), filtered as signed, until it expires.
 
+View links (`export`'s 3D view) are  <base>/view/<workspace>/<expires>.<signature>/<part>/<stem>
+with the purpose "view" over "<part>/<stem>": the same token opens the viewer page there and the
+model at .../<stem>.glb, which must be <parts_dir>/<part>/out/<stem>.glb (servable); nothing else.
+
 Upload links (`upload_reference`) are the same with /upload/ and a signature over a purpose
 ("put" or "put-overwrite") as well: a PUT to one stores one reference file in
 <parts_dir>/<part>/ref/ (refs.store), until it expires.
@@ -30,7 +34,8 @@ from urllib.parse import quote
 ROOT_WS = "_"  # stands for the shared root workspace (no valid workspace name starts with "_")
 
 TYPES = {".3mf": "model/3mf", ".stl": "model/stl", ".step": "model/step", ".stp": "model/step",
-         ".png": "image/png", ".json": "application/json", ".zip": "application/zip"}
+         ".png": "image/png", ".json": "application/json", ".zip": "application/zip",
+         ".glb": "model/gltf-binary"}
 
 
 def derive_secret(token: str | None, explicit: str | None = None) -> bytes:
@@ -76,6 +81,18 @@ def sign_zip(secret: bytes, workspace: str, part: str, query: str, ttl: float, n
 def verify_zip(secret: bytes, workspace: str, token: str, part: str, query: str, now: float | None = None) -> None:
     """Like verify(), for a zip link: 404 if not signed for exactly this part and filter, 410 once expired."""
     verify(secret, workspace, token, f"{part}.zip?{query}", now, purpose="zip")
+
+
+def sign_view(secret: bytes, workspace: str, part: str, stem: str, ttl: float, now: float | None = None) -> tuple[str, int]:
+    """URL path ("/view/...") of the 3D view of <parts_dir>/<part>/out/<stem>.glb, and its expiry."""
+    expires = int((now if now is not None else time.time()) + ttl)
+    sig = _sig(secret, workspace, f"{part}/{stem}", expires, "view")
+    return f"/view/{workspace}/{expires}.{sig}/{quote(part)}/{quote(stem)}", expires
+
+
+def verify_view(secret: bytes, workspace: str, token: str, part: str, stem: str, now: float | None = None) -> None:
+    """Like verify(), for a view link: 404 unless signed for exactly this part and model, 410 once expired."""
+    verify(secret, workspace, token, f"{part}/{stem}", now, purpose="view")
 
 
 class LinkError(Exception):
