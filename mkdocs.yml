@@ -67,6 +67,7 @@ nav:
       - Remixing a part: using/remix.md
       - Design review: using/design-review.md
       - Fit-test templates: using/templates.md
+      - Threads, fasteners and gears: using/threads-fasteners-gears.md
   - Writing part scripts:
       - The part script: scripts/convention.md
       - Checks API: scripts/checks-api.md

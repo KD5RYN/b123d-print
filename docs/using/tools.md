@@ -3,6 +3,9 @@
 What the `b123d-print-mcp` server offers. The full descriptions the model sees are in the
 [Reference](../reference.md#mcp-server), generated from the server itself.
 
+Part scripts written with these tools can use build123d, bd_warehouse (threads, fasteners,
+holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fasteners-gears.md).
+
 ## Tools
 
 | Tool | What it does |
