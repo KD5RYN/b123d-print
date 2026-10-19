@@ -136,9 +136,11 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02, size: str = "
         n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
         shade = 0.35 + 0.65 * np.abs(n @ light)  # two-sided
         # color: any matplotlib color, or one RGB row per triangle
-        rgb = np.asarray(color, dtype=float) if isinstance(color, np.ndarray) else np.array(matplotlib.colors.to_rgb(color))
+        # (a color with alpha, e.g. "#9aa0a640", draws see-through)
+        rgba = None if isinstance(color, np.ndarray) else matplotlib.colors.to_rgba(color)
+        rgb = np.asarray(color, dtype=float) if rgba is None else np.array(rgba[:3])
         all_faces.append(faces)
-        all_colors.append(np.c_[shade[:, None] * rgb, np.ones_like(shade)])
+        all_colors.append(np.c_[shade[:, None] * rgb, np.full_like(shade, 1.0 if rgba is None else rgba[3])])
     if not all_faces:
         raise ValueError("nothing to render (empty part)")
     faces = np.concatenate(all_faces)
@@ -152,7 +154,9 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02, size: str = "
     fig.suptitle(f"{title}   —   {size[0]:.2f} × {size[1]:.2f} × {size[2]:.2f} mm (X×Y×Z)", fontsize=14)
     for i, (name, elev, azim, hidden) in enumerate(VIEWS):
         ax = fig.add_subplot(2, 3, i + 1, projection="3d")
-        ax.add_collection3d(Poly3DCollection(faces, facecolors=colors, edgecolors=colors, linewidths=0.3))
+        edges = colors.copy()
+        edges[edges[:, 3] < 1, 3] = 0.0  # see-through faces: no edge lines (they would show every triangle)
+        ax.add_collection3d(Poly3DCollection(faces, facecolors=colors, edgecolors=edges, linewidths=0.3))
         ax.set_proj_type("ortho")
         ax.view_init(elev, azim)
         for setlim, c in zip((ax.set_xlim, ax.set_ylim, ax.set_zlim), ctr):

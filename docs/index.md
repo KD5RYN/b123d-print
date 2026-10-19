@@ -27,6 +27,13 @@ Or [remix](using/remix.md) a model you downloaded (STL, 3MF or STEP) and change 
   flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
   not printed yet.)
 
+Before a long print, test the fit with a [fit-test template](using/templates.md): a thin, quick print
+cut from the real part.
+
+- *"Make a fit-test template of the mounting face so I can check the hole pattern."* The
+  assistant shows you the face in red, asks you to confirm, and gives you a 1.2 mm plate with the
+  part's exact holes: minutes to print instead of hours.
+
 And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
 part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
 screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
@@ -83,6 +90,9 @@ framework.
 - **[Remix](using/remix.md)** — start from someone else's STL, 3MF or STEP: `import_model` makes
   a mesh a solid (coplanar triangles merged), the checks tell the original's problems from the
   ones the remix added, and a before/after view shows the change.
+- **Fit-test templates** — a quick thin print of a face, a slice or a region of the real part
+  (same holes and clearances) to check the hole pattern and the fits before the full print
+  ([fit-test templates](using/templates.md)).
 - **The workflow, model-neutral** — [MCP prompts](using/tools.md#prompts) plus an
   [`AGENTS.md`](scripts/rules.md) any agent can read. The rules come from real prints; one exists
   because a part broke through a 0.05 mm skin that no render showed.

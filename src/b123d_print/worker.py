@@ -42,12 +42,14 @@ from b123d_print.project import (  # noqa: E402
     printables,
     run_checks,
     variants,
+    write_template,
 )
 from b123d_print import remix  # noqa: E402
 import scipy.sparse.csgraph  # noqa: E402,F401  (import_model's mesh repair, loaded before the guard)
 from b123d_print.render import render, report, section_view, side_by_side  # noqa: E402
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 from b123d_print import metrics  # noqa: E402
+from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (
@@ -203,6 +205,11 @@ class _OnlyParts:
             if views is None:
                 raise AttributeError(attr)
             return lambda d: [v for v in views(d) if v.parts and set(v.parts) <= set(self._names)]
+        if attr == "templates":
+            tf = getattr(self._mod, "templates", None)
+            if tf is None:
+                raise AttributeError(attr)
+            return lambda d: [t for t in tf(d) if (t.part or "part") in self._names]
         return getattr(self._mod, attr)
 
     def build(self, d=None):
@@ -305,6 +312,23 @@ def do(job: dict) -> dict:
             raise ValueError("this part is not a remix: build() loads nothing with import_model and the script has no original(d)")
         r = before_after(orig, {(n or "part"): p for n, p in parts.items()}, out, tag, size)
         return {"variant": k or "standard", **r}
+    if op == "faces":
+        from b123d_print import templates as tp
+
+        pname, part = tp.pick_part(printables(mod, d), job.get("part"))
+        res = {"variant": k or "standard", "part": pname, **tp.list_faces(part)}
+        if job.get("highlight") is not None:
+            face, fid = tp.find_face(part, job["highlight"])
+            img = out / f"{tag}{'_' + pname if pname != 'part' else ''}_face{fid}{small}.png"
+            res["image"] = str(tp.highlight(part, [face], img, f"{tag}: face {fid} (red)", size=size))
+            res["highlight"] = fid
+        return res
+    if op == "template":
+        from b123d_print import templates as tp
+
+        spec = tp.Template(**{f: v for f, v in job["spec"].items() if v is not None})
+        fmts = parse_formats(job["formats"]) if job.get("formats") else settings.formats
+        return write_template(script, k, printables(mod, d), spec, out, fmts, settings)
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
         src = _OnlyParts(mod, [n.strip() for n in job["parts"].split(",") if n.strip()]) if job.get("parts") else mod

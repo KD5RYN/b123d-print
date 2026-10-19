@@ -32,6 +32,13 @@ Or [remix](https://kd5ryn.github.io/b123d-print/using/remix/) a model you downlo
   flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
   not printed yet.)
 
+Before a long print, test the fit with a [fit-test template](https://kd5ryn.github.io/b123d-print/using/templates/): a thin, quick print
+cut from the real part.
+
+- *"Make a fit-test template of the mounting face so I can check the hole pattern."* The
+  assistant shows you the face in red, asks you to confirm, and gives you a 1.2 mm plate with the
+  part's exact holes: minutes to print instead of hours.
+
 And the everyday things: a spacer, a knob, a bracket, a cable clip, a replacement for a broken
 part you can measure. Then keep talking to it: *"make it 5 mm taller"*, *"add a hole for an M4
 screw"*, *"the lid is too tight"*. Every dimension stays a named number in a short
@@ -122,6 +129,9 @@ It is not a general CAD framework.
   (coplanar triangles merged), the checks tell the original's problems from the ones the remix
   added, and a before/after view shows the change
   ([remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/)).
+- **Fit-test templates** — a quick thin print of a face, a slice or a region of the real part
+  (same holes and clearances) to check the hole pattern and the fits before the full print
+  ([fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/)).
 - **Design review** — after the print checks pass, the assistant reviews the part for a style
   you pick (functional, modern, least cost, rugged/outdoor, soft/handheld): rough filament and
   time estimates, supports, edge treatment, layer steps, water traps, and concrete suggestions
@@ -148,7 +158,7 @@ Not needed for most people. To keep the parts on a home server and design from a
 | --- | --- |
 | **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Advanced** | [Which mode?](https://kd5ryn.github.io/b123d-print/advanced/) · [Remote over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) |
-| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) |
+| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) · [Fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/) |
 | **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |
 | **More** | [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |
 

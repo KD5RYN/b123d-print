@@ -184,11 +184,11 @@ def test_env_vars_documented():
 
 
 def test_check_api_documented():
-    """Each check class (and View) has a section in checks-api.md listing exactly its arguments."""
+    """Each check class (and View, Template) has a section in checks-api.md listing exactly its arguments."""
     import b123d_print as bp
 
     text = page("scripts/checks-api.md")
-    for cls in (bp.Wall, bp.Overhang, bp.ThinFeature, bp.Holes, bp.BedEdge, bp.Gap, bp.Probe, bp.Overlap, bp.Fit, bp.View):
+    for cls in (bp.Wall, bp.Overhang, bp.ThinFeature, bp.Holes, bp.BedEdge, bp.Gap, bp.Probe, bp.Overlap, bp.Fit, bp.View, bp.Template):
         assert f"## `{cls.__name__}`" in text, f"no section for {cls.__name__} in docs/scripts/checks-api.md"
         documented = table_keys(text, f"`{cls.__name__}`")
         assert documented == {f.name for f in dataclasses.fields(cls)}, f"{cls.__name__} arguments"

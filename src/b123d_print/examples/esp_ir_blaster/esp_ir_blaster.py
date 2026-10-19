@@ -15,7 +15,8 @@ Layout (assembled, Z up = the face that points at the equipment):
 - Board: M3 screws into two flared standoffs at its diagonal holes, two small flared pads under
   the other corners (optional L-shaped locating lips, off by default).
 
-Print: base on its floor; lid outer face down.
+Print: base on its floor; lid outer face down. Fit tests first: the templates (export writes
+esp_ir_blaster_base_template_standoffs and esp_ir_blaster_lid_template_screws).
 """
 
 from dataclasses import dataclass
@@ -38,7 +39,7 @@ from build123d import (
     offset,
 )
 
-from b123d_print import View, Wall, hole_comp
+from b123d_print import Template, View, Wall, hole_comp
 
 MIN = Align.MIN
 CEN = Align.CENTER
@@ -340,6 +341,16 @@ def views(d: Dims):
         View("YZ", d.LED_X, "through the LED"),
         View("YZ", d.RX_X, "through the receiver"),
         View("XY", d.PCB_TOP + 4, "plan 4 mm above the board"),
+    ]
+
+
+def templates(d: Dims):
+    """Fit tests to print before the box: the top 1.2 mm of the standoffs and lid posts (joined by
+    a thin base) to set the board on and check its holes; the lid's inner face to lay on the base
+    and check the four screw holes."""
+    return [
+        Template.slice("XY", d.PCB_Z - 0.6, part="base", name="standoffs"),
+        Template.face_of("top", part="lid", name="screws"),
     ]
 
 

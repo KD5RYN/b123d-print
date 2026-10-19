@@ -2,6 +2,29 @@
 
 ## 0.3.2 — unreleased
 
+**Fit-test templates.** A quick thin print cut from the real part, to check its size, hole
+pattern and mating fits before printing the whole part ([docs](https://kd5ryn.github.io/b123d-print/using/templates/)):
+- Three kinds: **slice** (the part between two planes, `XY`/`XZ`/`YZ`), **face** (one flat face
+  with its holes as a plate) and **crop** (the part inside a box). 1.2 mm thick by default; cut
+  from the part as built, so hole compensation and clearances are the part's.
+- Each is laid flat (template face down, centered), joined by a 1 mm base plate when it falls
+  apart into pieces (or a crop has little to stand on), labeled `<part> <id>` where there is room
+  (never through a feature; `label=False` for none), and checked like a part. A plane or box that
+  misses the part is a clear error.
+- MCP tools `list_faces` (flat faces with stable ids, normals, areas, round holes; `highlight`
+  draws one in red to confirm it with the user) and `make_template` (writes
+  `<name>_template_<id>.*`, a picture of where it comes from, the findings, download links over
+  HTTP); prompt `fit_test`. CLI: `b123d-print faces` and `b123d-print template --slice | --face |
+  --crop`.
+- Part scripts may define `templates(d)` (`Template.slice`, `Template.face_of`, `Template.crop`):
+  export writes them with every variant. The `esp_ir_blaster` example has two; the part template
+  has a commented one.
+- Python: `slice_template`, `face_template`, `crop_template`, `list_faces`.
+- The workflow rules (`AGENTS.md`), prompts and skill: offer a fit-test template before the full
+  print when a part mates with something or has a hole pattern, and confirm the face or region
+  with the user first.
+- `render` draws colors with alpha see-through (the highlight pictures).
+
 **Fixed:** a server shutdown that arrived just after a build was claimed but before its process
 started no longer lets that build run on until its timeout (also fixes a flaky CI test).
 

@@ -86,10 +86,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "download_part"},
+                     "download_part", "list_faces", "make_template"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
-    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review"},
+    expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
+                       "fit_test"},
            f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
@@ -139,6 +140,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
     await c.call_tool("export", {"name": "box", "formats": "3mf,png"})
+    await template_checks(c, pw, expect)
     await handoff_checks(c, pw, expect, mode)
 
     # compare parses the files in the sandbox, like a build
@@ -247,6 +249,43 @@ async def handoff_checks(c, pw, expect, mode: str) -> None:
            "download_part's resource link reads the same zip over MCP")
     res = await c.call_tool("download_part", {"name": "box", "variant": "nope"})
     expect(res.is_error and "no variant 'nope'" in text(res), "download_part refuses an unknown variant, listing them")
+
+
+async def template_checks(c, pw, expect) -> None:
+    """Fit-test templates: list_faces with a highlight picture, a slice, a face and a crop template
+    (files written, checked, over HTTP downloadable by their link), and a slice that misses."""
+
+    def on_disk(rel):
+        return pw is None or (pw / rel).exists()
+
+    res = await c.call_tool("list_faces", {"name": "box", "highlight": "bottom", "size": "small"})
+    t = text(res)
+    faces = json.JSONDecoder().raw_decode(t[t.index("{"):])[0] if "{" in t else {}  # over HTTP a download note follows
+    bottom = next((f for f in faces.get("planar", []) if f.get("side") == "bottom"), None)
+    expect(bottom is not None and bottom["holes"] and bottom["holes"][0]["d"] > 3 and images(res),
+           "list_faces: the bottom face with its hole, and the highlight picture" + ("" if bottom else f"\n{t[:1500]}"))
+    res = await c.call_tool("make_template", {"name": "box", "kind": "slice", "plane": "XY", "at": 1.0, "formats": "3mf,png"})
+    t = text(res)
+    ok = "box_template_xy1" in t and "Checks: PASSED" in t and "x 1.20 mm" in t and images(res)
+    expect(ok and on_disk("parts/box/out/box_template_xy1.3mf") and on_disk("parts/box/out/box_template_xy1_where.png"),
+           "make_template slice: a 1.2 mm template, checked, files and the where-picture" + ("" if ok else f"\n{t[:2000]}"))
+    m = re.search(r"parts/box/out/box_template_xy1\.3mf\s+(https?://\S+)", t)
+    if m:  # over HTTP: the template's own download link works without a token
+        async with create_mcp_http_client() as h:
+            r = await h.get(m.group(1))
+        expect(r.status_code == 200 and len(r.content) > 500 and (pw is None or
+               r.content == (pw / "parts/box/out/box_template_xy1.3mf").read_bytes()),
+               f"the template's download link serves the 3MF ({r.status_code})")
+    res = await c.call_tool("make_template", {"name": "box", "kind": "face", "face": "bottom", "formats": "stl", "label": False})
+    expect("box_template_face_bottom" in text(res) and "Label: none" in text(res) and on_disk("parts/box/out/box_template_face_bottom.stl"),
+           "make_template face: the bottom face as a plate, no label")
+    res = await c.call_tool("make_template", {"name": "box", "kind": "crop", "center": "10,10,4", "size": [12, 12, 20],
+                                              "formats": "3mf", "inline": False})
+    expect("box_template_crop_10_10_4" in text(res) and not images(res), "make_template crop (center as text, size as a list)")
+    res = await c.call_tool("make_template", {"name": "box", "kind": "slice", "plane": "XY", "at": 50})
+    expect("misses the part" in text(res), "a slice that misses the part is a clear error")
+    res = await c.call_tool("make_template", {"name": "box", "kind": "bend"})
+    expect(res.is_error and "slice" in text(res), "an unknown template kind is refused with the choices")
 
 
 class Recorder:

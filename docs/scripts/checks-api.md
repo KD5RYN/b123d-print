@@ -173,3 +173,23 @@ Not a check: a cross-section saved as a PNG with every export, returned by `view
 | `at` | — | position, mm |
 | `title` | `""` | caption |
 | `parts` | `None` | names from `build()` to include; default the assembly if there is one, else all parts |
+
+## `Template`
+
+Not a check either: a [fit-test template](../using/templates.md) written with every export,
+returned by `templates(d)`. Make one with `Template.slice(plane, at, ...)`,
+`Template.face_of(face, ...)` or `Template.crop(center, size, ...)`; keyword arguments as below.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `kind` | — | `"slice"`, `"face"` or `"crop"` (set by the constructors) |
+| `plane` | `"XY"` | slice: `"XY"` (`at` = Z), `"XZ"` (`at` = Y) or `"YZ"` (`at` = X) |
+| `at` | `0.0` | slice: where, mm; the slice is `thickness` thick, centered there (moved inward at the part's ends) |
+| `face` | `None` | face: an id from `list_faces`, a side (`"bottom"`, `"top"`, `"front"`, `"back"`, `"left"`, `"right"` or `"-Z"`, `"+X"`, ...: the largest face facing that way) or a point `(x, y, z)` on the face |
+| `center` | `(0, 0, 0)` | crop: the box's center, mm |
+| `size` | `(20, 20, 10)` | crop: the box's size, mm |
+| `thickness` | `1.2` | slice and face: mm |
+| `label` | `True` | engrave `"<part> <id>"`, your own text, or `False` for none; skipped where there is no room |
+| `base` | `True` | slice and crop: a 1 mm base plate joins separate pieces (and holds up a crop with little bed contact) |
+| `part` | `None` | which printable part (default: the only one) |
+| `name` | `""` | the template id in file names (default from the arguments: `xy3`, `face7`, `face_bottom`, `crop_10_0_5`) |

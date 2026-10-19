@@ -8,7 +8,8 @@ actually printed; several rules exist because a print failed without them.
 ## Tools
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
-`build_part`, `render_preview`, `section`, `check`, `export`). Otherwise use the CLI:
+`build_part`, `render_preview`, `section`, `check`, `export`, `list_faces`, `make_template`). Otherwise
+use the CLI:
 
 - `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
 - `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png]` or `b123d-print build <name>` —
@@ -16,6 +17,8 @@ Use the **b123d-print MCP server** tools if your client has them (`new_part`, `w
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
 - `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
 - `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
+- `b123d-print faces <name>` / `b123d-print template <name> --slice XY:3 | --face ID | --crop x,y,z:sx,sy,sz`
+  — list flat faces; make a fit-test template (see below)
 
 ## The part script
 
@@ -32,7 +35,8 @@ Use the **b123d-print MCP server** tools if your client has them (`new_part`, `w
    simple **stand-ins** for the things they mate with (board, sensor, screw). The overlap check
    uses it: nothing printed may intersect a stand-in.
 6. `views(d)` lists cross-sections saved with each export; `checks(d)` declares wall checks and
-   changes the automatic checks (see below).
+   changes the automatic checks (see below); `templates(d)` lists fit-test templates exported
+   with every variant (`Template.slice("XY", 3)`, `Template.face_of("bottom")`, `Template.crop(...)`).
 
 ## Print rules
 
@@ -245,6 +249,32 @@ Do all of this every time you change geometry, before telling the user the part 
    hole compensation applied, check results, print orientation and any supports needed. On a
    remote server, bring the part home first (`download_part`, see
    [Remote server](#remote-server-bring-the-part-home-required-last-step)) and say where it is.
+
+## Fit-test templates (before the full print)
+
+A template is a quick thin print (1.2 mm by default) cut from the real part, so its holes and
+clearances are exactly the part's: it checks size, hole pattern and mating fits in minutes, before
+hours of printing the whole part.
+
+- **Offer one** when the part mates with something (a board on standoffs, a lid on a box, a
+  bracket on screws in a wall) or has a hole pattern, and the full print is long or the fit
+  uncertain. Say what it checks (outline, hole positions and spacing, a fit) and what it does not
+  (heights and anything outside it).
+- **Kinds:** `slice` (plane `XY`/`XZ`/`YZ` at a Z/Y/X: the part between two planes, e.g. the top
+  of the standoffs), `face` (one flat face with its holes as a plate: a mounting face),
+  `crop` (the part inside a box: a corner, a clip, a boss). Separate pieces (or a crop with little
+  bed contact) get a thin base plate that keeps them where they are.
+- **Confirm the face or region with the user first:** `list_faces(name, highlight=<id or side>)`
+  shows the face in red; `make_template` returns the `_where.png` picture, the part with the
+  template's source in red. Ids come from `list_faces`; a side (`bottom`, `top`, ...) is the
+  largest face facing that way.
+- Templates are laid flat (template face down) and checked like a part; read the notes: a
+  template printed on its side or turned over checks hole positions and spacing, but hole sizes
+  only where it prints the way the part does. The label is engraved where there is room, never
+  through a feature.
+- Standard fit tests go in `templates(d)` so `export` writes them for every variant.
+- **Report:** the template's size, what it checks, how to use it (lay it on the board, try the
+  screws), its findings, and where the files are.
 
 ## Design review (after the print checks pass)
 

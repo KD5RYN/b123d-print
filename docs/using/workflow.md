@@ -28,7 +28,11 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    feature, and [the checks](checks.md) — and it fixes what fails.
 4. **A report** with the overall size, key dimensions, the clearance and hole compensation
    applied, check results, print orientation and any supports needed.
-5. **A design review, if you want one.** Once the checks pass, the model can review the part for
+5. **A fit test first, if it mates with something.** For a part that sits on a board, a wall or
+   another part, or has a hole pattern, the model offers a [fit-test template](templates.md): a
+   thin print of a face, slice or region of the real part, minutes instead of hours. It shows you
+   the face or region in red before making it.
+6. **A design review, if you want one.** Once the checks pass, the model can review the part for
    the style you chose (functional, modern, least cost, rugged, soft, or your own) and suggest
    changes with rough filament and time numbers. It changes nothing without your OK. See
    [Design review](design-review.md).

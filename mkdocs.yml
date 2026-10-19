@@ -65,6 +65,7 @@ nav:
       - Comparing parts: using/compare.md
       - Remixing a part: using/remix.md
       - Design review: using/design-review.md
+      - Fit-test templates: using/templates.md
   - Writing part scripts:
       - The part script: scripts/convention.md
       - Checks API: scripts/checks-api.md
