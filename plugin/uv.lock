@@ -53,7 +53,7 @@ wheels = [
 
 [[package]]
 name = "b123d-print"
-version = "0.3.2"
+version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "build123d" },
@@ -62,21 +62,21 @@ dependencies = [
     { name = "numpy" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/b5/2934addda0ee5f74ac07123611a02fb1f1587afa5fe4910dc558bbb3a2d5/b123d_print-0.3.2.tar.gz", hash = "sha256:c2310f1b0a6452b8a02a87a2e5b3d73cf640116e5c85a83a94fa9c4aa958c548", size = 220621, upload-time = "2026-10-19T03:52:27.921Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/f4/23661cfdbf975521f44922c51b7e97542e4309f5b27a01a9e32e7547afe8/b123d_print-0.3.3.tar.gz", hash = "sha256:b038b3e2051e563beae589b99162879138655b172ce120e30e3588460a290d24", size = 227539, upload-time = "2026-10-19T17:00:15.607Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/3a/583fd648c3e4782749931b6f5ec9b1f6ba4ba02c2dde4b13ba38d713d944/b123d_print-0.3.2-py3-none-any.whl", hash = "sha256:23188929037d0041aab863f0b28979e84eb2b3868222113cc57f56d269eab221", size = 240492, upload-time = "2026-10-19T03:52:26.329Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/fa/a66a9c4655c582888939a64756eb6e92d17712061da1eb27f5ed5337aba7/b123d_print-0.3.3-py3-none-any.whl", hash = "sha256:2eaa54e81f0736e7536afd0589845d3bfecb445217c744d6ce7869617af33c59", size = 248708, upload-time = "2026-10-19T17:00:13.996Z" },
 ]
 
 [[package]]
 name = "b123d-print-plugin"
-version = "0.3.2"
+version = "0.3.3"
 source = { virtual = "." }
 dependencies = [
     { name = "b123d-print" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "b123d-print", specifier = "==0.3.2" }]
+requires-dist = [{ name = "b123d-print", specifier = "==0.3.3" }]
 
 [[package]]
 name = "bd-materials"
