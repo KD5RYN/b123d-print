@@ -167,6 +167,25 @@ as a starting point, say so in the report, and never turn it into a default or a
   2.6–2.9 mm); print a test pair for anything that matters. [T6]
 - Captive hex nut pockets: across-flats + 0.2 mm total. [T7]
 
+**Threads, fasteners and gears: the libraries** ([guide](https://kd5ryn.github.io/b123d-print/using/threads-fasteners-gears/))
+
+- Use the libraries instead of drawing standard parts: `bd_warehouse.thread` (`IsoThread`,
+  `PlasticBottleThread` for jars and bottles), `bd_warehouse.fastener` (screw, nut and
+  `HeatSetNut` sizes), `bd_warehouse.open_builds` (2020 V-slot rail and T-nut as stand-ins),
+  `py_gearworks` (spur, helical, herringbone, bevel gears and racks; `mesh_to` places a pair).
+- Modeled threads: M6 and up, coarse pitch or bottle threads, axis on Z. Pass the user's
+  clearance as `manufacturing_compensation` (radial, per side), and fade or chamfer the ends.
+  Below M6, use an insert, a nut or a pilot hole. [T1]
+- Holes from bd_warehouse are compensated once. `ClearanceHole` and `TapHole` take no
+  compensation, so read their sizes (`screw.clearance_hole_diameters["Normal"]`) and cut them
+  with `+ HOLE_COMP`. `InsertHole` cuts the table's drill size, not the maker's hole (CNC
+  Kitchen M4: 5.79 vs 5.6), so cut the maker's size yourself. [H1, T2]
+- Gears: module ≥ 1 (1.5–2 better), backlash on each gear (0.1–0.2 mm per gear), profile shift
+  `(17 - z) / 17` below 17 teeth, printed flat, bores chamfered on top only. Put the meshed pair
+  in `assembly(d)` with a `Gap` check between them.
+- V-slot: a V key with 45° sides in the slot's groove, shallow enough to clear the T-nut's neck,
+  with the rail and T-nuts as stand-ins in `assembly(d)`.
+
 **Text, splitting and gluing**
 
 - Text: on top (XY) faces, ≥ 0.5 mm deep or high (a multiple of the layer height), strokes ≥ ~1 mm,

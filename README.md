@@ -188,7 +188,9 @@ works as an SSH or HTTP client. [Platforms and status](https://kd5ryn.github.io/
 b123d-print is a thin layer over [build123d](https://github.com/gumyr/build123d),
 [Open CASCADE Technology](https://dev.opencascade.org) (via [OCP](https://github.com/CadQuery/OCP)),
 [lib3mf](https://github.com/3MFConsortium/lib3mf), [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)'s
-printer data, [matplotlib](https://matplotlib.org), [NumPy](https://numpy.org), the
+printer data, [bd_warehouse](https://github.com/gumyr/bd_warehouse) and
+[py_gearworks](https://github.com/GarryBGoode/py_gearworks) for part scripts,
+[matplotlib](https://matplotlib.org), [NumPy](https://numpy.org), the
 [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) and [uv](https://github.com/astral-sh/uv).
 Details and redistribution notes: [THIRD_PARTY.md](THIRD_PARTY.md).
 
