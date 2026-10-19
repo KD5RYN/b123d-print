@@ -102,30 +102,24 @@ def write_glb(items, path: Path) -> Path:
     return path
 
 
-def view_items(mod, d, layout: str = "print", parts: list[str] | None = None) -> list:
-    """What a view shows: the printable parts on the bed (side by side, as render_preview lays
-    them out), only `parts` if given; or the assembly with its stand-ins."""
-    from .project import assembly, printables
+def view_items(pieces, layout: str = "print", parts=None) -> list:
+    """What a view shows, from a project.Pieces (so it shares the export's build cache): the
+    printable parts on the bed (side by side, as render_preview lays them out), only `parts`
+    (a list or "a,b") if given; or the assembly with its stand-ins."""
     from .render import side_by_side
 
     if layout == "assembly":
-        asm = assembly(mod, d)
+        asm = pieces.assembly()
         if not asm:
             raise ValueError("this script has no assembly(d): use view='print'")
         return asm
-    named = {(k or "part"): p for k, p in printables(mod, d).items()}
-    if parts:
-        missing = [n for n in parts if n not in named]
-        if missing:
-            raise KeyError(f"no part(s) {missing}; parts: {sorted(named)}")
-        named = {n: named[n] for n in parts}
-    items = [(p, n) for n, p in named.items()]
+    items = [(p, n or "part") for n, p in pieces.parts(parts).items()]
     return side_by_side(items) if len(items) > 1 else [(items[0][0], None, items[0][1])]
 
 
-def write_view(mod, d, tag: str, out: Path, layout: str = "print", parts: list[str] | None = None) -> Path:
-    """out/<tag>_view.glb (or <tag>_assembly_view.glb) for one variant's dims `d`."""
-    return write_glb(view_items(mod, d, layout, parts), out / f"{stem(tag, layout)}.glb")
+def write_view(pieces, tag: str, out: Path, layout: str = "print", parts=None) -> Path:
+    """out/<tag>_view.glb (or <tag>_assembly_view.glb) for one variant's pieces."""
+    return write_glb(view_items(pieces, layout, parts), out / f"{stem(tag, layout)}.glb")
 
 
 # ---------------------------------------------------------------------------------------------

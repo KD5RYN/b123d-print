@@ -165,17 +165,23 @@ def cmd_styles(args) -> int:
 
 
 def cmd_build(args) -> int:
-    from .project import export_variant, load, variant_key, variants
+    from .project import export_variant, load, timing_lines, variant_key, variants
 
     for script in _targets(args):
         mod = load(script)
         for key in variants(mod):
             if args.variant and variant_key(args.variant) != key:
                 continue
-            s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None)
+            try:
+                s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None,
+                                   only=args.only)
+            except KeyError as e:
+                sys.exit(f"build: {e.args[0]}")
             for pname, r in s["parts"].items():
                 print(f"{script.stem}{'[' + key + ']' if key else ''} {pname}: {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, "
                       f"volume {r['volume']:.1f} mm^3, valid={r['valid']}")
+            for line in timing_lines(s["timing"]):
+                print(f"  {line}")
             print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
     return 0
 
@@ -226,17 +232,16 @@ def cmd_faces(args) -> int:
 def cmd_view(args) -> int:
     """A self-contained HTML 3D view of a part (viewer and model inline: opens from file://, offline)."""
     from . import viewer
-    from .project import dims, load, resolve_part
+    from .project import Pieces, dims, load, resolve_part
 
     root, parts_dir = workspace(args.root)
     script = resolve_part(args.part, root, parts_dir)
     mod = load(script)
     key = _one_variant(mod, args.variant)
     layout = "assembly" if args.assembly else "print"
-    only = [n.strip() for n in args.only.split(",") if n.strip()] if args.only else None
     try:
-        glb = viewer.write_view(mod, dims(mod, key), "_".join(x for x in (script.stem, key) if x),
-                                script.parent / "out", layout, only)
+        glb = viewer.write_view(Pieces(mod, dims(mod, key)), "_".join(x for x in (script.stem, key) if x),
+                                script.parent / "out", layout, args.only)
     except (KeyError, ValueError) as e:
         sys.exit(f"view: {str(e).strip(chr(34))}")
     page = viewer.write_offline(glb)
@@ -452,6 +457,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--variant")
         if name == "build":
             p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
+            p.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
+                                                             "those (lazy pieces: the others are never built)")
         if name == "check":
             p.add_argument("--json", action="store_true")
             p.add_argument("-v", "--verbose", action="store_true", help="also list passing checks")
@@ -532,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
                                          "server, `pull` or `version` for $SSH_ORIGINAL_COMMAND, refuses anything else")
     p.add_argument("--workspace", required=True, help="the workspace this key is pinned to")
     p.add_argument("--dest", help="user@host as clients see it, for the pull command export suggests")
-    p.add_argument("--timeout", type=float, help="seconds per build (default 120)")
+    p.add_argument("--timeout", type=float, help="seconds per build (default 240)")
     p.add_argument("--check-timeout", type=float, help="seconds per check run (default 300, or --timeout if longer)")
     p = sub.add_parser("pull", help="on the client: copy a part (script, out/, ref/) from an SSH server into "
                                     "parts/<part>/ of the project folder")
