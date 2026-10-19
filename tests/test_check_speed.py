@@ -289,7 +289,9 @@ def test_shares_merge_to_the_sequential_result(remix_ws, monkeypatch, count):
     mod = load(remix_ws)
     seq = run_checks(mod, "", settings)
     monkeypatch.setattr(project, "COST_MIN_SPLIT", 0.0)  # split even this small part
-    shares = [project.check_share(mod, "", settings, (i, count), started=time.time()) for i in range(count)]
+    started = time.time()  # one start for the whole run, as the server passes it: an original that share 0
+    # caches mid-run must not look "cached before" to a later share, or the shares partition differently
+    shares = [project.check_share(mod, "", settings, (i, count), started=started) for i in range(count)]
     assert sum(len(s["assigned"]) for s in shares) == len({a for s in shares for a in s["assigned"]})  # no item twice
     assert sum(bool(s["assigned"]) for s in shares) > 1  # really split
     assert lines(project.merge_shares(shares)) == lines(seq)
