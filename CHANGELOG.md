@@ -11,7 +11,7 @@ lens distortion), how to photograph with a scale reference, a copy-paste measure
 offsets table (units, datum, accuracy, CONFIRMED or estimated, a `MEASURE.md` as the source of
 truth), checking with a fit-test template, a 1:1 print-out or a test section, and worked
 examples including a 1.5 m curved trim. Sourced.
-- The workflow rules (`AGENTS.md`), the `design_part_from_photos` prompt and the skill: ask for
+- The workflow rules (`AGENTS.md`) and the `design_part_from_photos` prompt: ask for
   units, a datum, the critical dimensions and their accuracy; suggest the method for the part's
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
