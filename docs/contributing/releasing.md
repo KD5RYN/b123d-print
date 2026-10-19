@@ -54,7 +54,7 @@ While 0.x, the part-script convention may still change; say so in the release no
    `CHANGELOG.md` section into the GitHub Release page (and creates missing pages for older
    tags). The release refuses to start if that section is missing or still says "unreleased",
    so date it in step 2. Preview: `python tools/release_notes.py X.Y.Z`.
-5. Once the version is on PyPI, move the plugin to it: set `version` and the `b123d-print==X.Y.Z` pin in `plugin/pyproject.toml`, run `uv lock --directory plugin`, and merge (a test checks the lock matches the pin and is no newer than the package).
+5. Once the version is on PyPI, move the plugin to it: set `version` and the `b123d-print==X.Y.Z` pin in `plugin/pyproject.toml` and the pin in `plugin/.mcp.json`, run `uv lock --directory plugin`, and merge (a test checks the lock matches the pin and is no newer than the package).
 6. Update the pinned-version examples in the docs (`b123d-print==0.2.0`) if they should follow.
 
 ## MCP Registry

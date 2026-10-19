@@ -25,10 +25,10 @@ Requires [uv](https://docs.astral.sh/uv/) on your machine.
 
 ## What it runs, downloads and sends
 
-- **Runs** `uv run --frozen --project <plugin folder> b123d-print-mcp`: uv installs the open-source
+- **Runs** `uvx b123d-print==<version> mcp`: uv downloads that exact version of the open-source
   [`b123d-print`](https://pypi.org/project/b123d-print/) package and its dependencies (build123d,
-  OpenCascade, NumPy, matplotlib, the MCP SDK) from PyPI into a `.venv` in the plugin folder, at the
-  exact versions and hashes in the plugin's `uv.lock`, then starts it as a local MCP server over stdio.
+  OpenCascade, NumPy, matplotlib, the MCP SDK) from PyPI once, then starts it as a local MCP server
+  over stdio. The plugin's `uv.lock` records the exact dependency versions and hashes for that version.
 - **Writes** part scripts and exported files (STEP, STL, 3MF, PNG previews) into `parts/` in your
   project folder, and a `b123d-print.toml` settings file there.
 - **Runs part scripts written by Claude** in a separate, sandboxed process with a time limit (macOS:

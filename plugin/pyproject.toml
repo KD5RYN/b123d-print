@@ -1,6 +1,6 @@
-# Locks the MCP server this plugin runs (.mcp.json: uv run --frozen --project ${CLAUDE_PLUGIN_ROOT}),
-# so every install gets the same versions with checked hashes. Bump after each PyPI release:
-# set the version below, then `uv lock --directory plugin`.
+# Locks the MCP server this plugin runs (.mcp.json: uvx b123d-print==<version> mcp): exact versions and
+# hashes for the Claude plugin directory. Bump after each PyPI release: set the version here and in
+# .mcp.json, then `uv lock --directory plugin`.
 [project]
 name = "b123d-print-plugin"
 version = "0.3.2"

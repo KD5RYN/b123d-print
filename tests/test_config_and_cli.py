@@ -121,8 +121,8 @@ def test_server_json_matches_the_package():
 
 
 def test_plugin_pins_the_released_package():
-    """The Claude plugin runs the server from its own lockfile (exact versions and hashes, which the
-    directory wants), pinned to a released version no newer than this one; it ships its own LICENSE,
+    """The Claude plugin runs the server with `uvx b123d-print==<pin> mcp` and ships a lockfile for that
+    pin (exact versions and hashes, which the directory wants), pinned to a released version no newer than this one; it ships its own LICENSE,
     an icon, and no OS junk files."""
     import json
     import tomllib
@@ -132,12 +132,11 @@ def test_plugin_pins_the_released_package():
 
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     mcp = json.loads((ROOT / "plugin/.mcp.json").read_text(encoding="utf-8"))["mcpServers"]["b123d-print"]
-    assert mcp["command"] == "uv"
-    assert mcp["args"] == ["run", "--frozen", "--quiet", "--project", "${CLAUDE_PLUGIN_ROOT}", "b123d-print-mcp"]
     deps = tomllib.loads((ROOT / "plugin/pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
     assert len(deps) == 1 and deps[0].startswith("b123d-print==")
     pin = deps[0].removeprefix("b123d-print==")
     assert ver(pin) <= ver(version)  # the plugin moves to a release after it is on PyPI
+    assert mcp["command"] == "uvx" and mcp["args"] == [f"b123d-print=={pin}", "mcp"]  # the form a lock can pin
     lock = tomllib.loads((ROOT / "plugin/uv.lock").read_text(encoding="utf-8"))
     locked = [p for p in lock["package"] if p["name"] == "b123d-print"]
     assert [p["version"] for p in locked] == [pin], "run `uv lock --directory plugin` after changing the pin"
