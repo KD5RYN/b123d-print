@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, metrics, styles, faces, template, compare, to-step, config, list,
+"""`b123d-print` command line: init, new, build, check, metrics, orient, styles, faces, template, compare, to-step, config, list,
 and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -137,6 +137,38 @@ def cmd_metrics(args) -> int:
             out.append({"part": script.stem, "variant": key or "standard", **res})
             if not args.json:
                 print(f"{script.stem}{'[' + key + ']' if key else ''}\n{metrics.text(res)}\n")
+    if args.json:
+        json.dump(out, sys.stdout, indent=1, default=str)
+        print()
+    return 0
+
+
+def cmd_orient(args) -> int:
+    """Rank the print orientations of each part (never changes the script)."""
+    from . import orient
+    from .project import Pieces, dims, load, out_name, variant_key, variants
+    from .render import render
+
+    out = []
+    for script in _targets(args):
+        settings = load_settings(script)
+        mod = load(script)
+        for key in variants(mod):
+            if args.variant and variant_key(args.variant) != key:
+                continue
+            d = dims(mod, key)
+            ranked, best = orient.for_script(mod, d, Pieces(mod, d).parts(args.piece), settings, args.piece, args.load)
+            for n, r in ranked.items():
+                tag = out_name(script.stem, key, "" if n == "part" else n)
+                if args.image:
+                    img = script.parent / "out" / f"{tag}_orient.png"
+                    img.parent.mkdir(exist_ok=True)
+                    rows = r["candidates"]
+                    r["image"] = str(render(best[n], img, f"{tag}: {orient._fmt_rot(rows[0]['rot'])}, {rows[0]['down']} "
+                                                          "side on the bed"))
+                out.append({"part": script.stem, "variant": key or "standard", "piece": n, **r})
+                if not args.json:
+                    print(orient.text(tag, r) + (f"\nimage: {r['image']}" if args.image else "") + "\n")
     if args.json:
         json.dump(out, sys.stdout, indent=1, default=str)
         print()
@@ -444,6 +476,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft, structural")
     p.add_argument("--up", help="the side that points up in use, for water traps: +X, -Y, ... (default: UP, else +Z)")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("orient", help="rank the ways to put each part on the bed (supports, contact, time, tip-over, load)")
+    p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
+    p.add_argument("--variant")
+    p.add_argument("--piece", help="only this printable part of a script that builds several")
+    p.add_argument("--load", help="the bending or tension direction as build(d) returns the part: X, 'along Y', XZ, 1,0,1")
+    p.add_argument("--image", action="store_true", help="also render the top choice to out/<part>_orient.png")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("faces", help="list a part's flat faces with their ids (for a face template)")
     p.add_argument("part", help="part name or script path")
     p.add_argument("--variant")
@@ -579,9 +618,9 @@ def main(argv: list[str] | None = None) -> int:
         for p in find_parts(root, parts_dir):
             print(p.relative_to(root))
         return 0
-    if args.cmd in ("metrics", "styles"):
+    if args.cmd in ("metrics", "orient", "styles"):
         try:
-            return cmd_metrics(args) if args.cmd == "metrics" else cmd_styles(args)
+            return {"metrics": cmd_metrics, "orient": cmd_orient, "styles": cmd_styles}[args.cmd](args)
         except ValueError as e:
             sys.exit(str(e))
     if args.cmd in ("faces", "template"):

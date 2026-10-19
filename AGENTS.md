@@ -112,6 +112,10 @@ as a starting point, say so in the report, and never turn it into a default or a
   in ABS/ASA). Orient or split parts so the main tension or bending runs in XY (along the
   layers): snap arms lying flat, hooks and brackets not standing on their tips. State the load
   direction and the orientation in the report. [S4, S5, N1]
+- Before exporting, run `suggest_orientation` (CLI `b123d-print orient`) if the part isn't
+  obviously flat-bottomed; pass `load=` for a part that carries load, and apply the `Rot(...)`
+  it gives in `build(d)`. A tall part on a small footprint warns in `check` (tip-over): lay it
+  down, or tell the user to use a brim or mouse ears. [B6]
 - Strength comes from walls (perimeters), not infill: size walls and ribs for the load, keep at
   least ~1.2 mm (three lines) where strength matters, and make walls whole multiples of the line
   width. Say in the report which features need more slicer perimeters (screw bosses: 3-4 or

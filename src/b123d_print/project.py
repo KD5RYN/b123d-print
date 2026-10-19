@@ -15,7 +15,7 @@ and optionally:
                                                     # the things it mates with -> overlap check
     def views(d) -> list[View]                      # section views saved on export
     def checks(d) -> list[Wall | Overhang | Gap | ...]  # automatic per part: Overhang, ThinFeature,
-                                                    # Holes, BedEdge, Gap, Fit
+                                                    # Holes, BedEdge, TipOver, Gap, Fit
     def original(d) -> Part                         # remixes: the original as placed in the remix
                                                     # (default: what build() loaded with import_model)
     def templates(d) -> list[Template]              # fit-test templates exported with every variant
@@ -286,7 +286,7 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     fitted = {s.part or "part" for s in specs if isinstance(s, ck.Fit)}
     specs += [ck.Fit(p) for p in parts if p not in fitted]  # no-op without a printer profile
     # automatic per-part checks; a script lists one itself to change its arguments
-    for cls in (ck.ThinFeature, ck.Holes, ck.BedEdge):
+    for cls in (ck.ThinFeature, ck.Holes, ck.BedEdge, ck.TipOver):
         listed = {s.part or "part" for s in specs if isinstance(s, cls)}
         specs += [cls(p) for p in parts if p not in listed]
     gapped = {s.part or "part" for s in specs if isinstance(s, ck.Gap) and s.other is None}
@@ -708,7 +708,7 @@ def _write_findings(path: Path, findings: list[ck.Finding]) -> None:
 
 NO_CACHE_ENV = "B123D_PRINT_NO_CACHE"  # set (to anything but "" or 0): the worker neither reads nor writes the build cache
 SHAPE_TYPES = ("Part", "Compound", "Solid")  # what the build cache restores (a Box as a Part); others are built every time
-NOT_GEOMETRY = ("root", "formats", "style", "filament_price", "print_flow")  # settings no build reads
+NOT_GEOMETRY = ("root", "formats", "style", "filament_price", "print_flow", "tip_speed")  # settings no build reads
 
 
 def no_cache_env() -> bool:
@@ -1061,7 +1061,7 @@ def make_pieces(mod: ModuleType, key: str, d, settings: Settings, cache: CacheCo
     return Pieces(mod, d, BuildCache(mod, key, d, settings, cache) if use else None)
 
 
-INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.Gap)  # automatic checks also run on the original
+INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.TipOver, ck.Gap)  # automatic checks also run on the original
 ORIGINAL = "original"
 
 

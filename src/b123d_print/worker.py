@@ -296,6 +296,19 @@ def do(job: dict) -> dict:
         res = metrics.design_metrics(mod, d, pc.parts(), settings, style=job.get("style") or None,
                                      up=job.get("up") or None)
         return {"variant": k or "standard", "metrics": res, "text": metrics.text(res)}
+    if op == "orient":
+        from b123d_print import orient
+
+        piece = job.get("piece")
+        ranked, best = orient.for_script(mod, d, pc.parts(piece) if piece else pc.parts(), settings, piece, job.get("load"))
+        res = {"variant": k or "standard", "parts": ranked,
+               "text": "\n\n".join(orient.text(n if len(ranked) > 1 else tag, r) for n, r in ranked.items())}
+        if job.get("image"):
+            n, top = next(iter(best.items()))
+            rows = ranked[n]["candidates"]
+            title = f"{tag}{'_' + n if n != 'part' else ''}: {orient._fmt_rot(rows[0]['rot'])}, {rows[0]['down']} side on the bed"
+            res["image"] = str(render(top, out / f"{tag}{'_' + n if n != 'part' else ''}_orient{small}.png", title, size=size))
+        return res
     if op == "before_after":
         parts, orig, _ = built(mod, d, pc)
         if orig is None:

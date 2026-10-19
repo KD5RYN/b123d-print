@@ -24,7 +24,7 @@ def checks(d):
     ]
 ```
 
-The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `Gap`, `Fit`) run for every
+The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `TipOver`, `Gap`, `Fit`) run for every
 part; list one for a part to replace its automatic copy with your arguments.
 
 `part` is a name from `build()`. A script whose `build()` returns a single `Part` names it
@@ -99,6 +99,18 @@ Warns on fillets (curved faces) that start on the bed. Automatic for every part.
 | --- | --- | --- |
 | `part` | — | part name |
 | `min_area` | `0.2` | mm² of steep surface before a face counts |
+
+## `TipOver`
+
+Warns when a part is tall on a small first layer and could be knocked over or wobble
+([the check](../using/checks.md)). Automatic for every part; never fails.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name |
+| `brim` | `5.0` | mm: warn when the auto-brim estimate reaches this |
+| `min_height` | `10.0` | mm: lower parts are not checked |
+| `speed` | `None` | mm/s, the slicer's fastest print speed (default: the `tip_speed` setting; `0` turns it off) |
 
 ## `Gap`
 

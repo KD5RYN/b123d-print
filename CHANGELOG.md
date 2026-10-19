@@ -64,6 +64,26 @@ spur, helical, herringbone and bevel gears, racks). Both build inside the sandbo
   use for what, and to keep modeled threads to sizes that print.
 - bd_vslot is not included: its rails fail to build with build123d 0.13.
 
+**Print orientation**: a new MCP tool, `suggest_orientation(name, variant?, piece?, load?, image?)`,
+and CLI command, `b123d-print orient`, rank the ways to put a part on the bed
+([docs](https://kd5ryn.github.io/b123d-print/using/tools/#suggest_orientation)). The candidates
+are the six axis-aligned orientations and every large flat face of the part's convex hull,
+at most 12. Each is scored with the existing estimates: supports (bridges apart), print time,
+bed contact, long bridges, tip-over and, with a `load` direction or the `structural` style,
+how far the load points out of the layers (DS-T1). The result is a ranked table with the
+`Rot(x, y, z)` to apply in `build(d)`, and says how (and what `UP` becomes). It never edits the
+script.
+- **tip-over**, a new automatic check (`TipOver`, warn only, rule B6): a part tall on a small
+  first layer, which the nozzle can knock over. It measures with OrcaSlicer's Auto brim
+  formula (height, and the footprint's width and second moment of area), plus a footprint
+  that is a thin strip or a centre of mass outside it, and suggests a brim, mouse ears, laying
+  the part down, or printing several together. The new `tip_speed` setting (200 mm/s) scales
+  it; `0` turns it off.
+- `design_metrics`' supports estimate is about 4 times faster on detailed parts, and lists the
+  bridges it found.
+- `AGENTS.md`: run `suggest_orientation` before exporting a part that isn't obviously
+  flat-bottomed.
+
 ## 0.3.3 — 2026-10-19
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,

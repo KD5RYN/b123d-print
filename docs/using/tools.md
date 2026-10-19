@@ -19,6 +19,7 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `section(name, plane, at, variant?, parts?, size?, inline?, fresh?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
 | `check(name, variant?, fresh?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
 | `design_metrics(name, variant?, style?, up?, as_json?)` | the design numbers per part: size, filament (roughly ±20 %) and cost, print time (rough), supports, shallow slopes that show layer steps, edge treatment (sharp / filleted / chamfered, radii), symmetry, screw sizes, seam corners, water traps (`up` = the side up in use); then the suggestions the part's `style` triggers, each citing its rule ([design review](design-review.md)). Changes nothing; `as_json` for the full numbers |
+| `suggest_orientation(name, variant?, piece?, load?, image?, size?, inline?)` | ranks the ways to put the part on the bed: supports, bed contact, height, print time, bridges, [tip-over](checks.md) and, with a `load` direction or the `structural` style, whether the load runs along the layers; returns the `Rot(x, y, z)` to apply in `build(d)` and how. `piece` picks one printable part, `image` renders the top choice. Changes nothing ([how it ranks](#suggest_orientation)) |
 | `export(name, variant?, formats?, parts?, embed?, fresh?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"` (only that piece is built); says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result |
 | `list_faces(name, variant?, part?, highlight?, size?, inline?)` | the flat faces of a part with stable ids, normal and side, area, center, box and round holes, for a face [fit-test template](templates.md); `highlight` (an id or side) adds a picture with that face in red, to confirm it with you |
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
@@ -42,6 +43,59 @@ Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_p
 `upload_reference` runs in the
 [sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
 the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
+
+## suggest_orientation
+
+Run it before exporting when the part is not obviously flat-bottomed (a bracket, a hook, a
+part with a cap or a flange). It never edits the script: you apply the rotation it gives.
+
+**Candidates.** The six axis-aligned orientations (as modeled first) and every large flat face
+of the part's convex hull put down on the bed: the flat faces it can rest on, its own and the
+ones it spans (a wedge's slope, the rim of a cup). The same side down counts once; at most 12
+are scored, so a call takes a second or a few.
+
+**Scores.** Each candidate is measured with what `check` and `design_metrics` already use, then
+scored, lower is better; the table shows the parts of the score:
+
+| Term | Measured by | Weight |
+| --- | --- | --- |
+| time | the print-time estimate (M3), supports included: extra time over the fastest candidate | 1 per 100 % extra |
+| supports | the supports estimate (M5): downward faces past `max_overhang` that are not bridges within `max_bridge` | 4 × their share of the part's surface |
+| contact | the first layer's area | 0.5 × (1 − contact / the best candidate's) |
+| tip-over | the [tip-over check](checks.md)'s auto-brim estimate | 1 × estimate / 5 mm, up to 3 |
+| falls | nothing on the bed, or the centre of mass outside the footprint | 3 |
+| strip | standing on a strip under ~2 mm wide | 1 |
+| bridges | bridges longer than `max_bridge` | 0.3 each |
+| load | with `load`: how far the load points out of the layers, \|cos\| of its angle to Z (DS-T1) | 3 × \|cos\| |
+| assumed load | `structural` style, no `load`: the same for the part's long axis (least inertia) | 1.5 × \|cos\| |
+
+`load` is in the part's frame as `build(d)` returns it: `X`, `along Y`, `XZ` (a diagonal) or
+`1,0,1`; its sign does not matter. Filament, time and supports are rough estimates: good for
+comparing orientations, not for a quote.
+
+**Applying it.** In `build(d)`, turn the part and put it back on the bed (print orientation,
+bed at Z=0):
+
+```python
+p = Rot(0, -90, 0) * p
+p = Pos(0, 0, -p.bounding_box().min.Z) * p
+```
+
+`UP` and `SHOW` are in print orientation, so they turn too: the result says what `UP` becomes.
+Wall and Probe checks with `frame="print"` need their coordinates re-checked;
+`frame="assembly"` ones stay put. Then `build_part` and `check`.
+
+```text
+mush [standard]
+mush: 6 orientations ranked (lower score is better; rough estimates)
+ #  rotation             on the bed              supports  contact  height   time  score  notes
+                                                  mm2 / g      mm2      mm    min
+ 1  Rot(180, 0, 0)       +Z side                    0 / 0      707    36.0   13.7   0.09
+ 2  Rot(0, 0, 0)         -Z side                  656 / 4.9       50    36.0   20.2   3.08  supports under 656.3 mm^2; tip-over (auto-brim estimate 5.38 mm (>= 5)); as modeled now
+ ...
+```
+
+The CLI does the same: [`b123d-print orient`](../getting-started/cli.md).
 
 ## Prompts
 

@@ -889,7 +889,7 @@ def suggest(info: ImportInfo) -> dict:
 # Inherited findings
 
 
-INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "gap")
+INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "tip-over", "gap")
 MATCH_MM = 1.5  # an item of a finding counts as the original's when one of the original's is this close
 
 

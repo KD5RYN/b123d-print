@@ -44,6 +44,7 @@ class Settings:
     style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
+    tip_speed: float = 200.0  # mm/s, the slicer's fastest print speed: the tip-over check scales with it; 0 = off
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
 
@@ -60,7 +61,7 @@ _ENV = {
     "max_bridge": "B123D_PRINT_MAX_BRIDGE",
     "max_triangles": "B123D_PRINT_MAX_TRIANGLES",
 }
-NUMBERS = (*_ENV, "filament_price", "print_flow")  # the numeric settings
+NUMBERS = (*_ENV, "filament_price", "print_flow", "tip_speed")  # the numeric settings
 # measured per printer + material (calibration.toml): a calibration for the active printer beats
 # the same key in the user config, but not the workspace config or the environment
 CALIBRATED = ("hole_comp", "hole_comp_h", "clearance", "press_fit", "free_fit", "pip_clearance", "max_overhang", "max_bridge")
