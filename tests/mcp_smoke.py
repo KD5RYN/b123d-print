@@ -86,7 +86,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "download_part", "list_faces", "make_template"},
+                     "suggest_orientation", "download_part", "list_faces", "make_template", "check_fit", "trace_outline", "recipe"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
@@ -192,6 +192,13 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
            "design_metrics reports the numbers and the style's findings (in the sandbox)" + ("" if "style:" in t else f"\n{t[:2000]}"))
     res = await c.call_tool("design_metrics", {"name": "coupon", "style": "baroque"})
     expect(res.is_error and "no style 'baroque'" in text(res), "design_metrics refuses an unknown style with the list")
+    await c.call_tool("new_part", {"name": "lay"})  # box is the endless loop by now
+    res = await c.call_tool("suggest_orientation", {"name": "lay", "load": "along X", "image": True, "size": "small"})
+    t = text(res)
+    expect("orientations ranked" in t and "Rot(" in t and any(getattr(x, "type", "") == "image" for x in res.content),
+           "suggest_orientation ranks the orientations and renders the top choice (in the sandbox)" + ("" if "Rot(" in t else f"\n{t[:2000]}"))
+    res = await c.call_tool("suggest_orientation", {"name": "lay", "load": "sideways"})
+    expect(res.is_error and "load 'sideways'" in text(res), "suggest_orientation refuses a load it cannot read")
     g = await c.get_prompt("design_review", {"name": "coupon"})
     expect("Do NOT change the part" in g.messages[0].content.text and "DS-G9" in g.messages[0].content.text,
            "design_review prompt carries the rubric and the no-change rule")
@@ -219,6 +226,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
     await multipart_checks(c, expect)
     await remix_checks(c, pw, expect)
+    await trace_recipe_checks(c, pw, expect)
 
 
 async def handoff_checks(c, pw, expect, mode: str) -> None:
@@ -363,6 +371,47 @@ async def remix_checks(c, pw, expect) -> None:
         expect("b123d-print push" in t or "copy the file to" in t, "upload_reference says how to copy the file (SSH / local)")
 
 
+def scan_png() -> bytes:
+    """A 300 dpi scan of an 80 x 50 mm plate with a 20 mm hole (white background)."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    ppm = 300 / 25.4
+    im = Image.new("L", (1200, 800), 255)
+    d = ImageDraw.Draw(im)
+    d.rectangle([20 * ppm, 10 * ppm, 100 * ppm, 60 * ppm], fill=0)
+    d.ellipse([50 * ppm, 25 * ppm, 70 * ppm, 45 * ppm], fill=255)
+    buf = io.BytesIO()
+    im.save(buf, "PNG", dpi=(300, 300))
+    return buf.getvalue()
+
+
+async def trace_recipe_checks(c, pw, expect) -> None:
+    """trace_outline on an uploaded scan (sandboxed), the recipe tool and resources."""
+    res = await c.call_tool("upload_reference", {"part": "gasket", "filename": "scan.png",
+                                                 "data_base64": base64.b64encode(scan_png()).decode()})
+    expect("Stored parts/gasket/ref/scan.png" in text(res) and "trace_outline" in text(res), "upload_reference stores a scan")
+    res = await c.call_tool("trace_outline", {"part": "gasket", "file": "scan.png"})
+    t = text(res)
+    ok = not res.is_error and "traced 80" in t and "1 hole(s)" in t and "300 dpi" in t and images(res) and "OUTLINE = [" in t
+    expect(ok, "trace_outline: 80 x 50 mm with one hole at the file's 300 dpi, overlay and snippet" + ("" if ok else f"\n{t[:1500]}"))
+    expect(on_disk_ok(pw, "parts/gasket/out/scan_outline.json") and on_disk_ok(pw, "parts/gasket/out/scan_trace.png"),
+           "trace_outline writes the outline JSON and the overlay")
+    res = await c.call_tool("trace_outline", {"part": "gasket", "file": "../../../etc/passwd"})
+    expect(res.is_error, "trace_outline refuses a path out of the part's ref/ folder")
+    res = await c.call_tool("recipe", {})
+    expect("snap_arm" in text(res) and "teardrop_hole" in text(res), "recipe lists the recipes")
+    res = await c.call_tool("recipe", {"name": "snap_arm"})
+    expect("1.09" in text(res) and "def snap_arm" in text(res), "recipe shows the code and the strain formula")
+    r = await c.read_resource("b123d-print://recipes/nut_trap")
+    expect("def nut_trap" in r.contents[0].text, "recipe resource")
+
+
+def on_disk_ok(pw, rel) -> bool:
+    return pw is None or (pw / rel).exists()
+
+
 TWO = '''"""Base and lid, both in print orientation at the origin."""
 from dataclasses import dataclass
 from build123d import Align, Box, Part, Pos
@@ -411,6 +460,9 @@ async def multipart_checks(c, expect) -> None:
     await c.call_tool("write_part", {"name": "two", "code": TWO + ASSEMBLY})
     res = await c.call_tool("render_preview", {"name": "two"})
     expect(summary(res)["layout"] == "assembly", "with assembly(): the assembly is drawn")
+    res = await c.call_tool("check_fit", {"name": "two"})
+    expect(text(res).startswith("PASSED") and "assembly: base, lid" in text(res), "check_fit on a lid resting on its base"
+           + ("" if text(res).startswith("PASSED") else f"\n{text(res)[:1500]}"))
     res = await c.call_tool("render_preview", {"name": "two", "parts": "base,lid"})
     expect(summary(res)["layout"] == "side by side", "parts='base,lid': side by side")
     res = await c.call_tool("render_preview", {"name": "two", "parts": "lid"})

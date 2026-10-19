@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .refs import REF_DIR, SHARED_DIR, SUFFIXES
+from .refs import MODEL_SUFFIXES as SUFFIXES, REF_DIR, SHARED_DIR
 
 CONVERTER = 1  # bump when the mesh conversion changes, to invalidate cached results
 SMALL_HOLE = 8  # open loops of up to this many edges are closed (a missing triangle or a sliver gap)
@@ -889,7 +889,7 @@ def suggest(info: ImportInfo) -> dict:
 # Inherited findings
 
 
-INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "gap")
+INHERITABLE = ("overhang", "bridge", "thin", "holes", "bed edge", "tip-over", "gap")
 MATCH_MM = 1.5  # an item of a finding counts as the original's when one of the original's is this close
 
 

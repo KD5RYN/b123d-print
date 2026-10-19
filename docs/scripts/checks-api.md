@@ -24,7 +24,7 @@ def checks(d):
     ]
 ```
 
-The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `Gap`, `Fit`) run for every
+The automatic checks (`Overhang`, `ThinFeature`, `Holes`, `BedEdge`, `TipOver`, `Gap`, `Fit`) run for every
 part; list one for a part to replace its automatic copy with your arguments.
 
 `part` is a name from `build()`. A script whose `build()` returns a single `Part` names it
@@ -100,6 +100,18 @@ Warns on fillets (curved faces) that start on the bed. Automatic for every part.
 | `part` | — | part name |
 | `min_area` | `0.2` | mm² of steep surface before a face counts |
 
+## `TipOver`
+
+Warns when a part is tall on a small first layer and could be knocked over or wobble
+([the check](../using/checks.md)). Automatic for every part; never fails.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name |
+| `brim` | `5.0` | mm: warn when the auto-brim estimate reaches this |
+| `min_height` | `10.0` | mm: lower parts are not checked |
+| `speed` | `None` | mm/s, the slicer's fastest print speed (default: the `tip_speed` setting; `0` turns it off) |
+
 ## `Gap`
 
 The smallest gap between two parts, or between the solids of one part printed in place.
@@ -162,6 +174,24 @@ every part; does nothing in generic mode.
 | --- | --- | --- |
 | `part` | — | part name |
 | `margin` | `0.0` | mm kept free at each bed edge |
+
+## `Mates`
+
+[Fit between the pieces](../using/fit.md) of `assembly(d)`: overlaps, gaps under the clearance
+and hole alignment across pieces. Not automatic: list it in `checks(d)` to run it with `check`
+(the `check_fit` tool and `b123d-print fit` run it on any script with an assembly, with the
+arguments given here). `from b123d_print import Mates`.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `clearance` | `None` | mm per side two pieces must keep apart unless they touch; default the `clearance` setting |
+| `hole_tol` | `0.2` | mm: partner holes further off-axis fail |
+| `joints` | `()` | male/female pairs that are intentional fits: `("peg", "socket")`, `("peg", "socket", 0.1)`, `{"male": ..., "female": ..., "clearance": ...}` or objects with `male`/`female`/`clearance`; also read from the script's `joints(d)` |
+| `ignore` | `()` | label pairs meant to overlap (a screw stand-in in its pilot hole) |
+| `tol` | `0.01` | mm³ of overlap allowed |
+| `max_pairs` | `60` | at most this many close pairs are measured, nearest first |
+| `align` | `True` | also check hole alignment |
+| `part` | `"assembly"` | the name findings are reported under |
 
 ## `View`
 

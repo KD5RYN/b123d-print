@@ -194,6 +194,8 @@ sizes. Typed numbers always win over sizes read from a photo.
   is 11.8 pixels) with no perspective. Scan with a ruler or a card on the glass anyway: the DPI
   in the file is not always right. Parts
   thicker than a few mm blur and grow at the edges: scan the face that lies on the glass.
+  The assistant can [trace the outline](tracing.md) from the scan (or from a photo on a grid)
+  instead of you measuring it point by point.
 - **Printing a grid or a scan back at 1:1**: print at **100 % / "actual size"**, never "fit to
   page", and measure a known distance on the print with a ruler before you trust it.
 

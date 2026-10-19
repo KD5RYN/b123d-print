@@ -107,6 +107,7 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | B3 | ABS, ASA, PC and PA warp. They need an enclosure for large parts. PLA, PETG and TPU are "not prone to warping". Ranking: TPU ≈ PETG < PLA < ASA < ABS < PA. | — | PRUSA-WARP, PRUSA-MAT (ABS, ASA, PA, PETG, PLA, Flex), BAMBU-MAT, ORCA-WIKI brim (auto-brim sizes by material), HUBS-FDM, BOLAT2022 (peer-reviewed: ABS 0.8% short at 115 mm, PETG ≈0). | P | **b** + profile | New material field `warps = true` (abs, asa, pc, pa). Notes say "enclosure for parts over ~100 mm". Prusa's 10 × 10 cm ASA figure is (1 src), so it stays a note, not a threshold. |
 | B4 | Warp mitigation by design: round the footprint corners, fillet vertical edges, avoid large solid flat areas, add ribs to large flat walls. | — | MF: fillet edges normal to the bed. FR: ribs on walls, fillet sharp corners. HUBS-KEY: ribs on large flat areas. HACKADAY-WARP: break up large footprints. BAMBU-FORUM-WARP: grooves 1 × 1 mm every 30–80 mm (community numbers, **1 src**). | P | **b** + **a** (hint) | AGENTS.md. **Warp** hint (automatic, **info** only): when the material has `warps` and the bed contact is over ~100 mm or has sharp corners under 2 mm radius, list them. Info only, because the thresholds are not sourced well enough to warn. |
 | B5 | Brims, mouse ears, enclosure temperature. | Brim 4–18 mm | ORCA-WIKI, CURA-DEF, PRUSA-WARP | P | **d** | Slicer. Mention once in the report for warping materials. |
+| B6 | A tall part on a small first layer is knocked over by the nozzle or wobbles: give it a brim or mouse ears, lay it down, or print several together. | auto brim = speed × H² × W / (1920 I); none under 5 mm, at most 18 mm; +5 mm for islands with area / perimeter < 1.1 mm over 10 mm tall | ORCA-BRIM (OrcaSlicer's Auto brim, the source code; Bambu Studio has the same: BAMBU-BRIM *(search text, not fetched)*, "a taller part with a smaller footprint usually needs a wider brim to prevent itself from being toppled by the printer's nozzle"). PRUSA-BRIM: a brim for "tall objects with a small base", "at least a 3 mm brim". Height:width rules of 5:1 or 10:1 appear only on a blog (SCIPEDIA), so none is used. | P | **a** (warn) + **b** | **tip-over** check (`TipOver`, automatic, warn only) with OrcaSlicer's measure at `tip_speed` (200 mm/s: OrcaSlicer's reference speed; Bambu's X1C profile moves up to 300); `suggest_orientation` scores the same measure. AGENTS.md: run `suggest_orientation` before export. |
 
 ## 6. Fits and clearances
 
@@ -169,10 +170,13 @@ Source keys (e.g. `PRUSA-MODEL`) are listed with their URLs under [Sources](#sou
 | # | Rule | Value / range | Evidence | P | Class | Proposed behavior |
 |---|---|---|---|---|---|---|
 | J1 | Split when the part exceeds the build volume, needs a lot of support, or when pieces can each print in their strongest orientation. | — | PRUSA-CUT, SSD, FR, MF, HUBS-FDM, UM | P | **b** | AGENTS.md. The `fit` check already fails on build volume. Its message can point to splitting. |
-| J2 | Joint types: dovetail for sectioned parts, dowels or alignment pins to locate, tongue and groove. Key joints stack up tolerance. | — | SSD-2025 (dovetail), PRUSA-CUT (plug / dowel / snap / dovetail), MF (dowels, shoulder bolts), FORMLABS-JOINT, HUBS-JOINT, DIGIKEY | — | **b** + helper | AGENTS.md. Later helpers `dovetail()` / `dowel_pair()` that apply the calibrated clearance. |
-| J3 | Joint clearance. | 0.1–0.5 (range) | FORMLABS-JOINT 0.5. HUBS-JOINT 0.5. MF 0.05–0.2 total. SSD-2017: ≥1 line width. | P | **c** | K2. |
+| J2 | Joint types: dovetail for sectioned parts, dowels or alignment pins to locate, tongue and groove. Key joints stack up tolerance. | — | SSD-2025 (dovetail), PRUSA-CUT (plug / dowel / snap / dovetail), MF (dowels, shoulder bolts), FORMLABS-JOINT, HUBS-JOINT, DIGIKEY | — | **b** + helper | AGENTS.md. Helpers in `b123d_print.joints` (`Dowel`, `Bowtie`, `Dovetail`, `Lap`, `Insert`, `split()`) apply the clearance from the user's config; [Splitting parts](using/splitting.md). |
+| J3 | Joint clearance. Slicer cut tools put their tolerance on the hole: PrusaSlicer none by default (a diameter value), Bambu Studio 0.1. | 0.1–0.5 (range) | FORMLABS-JOINT 0.5. HUBS-JOINT 0.5. MF 0.05–0.2 total. SSD-2017: ≥1 line width. PRUSA-CUT-SRC (`m_connector_size_tolerance{0.f}`, halved to a radius). BAMBU-CUT-SRC (`CUT_TOLERANCE = 0.1f`). | P | **c** | K2. The joints helpers put `clearance` (per side) on the female. |
 | J4 | Glue by material: CA bonds all common filaments. Acetone welds ABS/ASA (and PLA). PETG has no hobby solvent, so use CA or epoxy. | — | PRUSA-GLUE, PRUSA-MAT (ASA), FORMLABS-JOINT, XOM-WEB | P | **b** + profile | Add a `glue` line to the material notes. |
 | J5 | Glued joints are weaker than the parent material. CA is weak in peel and torsion. | CA ≈ 9–13 MPa (quick test) | PRUSA-GLUE, DIGIKEY | — | **b** | AGENTS.md: a glued joint needs a mechanical key (dovetail or pins). |
+| J6 | Where to cut: where the load is low, away from holes and roots that take load; along a design line (an edge, a groove, a bend) where the seam hides; so each piece has a big flat face on the bed, needs no support and has its load along the layers; with room around the joint features. | — | PRUSA-CUT (cut for size, for a stronger orientation, for less support), S4/S5 (layers), J5 (the seam is the weak spot), PRUSA-POST and DL-JOIN (seams are filled and sanded, so a seam on a flat face is work). "Along a design line" is a convention: no source tests it. | — | **b** | AGENTS.md: propose the cut locations with reasons and wait. [Splitting parts](using/splitting.md#where-to-cut). |
+| J7 | Glue gap: thin CA bridges ~0.15 mm at most; gel CA with an activator up to ~1 mm; epoxy bond lines are typically 0.1–0.25 mm and fill more. So: CA on faces that touch, epoxy (or CA gel + activator) in a clearance fit. 0.25–0.3 mm per side "for glue" is epoxy territory. | CA ≤ 0.15; epoxy 0.1–0.25 | LOCTITE-401 (max gap 0.15 mm), LOCTITE-454 (gel: 0.15, up to 1.0 with activator 7457), EPOXY-BOND (bond lines > 0.127, usually ~0.254 mm), DL-JOIN (CA for small prints, 2-part epoxy for heavier ones) | P | **b** | AGENTS.md: name the adhesive for the gap in the assembly notes. |
+| J8 | Seams: dry-fit, glue and clamp, fill in thin layers (body filler or spot putty; CA with powder for small gaps), sand coarse then fine, prime with filler primer and repeat. | P100 → P400 (Prusa) | PRUSA-POST (activator, body filler in thin layers, P100, primer, P400), DL-JOIN (dry fit, spot filler, filler primer at 600–800 grit) | — | **b** | AGENTS.md: assembly notes in the report. |
 
 ## 12. Shrinkage and other material effects
 
@@ -197,6 +201,7 @@ in `checks(d)` (for example `ThinFeature(part, ignore=[box])`). See
 | **holes** (`Holes`, automatic) | H3, H5 | Concave cylindrical faces grouped by axis and radius, covering ≥ 260° (a full hole or a teardrop; fillets and arches cover less). A non-vertical hole has a "round top" when part of its wall faces down steeper than `max_overhang`. | **warn** round-topped horizontal hole d ≥ 2 mm; **warn** d < 1 mm |
 | **overhang** with bridges (`Overhang`, automatic) | O1, O3, O4 | Flat downward faces: from a grid of points, 24 rays find the face boundary; a point is bridged when two opposite rays end on anchored edges, its span is their sum. An edge is anchored when there is material just beyond and below it, or the next face continues tangentially and curves down. | bridge span > `max_bridge` **warns** (never fails); a cantilever is an overhang (fails with `fail=True`) |
 | **bed edge** (`BedEdge`, automatic) | O2 | Curved faces starting on the bed whose lower part faces down steeper than `max_overhang`. | **warn** |
+| **tip-over** (`TipOver`, automatic) | B6 | The first layer is the MeshSlicer section half a layer above the bed. Its area and second moment of area about its principal axes (the narrowest width and across it when the two are equal) give OrcaSlicer's auto-brim width at `tip_speed`; the islands' area / perimeter; the centre of mass against the footprint's convex hull. | **warn** brim estimate ≥ 5 mm, a strip island, or the centre of mass outside; parts under 10 mm skipped |
 | **gap** (`Gap`, automatic for parts of several solids; declared for assemblies) | F1, F3 | `distance_to` (BRepExtrema) between the solids of one part or between two parts, optionally inside a box. | automatic: **fail** < `pip_clearance`; declared `Gap(a, b, min=, max=)`: fail outside the range |
 | **wall** (`Wall`, declared) | T4 | Existing: thinnest wall around one cut. | **fail** < `min` |
 
@@ -265,6 +270,10 @@ calibration keys (`hole_comp_h`, `press_fit`, `free_fit`, `pip_clearance`, `max_
 - Checks: **Pins** (W5, W6), **LoadDir** (S4, S5, N1), **Warp** hint (B4).
 - Material `warps` / glue notes.
 
+**Joints (0.3.4).** `b123d_print.joints` (J2, J3): `Dowel`, `Bowtie`, `Dovetail`, `Lap`, `Insert`
+(the CNC Kitchen pocket, T2–T4) and `split()`, and the guide [Splitting parts](using/splitting.md)
+(J6–J8).
+
 **Dropped:** the class-d rows: slicer tuning, shrinkage percentages, rib ratios borrowed from
 injection molding.
 
@@ -295,8 +304,11 @@ hobby page. *(peer-reviewed)* = journal or conference.
 - PRUSA-EF: https://help.prusa3d.com/article/elephant-foot-compensation_114487
 - PRUSA-SUP: https://help.prusa3d.com/article/support-material_1698
 - PRUSA-WARP: https://help.prusa3d.com/article/warping_2011
+- PRUSA-BRIM: https://help.prusa3d.com/article/skirt-and-brim_133969
 - PRUSA-INFILL: https://help.prusa3d.com/article/infill_42
 - PRUSA-CUT: https://help.prusa3d.com/article/cut-tool_1779
+- PRUSA-CUT-SRC *(source code, read 2026-10-19)*: PrusaSlicer 2.9.2 `src/slic3r/GUI/Gizmos/GLGizmoCut.hpp` / `.cpp`, https://github.com/prusa3d/PrusaSlicer
+- PRUSA-POST *(fetched 2026-10-19)*: https://blog.prusa3d.com/postprocessing-of-3d-prints-step-by-step_29270/
 - PRUSA-COOL: https://help.prusa3d.com/article/cooling_127569
 - PRUSA-SEAM: https://help.prusa3d.com/article/seam-position_151069
 - PRUSA-MAT:
@@ -313,6 +325,7 @@ hobby page. *(peer-reviewed)* = journal or conference.
 
 **Bambu Lab**
 
+- BAMBU-CUT-SRC *(source code, read 2026-10-19; the wiki page returned 402)*: Bambu Studio `src/libslic3r/CutUtils.hpp` (`CUT_TOLERANCE`), https://github.com/bambulab/BambuStudio; wiki: https://wiki.bambulab.com/en/software/bambu-studio/cut-tool
 - BAMBU-XY: https://wiki.bambulab.com/en/software/bambu-studio/xy-hole-contour-compensation
 - BAMBU-AUTO: https://wiki.bambulab.com/en/software/bambu-studio/manual/auto-circle-contour-compensation
 - BAMBU-SHRINK: https://wiki.bambulab.com/en/knowledge-sharing/3d-prints-shrinkage
@@ -320,6 +333,7 @@ hobby page. *(peer-reviewed)* = journal or conference.
 - BAMBU-FORUM-SCREW *(community; MakerWorld account)*: https://forum.bambulab.com/t/how-to-design-screw-holes-for-3d-printing/217352
 - BAMBU-FORUM-WARP *(community)*: https://forum.bambulab.com/t/large-prints-say-goodbye-to-warping/240898
 - BAMBU-FORUM-PIP *(community)*: https://forum.bambulab.com/t/print-in-place-hinge-tolerances/111715
+- SCIPEDIA *(blog, uncited)*: https://sciencepedia.blog/3d-print-tall-thin-objects-stability-guide
 
 **Slicers and modeling tools**
 
@@ -333,6 +347,8 @@ hobby page. *(peer-reviewed)* = journal or conference.
   - …/others/others_settings_brim.html
   - …/material_settings/cooling/material_cooling
   - …/quality/quality_settings_seam
+- ORCA-BRIM: https://github.com/SoftFever/OrcaSlicer/blob/main/src/libslic3r/Brim.cpp (`configBrimWidthByVolumeGroups`; the additional brim for small islands) and https://github.com/SoftFever/OrcaSlicer/blob/main/src/libslic3r/Model.cpp (`get_auto_brim_width`, reference speed 200); speeds: https://github.com/SoftFever/OrcaSlicer/blob/main/resources/profiles/BBL/process/fdm_process_single_0.20.json
+- BAMBU-BRIM: https://wiki.bambulab.com/en/software/bambu-studio/auto-brim
 - CURA-DEF: https://github.com/Ultimaker/Cura/blob/main/resources/definitions/fdmprinter.def.json
 - SLIC3R: https://manual.slic3r.org/troubleshooting/dimension-errors
 - OPENSCAD: https://app.openscad.org/documentation/manual/undersized_circular_objects.html
@@ -427,6 +443,10 @@ hobby page. *(peer-reviewed)* = journal or conference.
   - …/3d-printing-with-heat-set-inserts-design-strong-screw-bosses-that-last
 - PRINTEDSOLID *(vendor)*: https://www.printedsolid.com/blogs/news/37036739-3d-printing-design-tips-part-1-stress-concentrations
 - DIGIKEY: https://www.digikey.com/en/maker/blogs/2024/how-to-split-and-join-large-3d-prints
+- DL-JOIN *(vendor; search only, the page returned 429)*: https://dangerousladies.ca/blogs/tutorials/finishing-3d-prints-101-joining-pieces-guide
+- LOCTITE-401 *(datasheet via a distributor; search only)*: https://uk.farnell.com/loctite/401-5g/adhesive-loctite-401-5g/dp/827940
+- LOCTITE-454 *(datasheet via a distributor; search only)*: https://za.rs-online.com/web/p/glues/0514616
+- EPOXY-BOND *(patent; search only)*: US 5712039, https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/5712039
 - PRINTFARMCALC: https://printfarmcalc.com/reference/shrinkage/
 - GRANDPACAD: https://grandpacad.com/en/tools/material-shrinkage-calculator
 

@@ -76,6 +76,20 @@ the same L with sharp corners, or standing up, gets them ([DS-T*](../DESIGN_GUID
 An example with estimated sizes: not printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/shelf_bracket/shelf_bracket.py)
 
+## `split_trim`
+
+![The split trim's joint, pulled apart: two pieces, a bowtie key and two square pins](../images/split_trim.png)
+
+A 420 mm trim strip, too long for a 256 mm bed, cut in the middle with
+[`split()`](../using/splitting.md#in-the-part-script-b123d_printjoints) into two 210 mm pieces.
+A bowtie key sunk into the back takes the pull across the seam; two square pins standing on a
+corner (a 45° roof, no bridge) line the faces up. The pieces print visible face down; the key
+and the pins are separate prints, laid flat. `Gap` checks prove the key and the pins have
+exactly `CLEARANCE` all round, a `Wall` check measures the material between the key recess and a
+pin socket, and two fit-test templates cut each piece's end around the joint. Variant
+`dovetail`: one through dovetail instead (the pieces slide together along Z). An example: not
+printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/split_trim/split_trim.py)
 ## `jar_lid`
 
 ![Jar lid with a 38-400 bottle thread](../images/jar_lid.png)

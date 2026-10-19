@@ -256,7 +256,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
             return {"ok": False, "error": f"worker exited with code {proc.returncode} and no result",
                     "log": _tail(stdout, stderr)}
         res = json.loads(rp.read_text(encoding="utf-8"))
-        log = _tail(stdout, stderr)
+        log = _tail(stdout, stderr, progress=False)  # the worker reported: its progress lines say nothing more
         if log:
             res["log"] = log
         res["sandbox"] = k
@@ -415,6 +415,12 @@ def kill_all() -> int:
     return len(procs)
 
 
-def _tail(stdout: bytes, stderr: bytes, n: int = 4000) -> str:
+def _tail(stdout: bytes, stderr: bytes, n: int = 4000, progress: bool = True) -> str:
+    """The end of the worker's output; progress=False drops its progress lines (diagnose.PROGRESS),
+    which only matter when it could not report (a timeout: which piece it was building)."""
+    from .diagnose import PROGRESS
+
     s = (stdout or b"").decode(errors="replace") + (stderr or b"").decode(errors="replace")
+    if not progress:
+        s = "".join(line for line in s.splitlines(keepends=True) if not line.startswith(PROGRESS))
     return s[-n:].strip()

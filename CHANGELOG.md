@@ -2,6 +2,64 @@
 
 ## 0.3.4 — unreleased
 
+**Fix and adjust parts with fewer rewrites and less guessing**
+([docs](https://kd5ryn.github.io/b123d-print/using/tools/#build-failures-dimensions-and-measurements)):
+- **Build-failure diagnosis.** A failed `build_part`, `render_preview`, `section`, `check` or
+  `export` result now carries a `DIAGNOSIS`: the likely cause, where (file, line, function, code
+  and the piece being built), the evidence read from the failing build123d call, and specific
+  fixes ("fillet r 3 on edges between faces 4 mm wide: try r <= 1.9 (R in Dims: set_params(...))").
+  Covers fillets and chamfers, 2D offsets (splines: offset a polyline), 3D offsets and shells,
+  booleans (coplanar, tangent, slivers, "Unable to clean"), lofts, sweeps, extrusions, missing
+  `Dims` fields, `build()` returning the wrong type, empty selections, missing imports, and
+  timeouts, which now name the piece that was building (the worker reports its progress). A
+  build that runs but is invalid, empty, 2D or off the bed gets `problems` in `build_part`.
+  New tool `diagnose_failure` (CLI `b123d-print diagnose`): each piece built on its own, the
+  largest fillet radius that works, bad faces and edges, tiny edges and sliver faces of an
+  invalid solid, and whether `fix()` repairs it.
+- **Change one dimension.** New tools `params` (the `Dims` fields with type, value and source
+  comment, derived values, variant overrides; read from the ast, never run) and `set_params`
+  (an exact in-place edit of the defaults, or of a variant's overrides, that keeps comments and
+  formatting; refuses unknown fields, expression defaults and wrong types; rebuilds and reports
+  size and volume before and after, with the call that undoes it). CLI: `b123d-print params`,
+  `b123d-print set <part> FIELD=VALUE`.
+- **Measure.** New tool `measure` (CLI `b123d-print measure`): the gap between two pieces or
+  assembly labels (stand-ins included) or their interference volume, a wall's thickness at a
+  point, the distance or angle between two flat faces from `list_faces`, and a hole's diameter,
+  printed size after `hole_comp` and depth; in mm with the points, and an optional highlight
+  picture.
+
+**Fit between pieces** ([docs](https://kd5ryn.github.io/b123d-print/using/fit/)): `check_fit`
+(MCP), `b123d-print fit` (CLI) and the `Mates` check for `checks(d)`, on the pieces of
+`assembly(d)` as placed, stand-ins included.
+- **Interference:** pairs that overlap (FAIL, with the volume, center and extent of the overlap)
+  and pairs closer than the clearance without touching (WARN, with the gap and where); faces
+  resting on each other are contact. Male/female joint pairs (a script's `joints(d)`, or
+  `Mates(joints=...)`) are measured against their own clearance.
+- **Hole alignment:** round holes of two pieces on one axis are partners (a counterbore and its
+  clearance hole count as one hole); partners further than `hole_tol` (0.2 mm) apart fail, and
+  their diameters are read as M2-M6 screw holes (ISO 273 clearance, pilot, CNC Kitchen insert):
+  a pair no single screw explains warns, as does a hole whose axis runs into solid material of
+  the next printed piece. Bounding-box pre-filter and a pair cap keep it fast.
+
+**Outline tracing** ([docs](https://kd5ryn.github.io/b123d-print/using/tracing/)): `trace_outline`
+(MCP) and `b123d-print trace` turn a flatbed scan or a photo on a grid into a 2D outline in mm,
+with its holes. Scale from the scan's DPI (read from the file), a grid's cell size, a credit card
+or other rectangle of known size, or two points a known distance apart. Otsu threshold, grid
+lines cleaned away, sub-pixel contour, simplified to a tolerance in mm (or spline through-points);
+writes the points (JSON), a snippet for the part script and an overlay PNG to confirm. Uses only
+what was already installed (numpy, scipy, Pillow and contourpy via matplotlib) and runs in the
+sandbox. `upload_reference` and `b123d-print push` now also take PNG, JPEG, TIFF and BMP images.
+
+**Recipe library** ([docs](https://kd5ryn.github.io/b123d-print/using/recipes/)): twelve tested
+build123d recipes in `b123d_print.recipes`, served by the `recipe` tool, the
+`b123d-print://recipes` resources and `b123d-print recipes`: teardrop / flat-roof holes,
+counterbores and countersinks (sized from bd_warehouse's fastener tables), hex nut traps, magnet pockets, snap arms with strain sizing,
+living hinges, print-in-place hinges, lids with a lip, embossed and debossed text, a fillet-safe
+bed chamfer, zip-tie and cable slots, ribs and gussets. Each has printing notes and sources, and
+its demo part is built and passes `check` in the tests.
+- `AGENTS.md`: trace a scan instead of measuring an outline point by point, use a recipe before
+  improvising a feature, run the fit check on assemblies.
+
 **Measuring for the AI**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/measuring/)):
 how to measure a real object and hand the numbers over, especially large, complex or curved
 parts. Which method for which part (calipers, a flatbed scan or a photo on a grid, profile
@@ -88,6 +146,44 @@ spur, helical, herringbone and bevel gears, racks). Both build inside the sandbo
   view HTML; `tools/vendor_viewer.py` rebuilds it from the npm tarball (integrity-checked) and
   records its provenance. `THIRD_PARTY.md` and the credits page list it.
 - `AGENTS.md`: offer the 3D view after an export.
+**Splitting parts**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/splitting/))
+and joint helpers for parts too big for the bed or better printed in pieces: when to split,
+where to cut, a joint selection table, clearances per fit with the test-snippet habit (a
+fit-test template of the joint), adhesives by gap, finishing seams, and worked examples (a long
+trim split into keyed pieces). Sourced; new rules J6–J8 in BEST_PRACTICES, J2 and J3 updated.
+- New module `b123d_print.joints`: `split(part, plane, joints, clearance)` cuts a part into two
+  pieces with matching joint features. `Dowel` (round or square, loose or a plug), `Bowtie`
+  (a butterfly key), `Dovetail`, `Lap` and `Insert` (the CNC Kitchen heat-set pocket, the
+  screw's clearance hole and head access). The female is the male grown by the clearance on
+  every side; loose keys and pins come back laid flat for printing, and placed for
+  `assembly(d)`. Each joint's `pair(clearance)` gives the matching male and female on their own.
+- New example `split_trim`: a 420 mm strip in two pieces with a bowtie key and square pins
+  (variant `dovetail`), with `Gap` and `Wall` checks and fit-test templates of the joint.
+- The workflow rules (`AGENTS.md`): a splitting step (propose cuts and a joint and wait, use the
+  joints helpers, offer a fit test of the joint, add assembly notes).
+- Corrections to commonly repeated advice: thin CA does not fill a 0.25–0.3 mm gap (epoxy or CA
+  gel with activator does); "die swell" is real but the slicer's extrusion width absorbs it;
+  elephant's foot, over-extrusion, corner bulge and faceted holes are what make fits tight.
+
+**Print orientation**: a new MCP tool, `suggest_orientation(name, variant?, piece?, load?, image?)`,
+and CLI command, `b123d-print orient`, rank the ways to put a part on the bed
+([docs](https://kd5ryn.github.io/b123d-print/using/tools/#suggest_orientation)). The candidates
+are the six axis-aligned orientations and every large flat face of the part's convex hull,
+at most 12. Each is scored with the existing estimates: supports (bridges apart), print time,
+bed contact, long bridges, tip-over and, with a `load` direction or the `structural` style,
+how far the load points out of the layers (DS-T1). The result is a ranked table with the
+`Rot(x, y, z)` to apply in `build(d)`, and says how (and what `UP` becomes). It never edits the
+script.
+- **tip-over**, a new automatic check (`TipOver`, warn only, rule B6): a part tall on a small
+  first layer, which the nozzle can knock over. It measures with OrcaSlicer's Auto brim
+  formula (height, and the footprint's width and second moment of area), plus a footprint
+  that is a thin strip or a centre of mass outside it, and suggests a brim, mouse ears, laying
+  the part down, or printing several together. The new `tip_speed` setting (200 mm/s) scales
+  it; `0` turns it off.
+- `design_metrics`' supports estimate is about 4 times faster on detailed parts, and lists the
+  bridges it found.
+- `AGENTS.md`: run `suggest_orientation` before exporting a part that isn't obviously
+  flat-bottomed.
 
 ## 0.3.3 — 2026-10-19
 

@@ -14,19 +14,27 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `new_part(name, description?, example?, show_code?)` | scaffold from the template, or copy a bundled example; returns a short confirmation (`show_code=True` also returns the new file's code; the template itself is the `b123d-print://template` resource) |
 | `read_part(name)` | the script's current code |
 | `write_part(name, code)` | replace the script (syntax-checked before saving) |
+| `params(name)` | the `Dims` fields, read from the script without running it: type, default as written, value, the comment saying where it came from, line; derived values and the fields they use; each variant's overrides |
+| `set_params(name, values, variant?, rebuild?, parts?)` | change `Dims` values in place: `values={"WIDTH": 42}` replaces those defaults and leaves every other character of the file as it was; refuses unknown fields, derived values, defaults that are expressions (`hole_comp(__file__)`) and values of the wrong type. `variant` changes (or adds) that variant's override instead. `rebuild` (default true) builds before and after and reports each piece's size and volume change (`parts` narrows it), with the call that undoes it |
 | `build_part(name, variant?, parts?, fresh?)` | run it: bounding box, volume, validity, dimensions, errors, and the [timing report](../scripts/convention.md#big-and-multi-piece-projects) (each piece's faces and seconds, with a hint for a slow or dense one); `parts="a,b"` builds only those pieces; writes no files but the [build cache](../scripts/convention.md#big-and-multi-piece-projects) |
+| `diagnose_failure(name, variant?, parts?)` | the deeper look after a failed or broken build (failed results already carry a short [diagnosis](#build-failures-dimensions-and-measurements)): builds each piece on its own, without the build cache, and gives each failure's cause and fixes with the numbers (the largest fillet radius that fits those edges), what makes a built piece unprintable, and for an invalid solid which faces and edges are bad, tiny edges and sliver faces, and whether `fix()` repairs it |
 | `render_preview(name, variant?, parts?, size?, inline?, fresh?)` | 6-view PNG. With several printable parts it draws `assembly()` if the script has one, else the parts side by side on the bed (also for `parts="a,b"`); `parts="assembly"` shows the fit |
 | `section(name, plane, at, variant?, parts?, size?, inline?, fresh?)` | colored cross-section PNG on `XY` (at = Z), `XZ` (at = Y) or `YZ` (at = X) |
-| `check(name, variant?, fresh?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)) |
+| `check(name, variant?, fresh?)` | validity, overlap, overhang and bridge, thin, holes, bed edge, gap, wall, probe and fit checks ([the checks](checks.md)); the fit between an assembly's pieces is `check_fit`, or part of `check` when the script lists `Mates()` |
 | `design_metrics(name, variant?, style?, up?, as_json?)` | the design numbers per part: size, filament (roughly ±20 %) and cost, print time (rough), supports, shallow slopes that show layer steps, edge treatment (sharp / filleted / chamfered, radii), symmetry, screw sizes, seam corners, water traps (`up` = the side up in use); then the suggestions the part's `style` triggers, each citing its rule ([design review](design-review.md)). Changes nothing; `as_json` for the full numbers |
+| `suggest_orientation(name, variant?, piece?, load?, image?, size?, inline?)` | ranks the ways to put the part on the bed: supports, bed contact, height, print time, bridges, [tip-over](checks.md) and, with a `load` direction or the `structural` style, whether the load runs along the layers; returns the `Rot(x, y, z)` to apply in `build(d)` and how. `piece` picks one printable part, `image` renders the top choice. Changes nothing ([how it ranks](#suggest_orientation)) |
 | `export(name, variant?, formats?, parts?, embed?, fresh?, view?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"` (only that piece is built); says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result. `view` makes a [3D view](formats.md#3d-view-in-the-browser) per variant to turn in a browser: `"print"` (default: the printable parts on the bed), `"assembly"` (`assembly(d)` with its stand-ins) or `"none"`; over HTTP a signed [view link](../getting-started/http.md#view-in-3d) (no token, expires), locally a self-contained `_view.html` that opens offline, over SSH the `.glb` (then `b123d-print view` at home) |
 | `list_faces(name, variant?, part?, highlight?, size?, inline?)` | the flat faces of a part with stable ids, normal and side, area, center, box and round holes, for a face [fit-test template](templates.md); `highlight` (an id or side) adds a picture with that face in red, to confirm it with you |
+| `measure(name, kind, a?, b?, at?, direction?, face?, face2?, frame?, variant?, image?, size?, inline?)` | precise measurements in mm with the points they were taken at. `kind` `distance`: the gap between pieces or assembly labels `a` and `b` (stand-ins too), or their interference volume, box and depth when they overlap; `wall`: the thickness through point `at` (into the part, or along `direction`) and the gaps and walls beyond; `faces`: the distance between two parallel flat faces `face` and `face2` (ids from `list_faces`) or their angle; `hole`: the holes in flat face `face` or at `at`, modeled diameter, the size it prints at after `hole_comp`, through or blind depth. `frame` `print` or `assembly` (default: the assembly for two labels, else the piece as built); `image` adds a picture with what was measured in red |
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
 | `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result; over HTTP it also lists the [view links](../getting-started/http.md#view-in-3d) of the views `export` made. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
 | `compare(reference, candidate, thresholds?, image?, size?, inline?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
-| `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it: `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
+| `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it, or a scan or photo (PNG, JPEG, TIFF, BMP) to [trace](tracing.md): `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
 | `describe_model(part, file, scale?, image?, size?, inline?)` | inspect an original before remixing it: format, units, size, faces before and after merging, the curved (faceted) share, round holes, repairs, the designer and license metadata it carries, and a suggestion to modify or redraw it; `image` adds a 6-view render |
 | `before_after(name, variant?, size?, inline?)` | for a remix: the original and the remix side by side, and the original colored where the remix differs, with `compare`'s score |
+| `check_fit(name, variant?, hole_tol?, verbose?, fresh?)` | [fit between the pieces](fit.md) of `assembly(d)` as placed, stand-ins included: pairs that overlap (volume and where), pairs closer than the clearance without touching, and hole alignment across pieces (partner holes off-axis by more than `hole_tol`, default 0.2 mm; diameters that no one screw explains; holes whose axis runs into solid material); male/female joint pairs are measured against their own clearance. `verbose` lists the pairs that fit too |
+| `trace_outline(part, file, dpi?, grid?, reference?, points?, distance?, tolerance?, smooth?, pick?, threshold?, invert?, inline?)` | [trace a flat object](tracing.md) in a scan or photo from `parts/<part>/ref/` into an outline in mm with its holes: scale from `dpi` (or the file's metadata), a `grid` cell size, a `reference` object (`card`, or its sides in mm) or two `points` a known `distance` apart; simplified to `tolerance` mm (or `smooth` spline points); `pick` chooses the object. Writes the points (JSON), a Python snippet and an overlay PNG to confirm with the user |
+| `recipe(name?)` | the [recipe library](recipes.md): tested build123d functions for common printable features; no `name` lists them, a name gives the code, a tested example, printing notes and sources |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP and SSH it is saved per workspace |
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
@@ -38,10 +46,106 @@ only those are built. Every tool that builds the part reads the pieces from the
 them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part` and
+Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`, `params` and
 `upload_reference` runs in the
 [sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
 the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
+
+Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`,
+`upload_reference` and `recipe` runs in the
+[sandbox](sandbox.md): the part script, or for `compare`, `describe_model` and `trace_outline`
+the parsing of the model and image files (they may come from model-written scripts or from the
+internet). `trace_outline` reads only the part's own reference files. `compare` only takes files inside the workspace.
+
+## suggest_orientation
+
+Run it before exporting when the part is not obviously flat-bottomed (a bracket, a hook, a
+part with a cap or a flange). It never edits the script: you apply the rotation it gives.
+
+**Candidates.** The six axis-aligned orientations (as modeled first) and every large flat face
+of the part's convex hull put down on the bed: the flat faces it can rest on, its own and the
+ones it spans (a wedge's slope, the rim of a cup). The same side down counts once; at most 12
+are scored, so a call takes a second or a few.
+
+**Scores.** Each candidate is measured with what `check` and `design_metrics` already use, then
+scored, lower is better; the table shows the parts of the score:
+
+| Term | Measured by | Weight |
+| --- | --- | --- |
+| time | the print-time estimate (M3), supports included: extra time over the fastest candidate | 1 per 100 % extra |
+| supports | the supports estimate (M5): downward faces past `max_overhang` that are not bridges within `max_bridge` | 4 × their share of the part's surface |
+| contact | the first layer's area | 0.5 × (1 − contact / the best candidate's) |
+| tip-over | the [tip-over check](checks.md)'s auto-brim estimate | 1 × estimate / 5 mm, up to 3 |
+| falls | nothing on the bed, or the centre of mass outside the footprint | 3 |
+| strip | standing on a strip under ~2 mm wide | 1 |
+| bridges | bridges longer than `max_bridge` | 0.3 each |
+| load | with `load`: how far the load points out of the layers, \|cos\| of its angle to Z (DS-T1) | 3 × \|cos\| |
+| assumed load | `structural` style, no `load`: the same for the part's long axis (least inertia) | 1.5 × \|cos\| |
+
+`load` is in the part's frame as `build(d)` returns it: `X`, `along Y`, `XZ` (a diagonal) or
+`1,0,1`; its sign does not matter. Filament, time and supports are rough estimates: good for
+comparing orientations, not for a quote.
+
+**Applying it.** In `build(d)`, turn the part and put it back on the bed (print orientation,
+bed at Z=0):
+
+```python
+p = Rot(0, -90, 0) * p
+p = Pos(0, 0, -p.bounding_box().min.Z) * p
+```
+
+`UP` and `SHOW` are in print orientation, so they turn too: the result says what `UP` becomes.
+Wall and Probe checks with `frame="print"` need their coordinates re-checked;
+`frame="assembly"` ones stay put. Then `build_part` and `check`.
+
+```text
+mush [standard]
+mush: 6 orientations ranked (lower score is better; rough estimates)
+ #  rotation             on the bed              supports  contact  height   time  score  notes
+                                                  mm2 / g      mm2      mm    min
+ 1  Rot(180, 0, 0)       +Z side                    0 / 0      707    36.0   13.7   0.09
+ 2  Rot(0, 0, 0)         -Z side                  656 / 4.9       50    36.0   20.2   3.08  supports under 656.3 mm^2; tip-over (auto-brim estimate 5.38 mm (>= 5)); as modeled now
+ ...
+```
+
+The CLI does the same: [`b123d-print orient`](../getting-started/cli.md).
+
+## Build failures, dimensions and measurements
+
+**Diagnosis.** When a build fails, the result of `build_part`, `render_preview`, `section`,
+`check` and `export` carries a `DIAGNOSIS`: the likely cause, where it happened (file, line,
+function, the code, and the piece of `build()` being built), the evidence and specific fixes.
+The worker reads the failing build123d call itself, so the fix has the numbers:
+
+```text
+DIAGNOSIS (fillet): the fillet radius is too big for a face next to the edges, or the edges selected are not the ones meant
+  where: parts/box/box.py line 14 in lid, while building piece 'lid': part = fillet(part.edges().filter_by(Axis.Z), radius=d.R)
+  Dims on that line: R=3.0
+  evidence: fillet radius 3 mm on 4 edge(s)
+  evidence: narrowest face next to those edges: 4 mm wide
+  try:
+    - fillet r 3 on edges between faces 4 mm wide: try r <= 1.9 (R in Dims: set_params('box', {'R': <new value>}))
+    - fillet before the cut or boolean that makes the narrow face, so it rounds simpler geometry
+```
+
+It covers fillets and chamfers (radius against the faces next to the edges, an empty edge
+selection), 2D offsets (an inward offset past half the outline, tight curves, splines: offset a
+polyline instead), 3D offsets and shells, booleans (coplanar faces, tangent contact, slivers,
+build123d's "Unable to clean"), lofts, sweeps, extrusions, a missing or misspelled `Dims` field
+(with the closest names), `build()` returning the wrong type (None, the builder, a list, a
+sketch), selections that come back empty, missing imports, and timeouts: the worker says which
+piece it is building, so a timeout names the slow piece and the pieces that finished. A build that
+runs but makes something unprintable (invalid, zero volume, 2D, not on the bed) gets `problems`
+in `build_part`'s result. Automatic in every failed result, because the error is all the model
+sees and it fixes the script from there; `diagnose_failure` is the slower, deeper look on demand.
+
+**One dimension.** `params` lists the `Dims`; `set_params` changes values in place with an
+exact edit (the ast gives the line and column of each default) instead of a rewrite of the whole
+script, and reports what changed in the build.
+
+**Measurements.** `measure` answers "does it fit" with numbers: the gap between the lid and the
+box in the assembly, the wall left around a counterbore, the width of a slot between two faces,
+the size and depth of a hole.
 
 ## Prompts
 
@@ -64,6 +168,8 @@ carries the full [workflow rules](../scripts/rules.md).
 | --- | --- |
 | `b123d-print://guide` | the workflow and print rules (the same text as [`AGENTS.md`](../scripts/rules.md)) |
 | `b123d-print://template` | the part-script template `new_part` starts from |
+| `b123d-print://recipes` | the [recipe library](recipes.md): every recipe with its functions |
+| `b123d-print://recipes/{name}` | one recipe: its code, a tested example, printing notes and sources (the same text as `recipe(name)`) |
 | `b123d-print://files/{workspace}/{+path}` | a file the server wrote (`parts/<part>/out/...`), only in the session's own workspace (`_` = the root workspace). Tool results link to these |
 | `b123d-print://download/{workspace}/{part}` | a whole part as a zip in the local layout (`parts/<part>/<part>.py`, `out/`, `ref/`), only in the session's own workspace; `download_part` links to it |
 

@@ -15,7 +15,7 @@ and optionally:
                                                     # the things it mates with -> overlap check
     def views(d) -> list[View]                      # section views saved on export
     def checks(d) -> list[Wall | Overhang | Gap | ...]  # automatic per part: Overhang, ThinFeature,
-                                                    # Holes, BedEdge, Gap, Fit
+                                                    # Holes, BedEdge, TipOver, Gap, Fit
     def original(d) -> Part                         # remixes: the original as placed in the remix
                                                     # (default: what build() loaded with import_model)
     def templates(d) -> list[Template]              # fit-test templates exported with every variant
@@ -102,6 +102,8 @@ class Pieces:
     instead of built. `stats` holds what each piece cost: faces, seconds (None for a piece of an
     eager dict: build(d) built them all, in `build_seconds`) and whether it came from the cache."""
 
+    progress = None  # a callable the worker sets: told what is being built (diagnose.PROGRESS lines, for timeouts)
+
     def __init__(self, mod: ModuleType, d, cache: BuildCache | None = None):
         self.mod, self.d, self.cache = mod, d, cache
         self.stats: dict[str, dict] = {}
@@ -124,6 +126,7 @@ class Pieces:
     def _build(self) -> dict:
         if self._raw is None:
             t = time.perf_counter()
+            self._say("building build(d)")
             with self._recording() as rec:
                 if hasattr(self.mod, "build"):
                     r = self.mod.build(self.d) if self.d is not None else self.mod.build()
@@ -132,11 +135,16 @@ class Pieces:
                 else:
                     raise AttributeError("script defines neither build(d) nor a module-level `part`")
             self.build_seconds = time.perf_counter() - t
+            self._say(f"built build(d) in {self.build_seconds:.2f} s")
             self._raw = dict(r) if isinstance(r, dict) else {"": r}
             self._imported = bool(rec)
             if self.cache is not None and not self._imported:
                 self.cache.save_names(list(self._raw))
         return self._raw
+
+    def _say(self, msg: str) -> None:
+        if Pieces.progress is not None:
+            Pieces.progress(msg)
 
     @contextmanager
     def _recording(self):
@@ -169,10 +177,12 @@ class Pieces:
                 raise KeyError(f"no part {name or 'part'!r}; parts: {sorted(k or 'part' for k in raw)}")
             v = raw[name]
             t = time.perf_counter()
+            self._say(f"building piece {name or 'part'}")
             with self._recording() as rec:
                 shape = v() if _lazy(v) else v
             secs = round(time.perf_counter() - t, 2) if _lazy(v) else None
             self.stats[name] = {"faces": _faces(shape), "seconds": secs, "cached": False}
+            self._say(f"built piece {name or 'part'}: {self.stats[name]['faces']} faces, {secs or 0:.2f} s")
             if self.cache is not None and not (self._imported or rec):
                 self.cache.save(name, shape, self.stats[name])
         self._done[name] = shape
@@ -286,7 +296,7 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     fitted = {s.part or "part" for s in specs if isinstance(s, ck.Fit)}
     specs += [ck.Fit(p) for p in parts if p not in fitted]  # no-op without a printer profile
     # automatic per-part checks; a script lists one itself to change its arguments
-    for cls in (ck.ThinFeature, ck.Holes, ck.BedEdge):
+    for cls in (ck.ThinFeature, ck.Holes, ck.BedEdge, ck.TipOver):
         listed = {s.part or "part" for s in specs if isinstance(s, cls)}
         specs += [cls(p) for p in parts if p not in listed]
     gapped = {s.part or "part" for s in specs if isinstance(s, ck.Gap) and s.other is None}
@@ -343,7 +353,8 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                 raise
             except Exception as e:
                 res["error"] = finding_dict(ck.Finding(ck.FAIL, "error", tag, f"build failed: {e!r}",
-                                                       {"traceback": traceback.format_exc()}))
+                                                       {"traceback": traceback.format_exc(),
+                                                        "diagnosis": _diagnosis(e, mod)}))
                 return res
             pre = [import_finding(i) for i in imports]
             for name, p in parts.items() if share[0] == 0 else ():  # once per run: share 0 reports them
@@ -397,6 +408,16 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
             not_run = [res["labels"][i] + (" on the original" if side == "original" else "") for i, side in todo[1:]]
             res["stopped"] = {"running": current, "not_run": not_run, "seconds": round(time.time() - dl.started, 1)}
     return res
+
+
+def _diagnosis(e: BaseException, mod: ModuleType) -> dict | None:
+    """diagnose.from_exception, never raising: a broken diagnosis must not hide the error itself."""
+    from . import diagnose
+
+    try:
+        return diagnose.from_exception(e, getattr(mod, "__file__", None))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def merge_shares(shares: list[dict], nudge: bool = True, failed: list[str] = ()) -> list[ck.Finding]:
@@ -708,7 +729,7 @@ def _write_findings(path: Path, findings: list[ck.Finding]) -> None:
 
 NO_CACHE_ENV = "B123D_PRINT_NO_CACHE"  # set (to anything but "" or 0): the worker neither reads nor writes the build cache
 SHAPE_TYPES = ("Part", "Compound", "Solid")  # what the build cache restores (a Box as a Part); others are built every time
-NOT_GEOMETRY = ("root", "formats", "style", "filament_price", "print_flow")  # settings no build reads
+NOT_GEOMETRY = ("root", "formats", "style", "filament_price", "print_flow", "tip_speed")  # settings no build reads
 
 
 def no_cache_env() -> bool:
@@ -1061,7 +1082,7 @@ def make_pieces(mod: ModuleType, key: str, d, settings: Settings, cache: CacheCo
     return Pieces(mod, d, BuildCache(mod, key, d, settings, cache) if use else None)
 
 
-INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.Gap)  # automatic checks also run on the original
+INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.TipOver, ck.Gap)  # automatic checks also run on the original
 ORIGINAL = "original"
 
 

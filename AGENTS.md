@@ -8,17 +8,28 @@ actually printed; several rules exist because a print failed without them.
 ## Tools
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
-`build_part`, `render_preview`, `section`, `check`, `export`, `list_faces`, `make_template`). Otherwise
+`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `make_template`,
+`trace_outline`, `recipe`). Otherwise
 use the CLI:
 
 - `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
 - `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png] [--only <pieces>]` or
   `b123d-print build <name> [--only <pieces>]` — export to `parts/<name>/out/` and run the checks
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
+- `b123d-print fit [<name>]` — fit between the pieces of `assembly(d)`: overlaps, gaps, hole alignment
+- `b123d-print trace <image> --dpi N | --grid MM | --reference card` — a scan or grid photo to an outline in mm
+- `b123d-print recipes [<name>]` — tested snippets for common features (teardrop, nut trap, snap arm, ...)
 - `b123d-print config` — show the print settings in effect (hole compensation, clearance, limits)
 - `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
 - `b123d-print faces <name>` / `b123d-print template <name> --slice XY:3 | --face ID | --crop x,y,z:sx,sy,sz`
   — list flat faces; make a fit-test template (see below)
+- `b123d-print diagnose <name>`, `b123d-print params <name>`, `b123d-print set <name> FIELD=VALUE`,
+  `b123d-print measure <name> --distance A,B | --wall x,y,z | --faces ID,ID | --hole ID` — as below
+
+**After a failed build, read its `DIAGNOSIS`** (cause, where, fixes with numbers) before changing
+the script; `diagnose_failure` looks deeper. **Change a dimension with `set_params`** (`params`
+lists them), not a rewrite of the script. **Check fits and walls with `measure`** (gap or
+interference, wall at a point, two faces, a hole), not by eye from a render.
 
 ## The part script
 
@@ -112,6 +123,10 @@ as a starting point, say so in the report, and never turn it into a default or a
   in ABS/ASA). Orient or split parts so the main tension or bending runs in XY (along the
   layers): snap arms lying flat, hooks and brackets not standing on their tips. State the load
   direction and the orientation in the report. [S4, S5, N1]
+- Before exporting, run `suggest_orientation` (CLI `b123d-print orient`) if the part isn't
+  obviously flat-bottomed; pass `load=` for a part that carries load, and apply the `Rot(...)`
+  it gives in `build(d)`. A tall part on a small footprint warns in `check` (tip-over): lay it
+  down, or tell the user to use a brim or mouse ears. [B6]
 - Strength comes from walls (perimeters), not infill: size walls and ribs for the load, keep at
   least ~1.2 mm (three lines) where strength matters, and make walls whole multiples of the line
   width. Say in the report which features need more slicer perimeters (screw bosses: 3-4 or
@@ -137,6 +152,8 @@ as a starting point, say so in the report, and never turn it into a default or a
 
 **Snap fits and living hinges**
 
+- Use a recipe (`recipe` tool, `b123d_print.recipes`) before improvising a snap arm, hinge, nut
+  trap, teardrop hole, lid lip, text or bed chamfer: they are tested and cite their numbers.
 - Snap arms: lie flat (bend in XY), root fillet ≥ 0.5 × arm thickness, taper the arm toward
   the tip. [N1, N2, N3]
 - Provisional (one source, Fictiv): size the arm with the cantilever strain formula and an
@@ -187,6 +204,27 @@ as a starting point, say so in the report, and never turn it into a default or a
   each print in their strongest orientation. Join with a dovetail and dowels or alignment pins
   (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds
   every common filament; acetone welds ABS/ASA; PETG takes only CA or epoxy. [J1, J2, J4, J5]
+
+## Splitting a part
+
+When a part does not fit the bed in any orientation (the `fit` check fails, or it is bigger than
+the user's bed), or would print much better in pieces: [J1]
+([guide](https://kd5ryn.github.io/b123d-print/using/splitting/))
+
+1. **Propose the cuts and the joint, with reasons, and wait for confirmation:** where the load is
+   low, along a design line where the seam hides, so each piece lies on a big flat face without
+   supports and with its load along the layers [J6]. Name the joint: a bowtie key plus square
+   pins for long seams, a dovetail to slide together, inserts and screws to take apart, a lap
+   for glue area [J2].
+2. **Use `b123d_print.joints`, never hand-made joints:** `split(part, plane, [Bowtie(...),
+   Dowel(...), ...], clearance=d.CLEARANCE)` returns the pieces (`.a`, `.b`), the loose keys and
+   pins laid flat (`.loose`) and placed (`.placed`, for `assembly(d)`). Joint sizes are named
+   `Dims` fields. Add `Gap` checks on a key or pin and `Wall` checks around the joint features.
+3. **Offer a fit-test template of the joint first** (`Template.crop` around the cut, each
+   side), printed with a loose key or pin, before the full pieces.
+4. **Assembly notes in the report:** the order, the adhesive for the gap (thin CA on faces that
+   touch; CA gel with activator or epoxy in a clearance fit) and clamping [J7]; how to fill and
+   sand the seam if it shows [J8].
 
 ## Remixing an existing model
 
@@ -279,6 +317,9 @@ printer only when the user asks.
   wire or tracing for curves; a **table of offsets** (stations at a fixed spacing along a datum
   line, one height or width per station, level or along the surface stated) for large or curved
   parts, plus a test section.
+- **Trace a scan instead of measuring a flat outline point by point:** `upload_reference` the
+  image, `trace_outline` it (scale from the scan's DPI, a grid, a card or two points), show the
+  overlay and confirm one known dimension; photo traces stay estimates.
 - **Photos:** ask for a scale reference (ruler, grid, card) in the same plane as the feature,
   shot square on from a distance; size readings from photos stay estimates.
 - **Record** each confirmed value as a named `Dims` field whose comment gives its source, method
@@ -295,6 +336,10 @@ Do all of this every time you change geometry, before telling the user the part 
    show what the 3D render hides.
 4. **Run the checks** and fix every failure; mention every warning you leave. Every part gets
    the overhang (with bridges), thin-feature, holes, bed-edge and gap checks automatically.
+   For several pieces with an `assembly(d)`, also run the fit check (`check_fit`, CLI
+   `b123d-print fit`): overlaps, gaps under the clearance and screw holes that do not line up
+   between pieces. It is not part of `check` unless the script lists `Mates()` in `checks(d)`;
+   do that for parts that are always checked as an assembly.
 5. **Wall check around deep cuts:** wherever a cut goes deeper than the wall it starts in
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.
@@ -366,7 +411,7 @@ The rules and their sources are in
 ## Checks reference
 
 ```python
-from b123d_print import Gap, Overhang, Probe, ThinFeature, Wall
+from b123d_print import Gap, Mates, Overhang, Probe, ThinFeature, Wall
 
 def checks(d):
     # Part names: a single Part returned by build() is "part" (the script's own name also works);
@@ -386,5 +431,7 @@ def checks(d):
         ThinFeature("lid", ignore=[((0, 20, 0.25), (40, 2, 0.6))]),
         # gap between two assembly parts (or part names) inside a box: the lid's sliding fit
         Gap("lid", "base", min=d.CLEARANCE, max=d.CLEARANCE + 0.1, within=((0, 0, 30), (60, 60, 4))),
+        # opt-in: fit between the assembly's pieces (overlaps, gaps, hole alignment) inside `check`
+        Mates(hole_tol=0.2, ignore=[("box", "screw (stand-in)")]),
     ]
 ```

@@ -46,9 +46,15 @@ b123d-print://guide (or the prompt design_part_from_photos) for the rules: named
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
 list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
 before reporting. render_preview and section return PNG images.
+A failed result carries a DIAGNOSIS (cause, where, fixes): read it before changing the script;
+diagnose_failure looks deeper. Change a dimension with set_params (params lists them), not a
+rewrite. Check fits and walls with measure, not by eye.
 Several pieces: return lazy pieces from build(d) ({"name": lambda: piece(d)}) and pass parts= to
 build_part, render_preview, section and export to work on one; built pieces are cached, so later
 calls reuse them (fresh=True rebuilds). build_part reports each piece's time and faces.
+Pieces with an assembly(d): check_fit (overlaps, gaps, hole alignment). A flat outline from a scan
+or grid photo: upload_reference, then trace_outline. Common features (teardrop holes, nut traps,
+snap arms, hinges, lids, text, bed chamfers): read the recipe tool before improvising one.
 When this server is remote (HTTP or SSH), it is a workbench, not storage: what it writes is a
 temporary working copy, deleted after some days unused. Use ONLY these MCP tools and the links they
 return; the server gives no shell, ssh or scp access. Last step, before reporting: download_part
@@ -176,15 +182,27 @@ async def _run(job: dict, out_dir: Path) -> dict:
 
 async def _job(name: str, op: str, **kw) -> dict:
     script = _script(name)
-    return await _run({"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}, script.parent / "out")
+    res = await _run({"op": op, "script": str(script), **{k: v for k, v in kw.items() if v is not None}}, script.parent / "out")
+    if not res.get("ok") and not res.get("usage_error"):  # a timeout or a dead worker: no diagnosis from the worker
+        from .diagnose import from_result
+
+        res["diagnosis"], res["part_name"] = from_result(res, script), name
+    return res
 
 
 def _error_text(res: dict) -> str:
+    from .diagnose import PROGRESS, text
+
     s = f"ERROR: {res.get('error')}"
+    if res.get("usage_error"):  # a wrong argument (piece, variant, face, measurement): the message says it all
+        return _scrub(s)
+    if res.get("diagnosis"):
+        s += "\n\n" + text(res["diagnosis"], res.get("part_name"))
     if res.get("traceback"):
         s += f"\n\n{res['traceback']}"
-    if res.get("log"):
-        s += f"\n\nOutput:\n{res['log']}"
+    log = "\n".join(line for line in (res.get("log") or "").splitlines() if not line.startswith(PROGRESS))
+    if log:
+        s += f"\n\nOutput:\n{log}"
     return _scrub(s)
 
 
@@ -478,14 +496,102 @@ def write_part(name: str, code: str) -> str:
     """Replace the whole part script with `code` (create the part with new_part first).
     The script must define build(d) (+ Dims, VARIANTS); see b123d-print://guide. Then call build_part."""
     p = _script(name)
+    err = _save_script(p, code)
+    if err:
+        return f"NOT SAVED: {err}"
+    return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+
+
+def _save_script(p: Path, code: str) -> str | None:
+    """Write a part script the way write_part does (size limit, must compile, bytes exactly as
+    given); the reason it was not saved, or None."""
     if len(code.encode()) > MAX_SCRIPT_BYTES:
         raise ToolError(f"script too large (> {MAX_SCRIPT_BYTES} bytes)")
     try:
         compile(code, str(p), "exec")
     except SyntaxError as e:
-        return f"NOT SAVED: syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
+        return f"syntax error at line {e.lineno}: {e.msg}\n{e.text or ''}"
     p.write_text(code, encoding="utf-8", newline="")  # exactly as sent, on every OS (no CRLF on Windows)
-    return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+    return None
+
+
+@mcp.tool()
+def params(name: str) -> str:
+    """The part's named dimensions, read from the script without running it: each Dims field
+    with its type, default as written, value (when the default is a literal), the comment saying
+    where it came from, and its line; the derived values (@property) and the fields they use;
+    and each variant's overrides in VARIANTS. Change one with set_params, not a whole rewrite."""
+    from .params import ParamError, read
+
+    p = _script(name)
+    try:
+        info = read(p.read_bytes().decode("utf-8"))
+    except ParamError as e:
+        raise ToolError(str(e)) from None
+    return json.dumps({"file": p.relative_to(_root()).as_posix(), **info}, indent=1, ensure_ascii=False)
+
+
+@mcp.tool()
+async def set_params(name: str, values: dict[str, float | int | str | bool | list[float | int | str | bool]],
+                     variant: str | None = None, rebuild: bool = True, parts: str | None = None) -> str:
+    """Change Dims values in the script in place, leaving every other character of the file as
+    it was: values {"FIELD": new value, ...} replaces each field's default (only literal defaults:
+    a default computed by an expression such as hole_comp(__file__) is refused with the reason;
+    so are unknown fields, derived @property values and values of the wrong type). variant: change
+    (or add) that variant's override in VARIANTS instead of the default. rebuild (default true):
+    build before and after (the build cache makes "before" quick) and report what changed per
+    piece: size and volume; parts: only those pieces. Saved like write_part (size limit, must
+    compile). If the new build fails, the result has the diagnosis and the call to undo it."""
+    import ast
+
+    from .params import ParamError, read, set_values
+
+    p = _script(name)
+    src = p.read_bytes().decode("utf-8")
+    try:
+        new, changes, notes = set_values(src, values, variant)
+        keys = list(read(src).get("variants", {}))
+    except ParamError as e:
+        raise ToolError(str(e)) from None
+    build_v = variant or (keys[0] if keys else None)
+    before = await _job(name, "build", variant=build_v, parts=parts) if rebuild else None
+    err = _save_script(p, new)
+    if err:
+        raise ToolError(f"not saved: {err}")
+    rel = p.relative_to(_root()).as_posix()
+    lines = [f"Changed {rel}:"]
+    for c in changes:
+        where = f"VARIANTS[{c['variant']!r}]" if c.get("variant") else "Dims"
+        lines.append(f"  {c['field']} ({where}, line {c['line']}): {c['old'] if c['old'] is not None else '(not set)'} -> {c['new']}")
+    lines += [f"  note: {n}" for n in notes]
+    undo = {c["field"]: ast.literal_eval(c["old"]) for c in changes if c["old"] is not None}
+    undo_call = f"set_params('{name}', {json.dumps(undo)}" + (f", variant={variant!r})" if variant else ")")
+    if not rebuild:
+        lines.append(f"Not rebuilt (rebuild=false). Next: build_part('{name}').")
+        return "\n".join(lines)
+    after = await _job(name, "build", variant=build_v, parts=parts)
+    if not after.get("ok"):
+        lines.append(f"\nThe change is saved, but the build now FAILS. Undo: {undo_call}\n")
+        return "\n".join(lines) + _error_text(after)
+    for v, res in after["variants"].items():
+        old = ((before or {}).get("variants") or {}).get(v, {}).get("parts", {}) if (before or {}).get("ok") else {}
+        lines.append(f"Rebuilt [{v}]:")
+        for pname, r in res["parts"].items():
+            o = old.get(pname)
+            size = f"{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm"
+            if o:
+                size = f"{o['x']:.2f} x {o['y']:.2f} x {o['z']:.2f} -> {size}"
+                dv = r["volume"] - o["volume"]
+                vol = f"volume {o['volume']:.1f} -> {r['volume']:.1f} mm^3 ({dv:+.1f}" + (
+                    f", {100 * dv / o['volume']:+.1f} %)" if o["volume"] else ")")
+            else:
+                vol = f"volume {r['volume']:.1f} mm^3" + ("" if before is None else " (new: no build before to compare)"
+                                                         if before.get("ok") else " (the build failed before this change)")
+            lines.append(f"  {pname}: {size}; {vol}; valid={r['valid']}")
+        for pname, probs in res.get("problems", {}).items():
+            lines += [f"  PROBLEM {pname}: {pr['cause']}; try: {pr['fixes'][0]}" for pr in probs]
+    lines.append(f"Undo: {undo_call}")
+    return _scrub("\n".join(lines))
 
 
 @mcp.tool()
@@ -503,6 +609,24 @@ async def build_part(name: str, variant: str | None = None, parts: str | None = 
         return _error_text(res)
     res.pop("ok", None)
     return json.dumps(res, indent=1, default=str)
+
+
+@mcp.tool()
+async def diagnose_failure(name: str, variant: str | None = None, parts: str | None = None) -> str:
+    """The deeper look after a failed or broken build (failed results already carry a short
+    DIAGNOSIS): builds one variant piece by piece, each on its own and without the build cache,
+    and for each piece reports the error with its likely cause and specific fixes (where in the
+    script, the piece, the numbers: e.g. the largest fillet radius that works on those edges),
+    or for a piece that built, what makes it unprintable (invalid solid, zero volume, a 2D shape,
+    not on the bed) and, for an invalid one, which faces and edges are bad, tiny edges and sliver
+    faces left by booleans, and whether part.fix() repairs it. Then the assembly. parts: only
+    those pieces. Stops before the time limit and names the pieces it did not get to."""
+    from .diagnose import deep_text
+
+    res = await _job(name, "diagnose", variant=variant, parts=parts)
+    if not res.get("ok"):
+        return _error_text(res)
+    return _scrub(deep_text(res, name))
 
 
 @mcp.tool(structured_output=False)
@@ -591,9 +715,11 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     overhangs > 45 deg from vertical in print orientation (bed face ignored) and bridge spans,
     thin features (walls under one line width fail), round-topped horizontal holes, fillets on
     bed edges, gaps between parts printed in place, the script's Wall checks (thinnest material
-    around deep cuts) and Probes. Fix every FAIL; report every WARN. On a remote server (HTTP/SSH)
-    the part is not on the user's machine until download_part brings it home. Uses the pieces
-    cached by an earlier build; fresh=True builds them again."""
+    around deep cuts) and Probes. The fit between an assembly's pieces (hole alignment, gaps) is
+    a separate tool, check_fit, unless the script lists Mates() in checks(d). Fix every FAIL;
+    report every WARN. On a remote server (HTTP/SSH) the part is not on the user's machine until
+    download_part brings it home. Uses the pieces cached by an earlier build; fresh=True builds
+    them again."""
     res = await _check(name, variant, fresh)
     if not res.get("ok"):
         return _error_text(res)
@@ -602,6 +728,10 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
         lines.append(f"\n{name} [{v}]")
         for f in findings:
             lines.append(f"  [{f['level'].upper():4}] {f['check']:8} {f['target']}: {f['message']}")
+            if (f.get("data") or {}).get("diagnosis"):
+                from .diagnose import text
+
+                lines += ["    " + x for x in text(f["data"]["diagnosis"], name).splitlines()]
     if res["passed"] and _remote():
         lines.append(f"\nNot on your machine yet: download_part('{name}') brings the part home when it is done. "
                      + _home_note(name))
@@ -633,6 +763,35 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
     if as_json:
         return json.dumps({"variant": res["variant"], **res["metrics"]}, indent=1, default=str)
     return f"{name} [{res['variant']}]\n{res['text']}"
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def suggest_orientation(name: str, variant: str | None = None, piece: str | None = None, load: str = "",
+                              image: bool = False, size: str = "normal", inline: bool = True) -> list:
+    """Rank the ways to put the part on the bed, so it does not print upside down or on a thin
+    edge: the six axis-aligned orientations and the large flat faces of its convex hull, each
+    scored on supports (area and grams under overhangs past max_overhang, bridges apart), bed
+    contact, height and print time (rough estimates), bridges, tip-over risk (as the check) and,
+    with a load or the structural style, whether the load runs along the layers (DS-T1). Returns
+    a ranked table with the Rot(x, y, z) to apply in build(d) and how. Run it before export when
+    the part is not obviously flat-bottomed. piece: one printable part (default: each).
+    load: the bending or tension direction as build(d) returns the part ('X', 'along Y', 'XZ',
+    '1,0,1'). image: also render the top choice (of the first part). Changes nothing."""
+    _image_options(size)
+    try:
+        from .orient import parse_load
+
+        parse_load(load)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    res = await _job(name, "orient", variant=variant, piece=piece, load=load or None, image=image or None, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    text = f"{name} [{res['variant']}]\n{res['text']}"
+    if not res.get("image"):
+        return [text]
+    return _with_note(_with_image(f"{text}\n\ntop choice: {_show(res['image'])}", res["image"], inline), name)
 
 
 @mcp.tool(structured_output=False)
@@ -780,6 +939,50 @@ async def list_faces(name: str, variant: str | None = None, part: str | None = N
     if not image:
         return [text]
     return _with_note(_with_image(f"face {res['highlight']} in red: {_show(image)}\n{text}", image, inline), name)
+
+
+@mcp.tool(structured_output=False)
+async def measure(name: str, kind: str, a: str | None = None, b: str | None = None,
+                  at: list[float] | str | None = None, direction: list[float] | str | None = None,
+                  face: int | str | None = None, face2: int | str | None = None, frame: str = "auto",
+                  variant: str | None = None, image: bool = False, size: str = "normal", inline: bool = True) -> list:
+    """Precise measurements on the built part, in mm, with the points where they were taken: check
+    fits with numbers instead of guessing from pictures. kind:
+    'distance' (a, b: piece names from build() or assembly labels, stand-ins included): the
+    smallest gap and its two points, or when they overlap the interference volume, its box and
+    depth. Two assembly labels are measured where assembly(d) puts them (the fit).
+    'wall' (at: x,y,z on or in the material; direction: optional x,y,z): the thickness along a
+    line through the point (default: into the part along the nearest face's normal), with the gaps
+    and walls beyond it.
+    'faces' (face, face2: ids or sides from list_faces): the distance between two parallel flat
+    faces (a wall, a slot), or the angle between them, and their closest points.
+    'hole' (face: a flat face id or side, and/or at: a point at the hole): each round hole's
+    modeled diameter, what it prints at after hole_comp, center, axis, through or blind depth.
+    a: the piece for wall, faces and hole (default: the only one). frame: 'auto' (default),
+    'print' (as build() returns it) or 'assembly' (as assembly(d) places it); points are in that
+    frame. image: also a picture of the part with what was measured in red. Uses the build cache."""
+    _image_options(size)
+    kind = (kind or "").lower()
+    if kind not in ("distance", "wall", "faces", "hole"):
+        raise ToolError("kind: 'distance', 'wall', 'faces' or 'hole'")
+
+    def fid(v):
+        if v is None or str(v).strip() == "":
+            return None
+        v = str(v).strip()
+        return int(v) if v.lstrip("-").isdigit() else (_triple(v, "face") if "," in v else v)
+
+    q = {"kind": kind, "a": a, "b": b, "at": _triple(at, "at"), "direction": _triple(direction, "direction"),
+         "face": fid(face), "face2": fid(face2), "frame": frame, "image": image}
+    res = await _job(name, "measure", variant=variant, query={k: v for k, v in q.items() if v is not None}, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    res.pop("ok", None)
+    img = res.pop("image", None)
+    text = f"{res.pop('summary')}\n{json.dumps(res, indent=1)}"
+    if not img:
+        return [text]
+    return _with_note(_with_image(f"{text}\nhighlight: {_show(img)}", img, inline), name)
 
 
 @mcp.tool(structured_output=False)
@@ -1029,7 +1232,8 @@ def _ref_file(part: str, file: str) -> Path:
 @mcp.tool()
 def upload_reference(part: str, filename: str, data_base64: str = "", overwrite: bool = False) -> str:
     """Get an original model (STL, 3MF or STEP) onto the server, into parts/<part>/ref/<filename>,
-    to remix it (the part folder may not exist yet). With data_base64 (the whole file, base64) it
+    to remix it, or a scan or photo (PNG, JPEG, TIFF, BMP) to trace with trace_outline (the part
+    folder may not exist yet). With data_base64 (the whole file, base64) it
     is stored now, up to 50 MB; that is only practical for small files, since the model has to
     write out every byte. Without it, the result says how the USER copies the file: over HTTP a
     signed upload link for `curl -fT <file> '<link>'` (no token needed, expires), over SSH the
@@ -1057,9 +1261,9 @@ def upload_reference(part: str, filename: str, data_base64: str = "", overwrite:
             refs.store(root, parts_dir, part, filename, data, overwrite)
         except refs.RefError as e:
             raise ToolError(str(e)) from None
-        return f"Stored {rel} ({len(data):,} bytes). Next: describe_model('{part}', '{filename}')."
+        return f"Stored {rel} ({len(data):,} bytes). Next: {_ref_next(part, filename)}."
     if os.path.lexists(target) and not overwrite:
-        return f"{rel} is already there. Next: describe_model('{part}', '{filename}') (overwrite=True to replace it)."
+        return f"{rel} is already there. Next: {_ref_next(part, filename)} (overwrite=True to replace it)."
     if _http():
         url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"],
                                   purpose="put-overwrite" if overwrite else "put")
@@ -1067,14 +1271,22 @@ def upload_reference(part: str, filename: str, data_base64: str = "", overwrite:
                 f"{refs.MAX_BYTES // 1_000_000} MB; the link expires "
                 f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))}):\n"
                 f"  curl -fT <path/to/{filename}> '{_base_url()}{url}'\n"
-                f"Then describe_model('{part}', '{filename}').")
+                f"Then {_ref_next(part, filename)}.")
     if STATE["ssh_dest"]:
         return (f"Ask the user to run this on their machine (the same SSH key as this MCP connection):\n"
                 f"  b123d-print push <path/to/{filename}> --part {part} --to {STATE['ssh_dest']}"
                 f"{' --overwrite' if overwrite else ''}\n"
-                f"Then describe_model('{part}', '{filename}').")
+                f"Then {_ref_next(part, filename)}.")
     return (f"This server runs locally: copy the file to {target} (create the folder if needed; you may do it "
-            f"yourself if you can write files). Then describe_model('{part}', '{filename}').")
+            f"yourself if you can write files). Then {_ref_next(part, filename)}.")
+
+
+def _ref_next(part: str, filename: str) -> str:
+    from .refs import IMAGE_SUFFIXES
+
+    if Path(filename).suffix.lower() in IMAGE_SUFFIXES:
+        return f"trace_outline('{part}', '{filename}', <scale: dpi, grid, reference or points + distance>)"
+    return f"describe_model('{part}', '{filename}')"
 
 
 @mcp.tool(structured_output=False)
@@ -1089,6 +1301,10 @@ async def describe_model(part: str, file: str, scale: str = "", image: bool = Tr
     (saved as parts/<part>/out/<file>_original.png)."""
     _image_options(size)
     path = _ref_file(part, file)
+    from .refs import IMAGE_SUFFIXES
+
+    if path.suffix.lower() in IMAGE_SUFFIXES:
+        raise ToolError(f"{file} is an image: trace_outline('{part}', '{file}', ...) traces a flat object in it")
     sc: object = 1.0
     if scale:
         from .remix import UNITS
@@ -1122,6 +1338,106 @@ async def before_after(name: str, variant: str | None = None, size: str = "norma
 
 
 # ---------------------------------------------------------------------------------------------
+# Fit between pieces, outline tracing, recipes
+
+
+@mcp.tool()
+async def check_fit(name: str, variant: str | None = None, hole_tol: float | None = None, verbose: bool = False,
+                    fresh: bool = False) -> str:
+    """How the pieces of assembly(d) fit together, as placed (stand-ins count as obstacles):
+    interference (pairs that overlap: the volume and where; pairs closer than the clearance
+    without touching: the gap and where; faces resting on each other are contact) and hole
+    alignment (round holes of two pieces on one axis are partners: offset beyond hole_tol mm,
+    default 0.2, fails; their diameters read as screw holes, clearance + pilot / insert / nut,
+    and a pair no single screw explains warns; a hole whose axis runs into solid material of the
+    next piece has no partner). Male/female joint pairs from the script's joints(d) (or a
+    Mates(joints=...) in checks(d)) are intentional fits measured against their own clearance.
+    Stand-ins: labels saying stand-in or dummy, or matching no piece of build(). verbose: list
+    the passing pairs too. One variant, or all. Uses the build cache (fresh=True rebuilds)."""
+    res = await _job(name, "fit", variant=variant, hole_tol=hole_tol, verbose=verbose or None, fresh=fresh or None)
+    if not res.get("ok"):
+        return _error_text(res)
+    head = "PASSED" if res["passed"] else "FAILED"
+    return _scrub(head + "\n" + "\n\n".join(v["text"] for v in res["variants"]))
+
+
+def _numbers(v, n: int, what: str) -> list[float] | None:
+    if v in (None, "", []):
+        return None
+    try:
+        vals = [float(x) for x in (v.replace(";", ",").split(",") if isinstance(v, str) else v)]
+    except (TypeError, ValueError):
+        raise ToolError(f"{what}: {n} numbers") from None
+    if len(vals) != n:
+        raise ToolError(f"{what}: {n} numbers, got {len(vals)}")
+    return vals
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def trace_outline(part: str, file: str, dpi: float | None = None, grid: float | None = None, reference: str = "",
+                        points: str = "", distance: float | None = None, tolerance: float = 0.2, smooth: bool = False,
+                        pick: str = "", threshold: float | None = None, invert: bool | None = None,
+                        inline: bool = True) -> list:
+    """Trace a flat object in a scan or photo (parts/<part>/ref/<file>, from upload_reference) into a
+    2D outline in mm for a part script: the largest object's outline and its holes, simplified to
+    `tolerance` mm (few points: dense polylines build slowly), or with smooth=True through-points
+    for a periodic spline. Scale, one of: dpi (a flatbed scan; omit everything to read it from the
+    file), grid (cell size in mm of a grid or cutting mat under the object), reference ('card' =
+    a credit card 85.60 x 53.98 mm beside the object, or 'L,S' mm of another rectangle), or points
+    ('x1,y1,x2,y2' pixels, origin top left) with distance (mm between them). pick: 'x,y' pixel
+    inside the object to trace when it is not the largest. threshold (0..1) and invert (object
+    lighter than the background) override the automatic threshold. Writes out/<file>_outline.json
+    (the points), out/<file>_outline.py (a snippet with OUTLINE, OUTLINE_HOLES and a face function)
+    and out/<file>_trace.png (the outline on the image: show it to the user to confirm). A scan is
+    accurate to about a pixel; a photo only as far as it is square-on, flat and undistorted:
+    check a known dimension before trusting it."""
+    path = _ref_file(part, file)
+    from .refs import IMAGE_SUFFIXES
+
+    if path.suffix.lower() not in IMAGE_SUFFIXES:
+        raise ToolError(f"{file}: trace_outline reads images ({', '.join(IMAGE_SUFFIXES)}); describe_model is for models")
+    scale: dict = {}
+    if dpi:
+        scale["dpi"] = dpi
+    if grid:
+        scale["grid"] = grid
+    if reference:
+        scale["reference"] = reference if "," not in reference else _numbers(reference, 2, "reference")
+    if points:
+        scale["points"] = _numbers(points, 4, "points")
+        scale["distance"] = distance
+    args = {"tolerance": tolerance, "smooth": smooth, "threshold": threshold, "invert": invert,
+            "pick": _numbers(pick, 2, "pick")}
+    res = await _run({"op": "trace", "file": str(path), "scale": scale, "args": args}, _parts_dir() / part / "out")
+    if not res.get("ok"):
+        return [_error_text(res)]
+    t = res["trace"]
+    files = ", ".join(_show(f) for f in t["files"].values())
+    text = (f"{res['text']}\nfiles: {files}\n\nShow the overlay to the user and confirm the outline and one known "
+            f"dimension before modeling with it.\n\n```python\n{res['snippet']}```")
+    return _with_note(_with_image(text, t["image"], inline), part)
+
+
+@mcp.tool()
+def recipe(name: str = "") -> str:
+    """Tested build123d recipes for common printable features, with printing notes and sources:
+    teardrop holes, counterbores and countersinks, nut traps, magnet pockets, snap arms (with
+    strain sizing), living hinges, print-in-place hinges, lids with a lip, text, bed-edge
+    chamfers, zip-tie and cable slots, ribs and gussets. name: '' lists them; a recipe (or one of
+    its function names) gives its code, an example and the notes. Use one before improvising the
+    feature; part scripts import them: from b123d_print.recipes import snap_arm."""
+    from . import recipes
+
+    if not name:
+        return recipes.index()
+    try:
+        return recipes.get(name).text()
+    except KeyError as e:
+        raise ToolError(e.args[0]) from None
+
+
+# ---------------------------------------------------------------------------------------------
 # Resources and prompts (the workflow, model-neutral)
 
 
@@ -1135,6 +1451,27 @@ def guide() -> str:
 def template() -> str:
     """The part-script template new_part starts from."""
     return data("part_template.py")
+
+
+@mcp.resource("b123d-print://recipes", mime_type="text/markdown")
+def recipes_index() -> str:
+    """The recipe library: tested build123d functions for common printable features."""
+    from . import recipes
+
+    return recipes.index()
+
+
+@mcp.resource("b123d-print://recipes/{name}", mime_type="text/markdown")
+def recipe_text(name: str) -> str:
+    """One recipe: its code, a tested example, printing notes and sources."""
+    from mcp.server.mcpserver.exceptions import ResourceError
+
+    from . import recipes
+
+    try:
+        return recipes.get(name).text()
+    except KeyError as e:
+        raise ResourceError(e.args[0]) from None
 
 
 @mcp.resource("b123d-print://files/{workspace}/{+path}", mime_type="application/octet-stream")

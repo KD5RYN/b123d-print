@@ -180,14 +180,32 @@ def _edge_faces(part: Part) -> dict:
     return m
 
 
-def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, edge_faces: dict | None = None) -> dict:
+class Inside:
+    """solid.is_inside(point) (inside or on a face) with one OCC classifier for the solid:
+    Shape.is_inside builds a new one per call, which costs about as much as the test."""
+
+    def __init__(self, solid: Part):
+        from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+
+        self.c = BRepClass3d_SolidClassifier(solid.wrapped)
+
+    def __call__(self, x: float, y: float, z: float) -> bool:
+        from OCP.gp import gp_Pnt
+        from OCP.TopAbs import TopAbs_IN
+
+        self.c.Perform(gp_Pnt(float(x), float(y), float(z)), 1e-6)
+        return self.c.State() == TopAbs_IN or self.c.IsOnAFace()
+
+
+def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, edge_faces: dict | None = None,
+                inside: Inside | None = None) -> dict:
     """How a flat downward face (a ceiling) of `solid` is held. An edge is anchored when there is
     material just beyond it and just below the ceiling (a wall the bridge rests on), or when the
     face next to it carries on tangentially and curves down (a rounded corner into a wall). From points on a grid over the face,
     rays find the boundary in `rays` directions; a point is bridged when two opposite rays both
     end on anchored edges, and its span is the sum of the two. Returns {"span": mm (longest
     bridged span), "hanging": mm (how far unbridged material reaches from an anchor, 0 if none),
-    "kind": "bridge" | "cantilever"}."""
+    "kind": "bridge" | "cantilever"}. inside: the solid's Inside, when already made."""
     z = face.center().Z
     area = face.area
     st = step or max(0.25, min(1.0, np.sqrt(area) / 40))
@@ -204,7 +222,6 @@ def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, ed
             loops.append(np.array(pts))
     if not edges or not loops:
         return {"span": 0.0, "hanging": 0.0, "kind": "bridge"}
-    from build123d import Vector
     from matplotlib.path import Path as MPath
 
     paths = [MPath(lp) for lp in loops]
@@ -214,6 +231,8 @@ def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, ed
 
     if edge_faces is None:
         edge_faces = _edge_faces(solid)
+    if inside is None:
+        inside = Inside(solid)
     segs, anchored = [], []
     for e, xy in edges:
         # anchored: just beyond the edge (away from the ceiling) and just below it is material
@@ -226,7 +245,7 @@ def bridge_span(face, solid: Part, step: float | None = None, rays: int = 24, ed
             perp /= nrm
             eps = 0.05
             out = -perp if in_face((m.X + perp[0] * eps, m.Y + perp[1] * eps)) else perp
-            anch = solid.is_inside(Vector(m.X + out[0] * eps, m.Y + out[1] * eps, z - eps))
+            anch = inside(m.X + out[0] * eps, m.Y + out[1] * eps, z - eps)
             if not anch:  # tangent continuation curving down: the rounded top corner of a window
                 for g in edge_faces.get(hash(e), []):
                     if g.is_same(face) or g.geom_type.name == "PLANE" or g.bounding_box().min.Z > z - 0.3:
@@ -291,7 +310,7 @@ def overhang_faces(part: Part, max_angle: float = 45.0, bed_tol: float = 0.05, t
     at exactly max_angle. ignore_below: skip triangles lying entirely within this height above the bed."""
     zmin = part.bounding_box().min.Z
     found = []
-    edge_faces = None
+    edge_faces = inside = None
     hole_faces = None
     for face in part.faces():
         t = _down_tris(face, tol)
@@ -318,7 +337,8 @@ def overhang_faces(part: Part, max_angle: float = 45.0, bed_tol: float = 0.05, t
         }
         if ang[flag].min() > 89 and face.geom_type.name == "PLANE":
             edge_faces = edge_faces if edge_faces is not None else _edge_faces(part)
-            entry.update(bridge_span(face, part, edge_faces=edge_faces))  # kind "bridge" or "cantilever"
+            inside = inside or Inside(part)
+            entry.update(bridge_span(face, part, edge_faces=edge_faces, inside=inside))  # kind "bridge" or "cantilever"
         elif face.geom_type.name == "CYLINDER":
             if hole_faces is None:
                 hole_faces = {hash(f) for h in holes(part) if not h["vertical"] for f in h["faces"]}
@@ -374,6 +394,127 @@ def bed_fillets(part: Part, max_angle: float = 45.0, bed_tol: float = 0.05, min_
                     "max_angle": round(float(ang[flag].max()), 1), "height": round(f.bounding_box().size.Z, 2),
                     "center": [round(c.X, 2), round(c.Y, 2), round(c.Z, 2)]})
     return out
+
+
+# ---------------------------------------------------------------------------------------------
+# Tip-over: how well the first layer holds a tall part
+
+
+# BP-B6. OrcaSlicer's (and Bambu Studio's) Auto brim, src/libslic3r/Brim.cpp: brim width =
+# speed x H^2 x W / (1920 I), with I the first layer's second moment of area and W its width
+# across that axis; under 5 mm it makes no brim. The same file adds 5 mm of brim to a part over
+# 10 mm tall whose footprint islands have area / perimeter under 1.1 mm.
+TIP_BRIM = 5.0  # mm: the auto-brim estimate from which a part counts as tippy
+TIP_HEIGHT = 10.0  # mm: lower parts are not checked
+TIP_STRIP = 1.1  # mm: area / perimeter of a footprint island under which its contact is a thin strip
+
+
+def _hull(pts: np.ndarray) -> np.ndarray:
+    """Convex hull of 2D points, counter-clockwise (monotone chain)."""
+    p = np.unique(np.round(pts, 6), axis=0)
+    if len(p) < 3:
+        return p
+
+    def half(seq):
+        out: list = []
+        for q in seq:
+            while len(out) >= 2 and ((out[-1][0] - out[-2][0]) * (q[1] - out[-2][1])
+                                     - (out[-1][1] - out[-2][1]) * (q[0] - out[-2][0])) <= 0:
+                out.pop()
+            out.append(q)
+        return out[:-1]
+
+    return np.array(half(p) + half(p[::-1]))
+
+
+def footprint(faces: list, height: float, speed: float = 200.0, com=None) -> dict:
+    """The first layer of a part (faces: a MeshSlicer section near the bed, [outer, holes...] per
+    island) and what it says about a part `height` tall: contact area, narrowest width of its
+    convex hull, height / that width, the auto-brim estimate (TIP_BRIM; about the footprint's
+    weaker principal axis, so it does not depend on how the part is turned on the bed), the thinnest island
+    (area / perimeter, TIP_STRIP) and whether the centre of mass `com` (x, y) is over the hull."""
+    loops = [lp for f in faces for lp in f]
+    out = {"area": 0.0, "height": round(height, 2), "width": 0.0, "length": 0.0, "ratio": float("inf"), "brim": float("inf"),
+           "islands": len(faces), "strip": 0.0, "com_inside": None}
+    if not loops:
+        return out
+    ref = np.concatenate(loops).mean(0)
+    A = cx = cy = Sxx = Syy = Sxy = 0.0
+    for lp in loops:  # outer loops CCW, holes CW: signed sums subtract the holes
+        x, y = (lp - ref).T
+        x1, y1 = np.roll(x, -1), np.roll(y, -1)
+        c = x * y1 - x1 * y
+        A += c.sum() / 2
+        cx += ((x + x1) * c).sum() / 6
+        cy += ((y + y1) * c).sum() / 6
+        Sxx += ((x * x + x * x1 + x1 * x1) * c).sum() / 12  # integral of x^2
+        Syy += ((y * y + y * y1 + y1 * y1) * c).sum() / 12
+        Sxy += ((x * y1 + 2 * x * y + 2 * x1 * y1 + x1 * y) * c).sum() / 24
+    if A <= 1e-9:
+        return out
+    cx, cy = cx / A, cy / A
+    Ixx, Iyy, Ixy = Sxx - A * cx * cx, Syy - A * cy * cy, Sxy - A * cx * cy  # about the centroid
+    hull = _hull(np.concatenate([f[0] for f in faces]) - ref)
+    th = np.radians(np.arange(0, 180, 2.0))
+    if len(hull) >= 3:
+        e = np.roll(hull, -1, 0) - hull
+        th = np.concatenate([th, np.arctan2(e[:, 0], -e[:, 1])])  # the hull's edge normals: the exact narrowest width
+    n = np.c_[np.cos(th), np.sin(th)]
+    proj = hull @ n.T
+    w = proj.max(0) - proj.min(0)
+    # OrcaSlicer measures along X and Y; here along the footprint's principal axes (the narrowest
+    # width and across it when they are not distinct), so turning the part on the bed changes nothing
+    J = np.array([[Ixx, Ixy], [Ixy, Iyy]])
+    ev, vec = np.linalg.eigh(J)
+    axes = vec.T if ev[1] > 1.05 * ev[0] else [n[int(np.argmin(w))], n[int(np.argmin(w))] @ [[0, 1], [-1, 0]]]
+    k = []
+    for u in axes:
+        pr = hull @ u
+        inertia = float(u @ J @ u)  # about the axis across u
+        k.append((pr.max() - pr.min()) / inertia if inertia > 1e-12 else np.inf)
+    k = np.array(k)
+    strips = []
+    for f in faces:
+        lp = f[0]
+        a = 0.5 * abs(float(np.sum(lp[:, 0] * np.roll(lp[:, 1], -1) - np.roll(lp[:, 0], -1) * lp[:, 1])))
+        per = float(np.linalg.norm(np.roll(lp, -1, 0) - lp, axis=1).sum())
+        strips.append(a / per if per else 0.0)
+    width = float(w.min())
+    out.update(area=round(A, 2), width=round(width, 2), length=round(float(w.max()), 2),
+               ratio=round(height / width, 2) if width > 1e-6 else float("inf"),
+               brim=round(float(speed * height ** 2 * k.max() / 1920), 2), strip=round(min(strips), 2),
+               centroid=[round(float(cx + ref[0]), 2), round(float(cy + ref[1]), 2)])
+    if com is not None and len(hull) >= 3:
+        from matplotlib.path import Path as MPath
+
+        out["com_inside"] = bool(MPath(hull).contains_point((com[0] - ref[0], com[1] - ref[1]), radius=1e-6))
+    return out
+
+
+def bed_footprint(part: Part, speed: float = 200.0, layer: float = 0.2, slicer=None) -> dict:
+    """footprint() of `part` as it sits (bed at its lowest point): the section half a layer up."""
+    from build123d import CenterOf
+
+    bb = part.bounding_box()
+    sl = slicer or MeshSlicer(part)
+    c = part.center(CenterOf.MASS)
+    return footprint(sl.section("XY", bb.min.Z + layer / 2, 1e9), bb.size.Z, speed, (c.X, c.Y))
+
+
+def tip_risk(fp: dict, brim: float = TIP_BRIM, min_height: float = TIP_HEIGHT) -> list[str]:
+    """Why a footprint() is at risk of being knocked over or wobbling (empty: it is not)."""
+    if fp["height"] < min_height:
+        return []
+    why = []
+    if not fp["area"]:
+        return ["nothing on the bed (it rests on an edge or a point)"]
+    if fp["com_inside"] is False:
+        why.append("its centre of mass is outside the footprint")
+    if fp["brim"] >= brim:
+        why.append(f"auto-brim estimate {fp['brim']:.3g} mm (>= {brim:g})")
+    if fp["strip"] < TIP_STRIP:
+        why.append(f"it stands on a strip {2 * fp['strip']:.2g} mm wide")
+    return why
 
 
 def _vec(c):
@@ -1034,6 +1175,37 @@ class BedEdge:
         return [Finding(WARN, "bed edge", name,
                         f"{len(found)} rounded bed edge(s): {where}{more}; the start of a fillet on the bed is a "
                         "flat overhang that flares. Use a chamfer on bed edges", {"faces": found})]
+
+
+@dataclass
+class TipOver:
+    """Warns when a part is tall on a small first layer: the nozzle can knock it off the bed, or
+    it wobbles and its top prints badly. BP-B6. The measure is OrcaSlicer's Auto brim (height,
+    and the footprint's width and second moment of area about its weakest axis, at the `tip_speed`
+    setting); also a footprint that is a thin strip, or a centre of mass outside it. Never
+    fails. Added automatically for every part; tip_speed = 0 turns it off."""
+
+    part: str
+    brim: float = TIP_BRIM  # mm: warn when the auto-brim estimate reaches this
+    min_height: float = TIP_HEIGHT  # mm: lower parts are not checked
+    speed: float | None = None  # mm/s: the slicer's fastest print speed (default: the tip_speed setting)
+
+    def run(self, parts, assembly, settings) -> list[Finding]:
+        name = self.part or "part"
+        speed = self.speed if self.speed is not None else settings.tip_speed
+        if not speed:
+            return []
+        fp = bed_footprint(_get(parts, self.part), speed)
+        why = tip_risk(fp, self.brim, self.min_height)
+        size = f"{fp['height']:g} mm tall on a {fp['width']:g} x {fp['length']:g} mm footprint ({fp['area']:g} mm^2"
+        size += f", height {fp['ratio']:.3g} x its narrowest width)" if fp["width"] else ")"
+        if not why:
+            low = f"under {self.min_height:g} mm tall" if fp["height"] < self.min_height else f"auto-brim estimate {fp['brim']:.3g} mm"
+            return [Finding(OK, "tip-over", name, f"stable: {size}; {low}", fp)]
+        return [Finding(WARN, "tip-over", name,
+                        f"{size}: {'; '.join(why)}. The nozzle can knock it over, or it wobbles. Use a brim "
+                        "(5-10 mm) or mouse ears, lay it down (suggest_orientation ranks the ways to put it on the bed), "
+                        "or print several together joined by a thin tie", fp)]
 
 
 @dataclass

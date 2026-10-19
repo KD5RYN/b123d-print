@@ -40,9 +40,17 @@ b123d-print check
 | `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |
 | `metrics [parts] [--variant v] [--style s] [--up +Y] [--json]` | the [design review](../using/design-review.md) numbers and the suggestions the part's style triggers (filament roughly ±20 %, time a rough estimate); never fails |
+| `orient [parts] [--variant v] [--piece name] [--load X] [--image] [--json]` | rank the ways to put each part on the bed: supports, contact, height, time, bridges, tip-over, the load against the layers; prints the `Rot(...)` to apply in `build(d)` (see [suggest_orientation](../using/tools.md#suggest_orientation)); `--image` renders the top choice to `out/<part>_orient.png`; never fails, changes nothing |
+| `fit [parts] [--variant v] [--hole-tol mm] [-v/--verbose] [--json]` | [fit between the pieces](../using/fit.md) of each part's `assembly(d)`: overlaps, gaps under the clearance, hole alignment across pieces; exit code 1 on any failure; `-v` also lists the pairs that fit |
+| `trace <image> [--dpi n] [--grid mm] [--reference card\|L,S] [--points x1,y1,x2,y2 --distance mm] [--tolerance mm] [--smooth] [--pick x,y] [--threshold t] [--invert] [-o/--out folder] [--json]` | [trace a flat object](../using/tracing.md) in a scan or photo into an outline in mm: writes `<image>_outline.json`, `<image>_outline.py` (a snippet for a part script) and `<image>_trace.png` (the outline on the image) next to the image or into `--out` |
+| `recipes [name]` | list the [recipe library](../using/recipes.md), or print one recipe's code, example, printing notes and sources |
 | `faces <part> [--variant v] [--part name] [--highlight ID] [--json]` | the part's flat faces with their ids, holes and sides, for a face template; `--highlight` draws one in red ([fit-test templates](../using/templates.md)) |
 | `template <part> --slice XY:3 \| --face ID \| --crop x,y,z:sx,sy,sz [--thickness t] [--no-label] [--no-base] [--name id] [--variant v] [--part name] [--formats f]` | make a [fit-test template](../using/templates.md), write it to `out/` and check it; exit code 1 if a check fails |
 | `view <part> [--variant v] [--parts a,b] [--assembly] [--open]` | write `out/<part>_view.html`, a self-contained [3D view](../using/formats.md#3d-view-in-the-browser) of the part (viewer and model inline: opens offline, from `file://`); the printable parts on the bed, or `--assembly`; `--open` also opens the browser |
+| `diagnose <part> [--variant v] [--only pieces] [--json]` | a failed or broken build: builds each piece on its own and prints the likely cause and specific fixes (where in the script, the numbers), what makes a built piece unprintable, and for an invalid solid which faces and edges are bad; exit code 1 if a piece fails or has a problem ([diagnosis](../using/tools.md#build-failures-dimensions-and-measurements)) |
+| `params <part> [--json]` | the part's `Dims` fields with type, value and source comment, its derived values and each variant's overrides, read from the script without running it |
+| `set <part> FIELD=VALUE... [--variant v] [--no-build]` | change `Dims` values in the script in place (everything else in the file stays as it was; values are Python literals: `WIDTH=42 LABEL='"lid"'`), then build and print each piece's size and volume before and after; `--variant` changes that variant's override in `VARIANTS` |
+| `measure <part> --distance A,B \| --wall x,y,z \| --faces ID,ID \| --hole [ID] [--at x,y,z] [--of name] [--dir dx,dy,dz] [--frame auto/print/assembly] [--variant v] [--image] [--json]` | precise measurements in mm with the points: the gap or interference between two pieces or assembly labels, a wall's thickness at a point, the distance or angle between two flat faces (ids from `faces`), a hole's size and depth; `--image` draws what was measured in red |
 | `styles [name]` | list the [design styles](../using/design-review.md#custom-styles) and where each comes from (workspace, user, built-in), or show one with `based_on` applied |
 | `printer list [words]` | search the printer profiles |
 | `printer show [name]` | show a printer (default: the active one) |
@@ -63,7 +71,7 @@ b123d-print check
 Global options, before the command: `--root <folder>` (the workspace; default the nearest
 folder with a `b123d-print.toml`, else the current folder) and `--version`.
 
-`parts` is a list of part names or script paths; without it, `build`, `check` and `metrics` take every part
+`parts` is a list of part names or script paths; without it, `build`, `check`, `metrics` and `orient` take every part
 in the workspace. Each command's full `--help` output is in the [Reference](../reference.md#b123d-print).
 
 ## Agents and `AGENTS.md`

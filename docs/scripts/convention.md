@@ -46,7 +46,8 @@ if __name__ == "__main__":
 | `Dims` | by convention | frozen dataclass; every dimension an UPPER_CASE field in mm with a comment saying where it came from; derived values as `@property` |
 | `VARIANTS` | no (default: only the standard part) | `{"": {}, "140": dict(PLATE_W=140.0)}` — overrides only; `""` is the standard part; output files get the key as a suffix |
 | `build(d)` | yes | the printable part, or `{"name": part}` for several, in print orientation, bottom face on Z=0; for several, the values may be zero-argument functions ([lazy pieces](#big-and-multi-piece-projects)) |
-| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw); the overlap check uses it |
+| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw), labeled `"... (stand-in)"`; the overlap check and the [fit check](../using/fit.md) use it |
+| `joints(d)` | no | `[("peg", "socket", clearance), ...]`: male/female pairs of `assembly(d)` labels that are intentional fits; the [fit check](../using/fit.md) measures them against their own clearance |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
 | `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md) |
@@ -129,6 +130,12 @@ override them) or at module level:
 | `hole_comp(__file__)` | `HOLE_COMP: float = hole_comp(__file__)`; add it to hole diameters when cutting ([Hole compensation](../using/hole-compensation.md)) |
 | `clearance(__file__)` | `CLEARANCE: float = clearance(__file__)`; the default mating gap (0.2 mm) |
 | `printer(__file__)` | the active [printer profile](../using/printer-profiles.md), or `None` in generic mode |
+
+## Splitting into pieces
+
+| Helper | Use |
+| --- | --- |
+| `split(part, plane, joints, clearance)` | from `b123d_print.joints`: cut a part at a plane into two pieces with matching joint features (`Dowel`, `Bowtie`, `Dovetail`, `Lap`, `Insert`), the female `clearance` bigger on every side; loose keys and pins come back laid flat. See [Splitting parts](../using/splitting.md) |
 
 ## Starting from an existing model
 
