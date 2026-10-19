@@ -7,12 +7,12 @@ Ask where the load comes from and how it is held, then look for: the load along 
 across them: bending and tension in XY; turn or split the part, or 45 deg as a compromise
 [DS-T1]; inside corners filleted, r >= half the wall, none left sharp on a loaded path [DS-T3];
 walls >= 3 lines, whole multiples of the line width; strength from walls: 4-6 walls in the
-slicer, 15-30 % gyroid or cubic infill [DS-T2, DS-T4]; ribs and gussets as thick as the wall
+slicer, 15-30 % infill (gyroid supports in every direction) [DS-T2, DS-T4]; ribs and gussets as thick as the wall
 instead of bulk [DS-T5]; screws: inserts or nuts where torque or reuse matters, 3-4+ walls round
 the hole, a washer under the head, holes well away from edges, clamp layers together rather than
 pulling them apart [DS-T6, DS-T7]; material: PLA is stiff but softens at ~55 C, PETG ~70 C, ASA
-or PC ~100 C [DS-T8]; snap arms and hinges bending in XY [DS-T10]; slicer: hotter nozzle, less
-fan, wider lines for layer adhesion [DS-T11]. Say which features need more walls.
+or PC ~100 C [DS-T8]; snap arms and hinges bending in XY [DS-T10]; slicer: nozzle near the top
+of the material's range (not past it), wider lines, a heated enclosure for ABS/ASA [DS-T11]. Say which features need more walls.
 Typical: "lay the bracket on its side: the shelf's load then bends it along the layers";
 "r 1 inside corner on a 6 mm arm: make it r 3 or more"; "print with 5 walls and 20 % gyroid";
 "use a heat-set insert: a screw in plastic strips at about 1 Nm".
