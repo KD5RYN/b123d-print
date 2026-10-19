@@ -35,6 +35,9 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    another part, or has a hole pattern, the model offers a [fit-test template](templates.md): a
    thin print of a face, slice or region of the real part, minutes instead of hours. It shows you
    the face or region in red before making it.
+   A part too big for the bed is [split into pieces](splitting.md): the model proposes where to
+   cut and which joint to use (keys, pins, a dovetail, inserts), and you get a fit test of the
+   joint and assembly notes.
 6. **A design review, if you want one.** Once the checks pass, the model can review the part for
    the style you chose (functional, modern, least cost, rugged, soft, structural, or your own) and suggest
    changes with rough filament and time numbers. It changes nothing without your OK. See

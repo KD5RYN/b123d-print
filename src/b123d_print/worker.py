@@ -50,6 +50,7 @@ from b123d_print.render import render, report, section_view, side_by_side  # noq
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 from b123d_print import metrics  # noqa: E402
 from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
+from b123d_print import joints  # noqa: E402,F401  (split parts, joint helpers)
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (

@@ -74,6 +74,12 @@ override them) or at module level:
 | `clearance(__file__)` | `CLEARANCE: float = clearance(__file__)`; the default mating gap (0.2 mm) |
 | `printer(__file__)` | the active [printer profile](../using/printer-profiles.md), or `None` in generic mode |
 
+## Splitting into pieces
+
+| Helper | Use |
+| --- | --- |
+| `split(part, plane, joints, clearance)` | from `b123d_print.joints`: cut a part at a plane into two pieces with matching joint features (`Dowel`, `Bowtie`, `Dovetail`, `Lap`, `Insert`), the female `clearance` bigger on every side; loose keys and pins come back laid flat. See [Splitting parts](../using/splitting.md) |
+
 ## Starting from an existing model
 
 | Helper | Use |

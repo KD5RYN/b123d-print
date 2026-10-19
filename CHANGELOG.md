@@ -16,6 +16,25 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
+**Splitting parts**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/splitting/))
+and joint helpers for parts too big for the bed or better printed in pieces: when to split,
+where to cut, a joint selection table, clearances per fit with the test-snippet habit (a
+fit-test template of the joint), adhesives by gap, finishing seams, and worked examples (a long
+trim split into keyed pieces). Sourced; new rules J6–J8 in BEST_PRACTICES, J2 and J3 updated.
+- New module `b123d_print.joints`: `split(part, plane, joints, clearance)` cuts a part into two
+  pieces with matching joint features. `Dowel` (round or square, loose or a plug), `Bowtie`
+  (a butterfly key), `Dovetail`, `Lap` and `Insert` (the CNC Kitchen heat-set pocket, the
+  screw's clearance hole and head access). The female is the male grown by the clearance on
+  every side; loose keys and pins come back laid flat for printing, and placed for
+  `assembly(d)`. Each joint's `pair(clearance)` gives the matching male and female on their own.
+- New example `split_trim`: a 420 mm strip in two pieces with a bowtie key and square pins
+  (variant `dovetail`), with `Gap` and `Wall` checks and fit-test templates of the joint.
+- The workflow rules (`AGENTS.md`): a splitting step (propose cuts and a joint and wait, use the
+  joints helpers, offer a fit test of the joint, add assembly notes).
+- Corrections to commonly repeated advice: thin CA does not fill a 0.25–0.3 mm gap (epoxy or CA
+  gel with activator does); "die swell" is real but the slicer's extrusion width absorbs it;
+  elephant's foot, over-extrusion, corner bulge and faceted holes are what make fits tight.
+
 ## 0.3.3 — 2026-10-19
 
 **A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,

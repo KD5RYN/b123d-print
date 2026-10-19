@@ -144,6 +144,27 @@ as a starting point, say so in the report, and never turn it into a default or a
   (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds
   every common filament; acetone welds ABS/ASA; PETG takes only CA or epoxy. [J1, J2, J4, J5]
 
+## Splitting a part
+
+When a part does not fit the bed in any orientation (the `fit` check fails, or it is bigger than
+the user's bed), or would print much better in pieces: [J1]
+([guide](https://kd5ryn.github.io/b123d-print/using/splitting/))
+
+1. **Propose the cuts and the joint, with reasons, and wait for confirmation:** where the load is
+   low, along a design line where the seam hides, so each piece lies on a big flat face without
+   supports and with its load along the layers [J6]. Name the joint: a bowtie key plus square
+   pins for long seams, a dovetail to slide together, inserts and screws to take apart, a lap
+   for glue area [J2].
+2. **Use `b123d_print.joints`, never hand-made joints:** `split(part, plane, [Bowtie(...),
+   Dowel(...), ...], clearance=d.CLEARANCE)` returns the pieces (`.a`, `.b`), the loose keys and
+   pins laid flat (`.loose`) and placed (`.placed`, for `assembly(d)`). Joint sizes are named
+   `Dims` fields. Add `Gap` checks on a key or pin and `Wall` checks around the joint features.
+3. **Offer a fit-test template of the joint first** (`Template.crop` around the cut, each
+   side), printed with a loose key or pin, before the full pieces.
+4. **Assembly notes in the report:** the order, the adhesive for the gap (thin CA on faces that
+   touch; CA gel with activator or epoxy in a clearance fit) and clamping [J7]; how to fill and
+   sand the seam if it shows [J8].
+
 ## Remixing an existing model
 
 When the user gives you someone else's model (STL, 3MF or STEP) to change:
