@@ -11,3 +11,4 @@ deploy/.env
 deploy/parts/
 deploy/config/
 deploy/compose.override.yaml
+.DS_Store

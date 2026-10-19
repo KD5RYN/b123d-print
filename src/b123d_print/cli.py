@@ -521,11 +521,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
+    p = sub.add_parser("mcp", add_help=False,
+                       help="run the MCP server: the same as b123d-print-mcp, with all its options "
+                            "(b123d-print mcp --help); lets `uvx b123d-print mcp` start it")
+    p.add_argument("args", nargs=argparse.REMAINDER)
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
     safe_console()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] == ["mcp"]:  # hand everything after `mcp` to the MCP server untouched
+        from .mcp_server import main as mcp_main
+
+        mcp_main(raw[1:])
+        return 0
     args = build_parser().parse_args(argv)
 
     if args.cmd == "init":

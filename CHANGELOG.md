@@ -28,6 +28,10 @@ pattern and mating fits before printing the whole part ([docs](https://kd5ryn.gi
 **Fixed:** a server shutdown that arrived just after a build was claimed but before its process
 started no longer lets that build run on until its timeout (also fixes a flaky CI test).
 
+**Sharing:** `b123d-print mcp …` starts the MCP server (the same as `b123d-print-mcp`), so
+`uvx b123d-print mcp` works; `server.json` describes the server for the MCP Registry
+(`io.github.KD5RYN/b123d-print`); the docs show the one-command plugin install.
+
 ## 0.3.1 — 2026-10-18
 
 **Bringing parts home from a remote server.** Over HTTP and SSH the server is a workbench, not

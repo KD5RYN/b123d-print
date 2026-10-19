@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.KD5RYN/b123d-print",
+  "title": "b123d-print",
+  "description": "Vibe CAD for 3D printing: design, check and export printable parts with build123d.",
+  "websiteUrl": "https://kd5ryn.github.io/b123d-print/",
+  "repository": {
+    "url": "https://github.com/KD5RYN/b123d-print",
+    "source": "github"
+  },
+  "version": "0.3.2",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "b123d-print",
+      "version": "0.3.2",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        { "type": "positional", "value": "mcp" },
+        {
+          "type": "named",
+          "name": "--workspace",
+          "description": "Folder for your parts (parts/<name>/...); default: the folder the client starts the server in",
+          "format": "filepath",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
