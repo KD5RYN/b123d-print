@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "b123d-print": {
-      "command": "uvx",
-      "args": ["--from", "${CLAUDE_PLUGIN_ROOT}", "b123d-print-mcp"]
-    }
-  }
-}

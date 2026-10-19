@@ -88,9 +88,9 @@ def test_mcp_prompts_and_resources_documented(server):
 def test_skill_lists_every_tool_and_prompt(server):
     """The Claude Code skill names the tools and prompts too; keep it complete."""
     tools, prompts, _ = server
-    skill = code_names((ROOT / "skills/cad-parts/SKILL.md").read_text(encoding="utf-8"))
+    skill = code_names((ROOT / "plugin/skills/cad-parts/SKILL.md").read_text(encoding="utf-8"))
     missing = {t.name for t in tools} | {p.name for p in prompts}
-    assert not (missing - skill), f"skills/cad-parts/SKILL.md does not mention {missing - skill}"
+    assert not (missing - skill), f"plugin/skills/cad-parts/SKILL.md does not mention {missing - skill}"
 
 
 def _flags(parser: argparse.ArgumentParser) -> set[str]:
