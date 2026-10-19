@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.2 — unreleased
+## 0.3.2 — 2026-10-19
 
 **Fit-test templates.** A quick thin print cut from the real part, to check its size, hole
 pattern and mating fits before printing the whole part ([docs](https://kd5ryn.github.io/b123d-print/using/templates/)):
