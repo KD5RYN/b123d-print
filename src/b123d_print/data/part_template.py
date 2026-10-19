@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from build123d import Align, Axis, Box, Part, chamfer
 
-from b123d_print import Overhang, View, Wall, clearance, hole_comp  # noqa: F401
+from b123d_print import Overhang, Template, View, Wall, clearance, hole_comp  # noqa: F401
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)  # sit on Z=0
 
@@ -55,6 +55,11 @@ def build(d: Dims) -> Part:
 def views(d: Dims):
     """Cross-sections saved with every export."""
     return [View("XY", d.HEIGHT / 2, "mid height")]
+
+
+# def templates(d: Dims):
+#     """Fit-test templates written with every export: quick thin prints to check fits first."""
+#     return [Template.face_of("bottom"), Template.slice("XY", d.HEIGHT / 2)]
 
 
 def checks(d: Dims):

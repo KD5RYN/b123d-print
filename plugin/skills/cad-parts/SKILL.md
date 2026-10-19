@@ -16,14 +16,16 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
      before reporting.
 2. **For a new design** use the MCP prompt `design_part_from_photos`; to change a part,
    `modify_part`; to review one, `verify_part`; once its checks pass, `design_review` (the design
-   for its style; suggestions only, nothing changes without the user's OK); to calibrate holes, `calibrate_hole_comp`; to remix someone else's STL, 3MF or
+   for its style; suggestions only, nothing changes without the user's OK); to calibrate holes, `calibrate_hole_comp`; to test a fit before the full print, `fit_test`; to remix someone else's STL, 3MF or
    STEP, `remix_part`.
 3. **Tools** (b123d-print MCP server): `list_parts`, `new_part`, `read_part`, `write_part`,
    `build_part`, `render_preview`, `section`, `check`, `design_metrics` (design numbers and the
    style's suggestions; filament and time are rough estimates), `export`, `compare` (to measure a part
    against a reference STL/3MF/STEP the user put in the workspace), `upload_reference`,
    `describe_model` and `before_after` (remixing an existing model: get it onto the server, inspect
-   it, compare the remix with it), and `use_printer` (only when the user asks to set a printer). If the server is remote (HTTP or SSH), its copy is
+   it, compare the remix with it), `list_faces` and `make_template` (a fit-test template: a quick
+   thin print of a face, slice or region of the part, offered before the full print when it mates
+   with something or has a hole pattern), and `use_printer` (only when the user asks to set a printer). If the server is remote (HTTP or SSH), its copy is
    temporary: the last step before reporting is `download_part` (over HTTP `curl -fLo <name>.zip
    '<link>'` and unzip it in the project folder; over SSH the `b123d-print pull` command it gives),
    which writes `parts/<name>/<name>.py`, `out/` and `ref/` like a local install; check the files

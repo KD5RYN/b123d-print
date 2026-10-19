@@ -1,5 +1,5 @@
-"""`b123d-print` command line: init, new, build, check, metrics, styles, compare, to-step, config, list, and MCP over
-SSH (setup-ssh, ssh-serve, pull, push)."""
+"""`b123d-print` command line: init, new, build, check, metrics, styles, faces, template, compare, to-step, config, list,
+and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
 
@@ -180,6 +180,105 @@ def cmd_build(args) -> int:
     return 0
 
 
+def _one_variant(mod, want: str | None) -> str:
+    from .project import variant_key, variants
+
+    keys = list(variants(mod))
+    key = variant_key(want) if want is not None else keys[0]
+    if key not in keys:
+        sys.exit(f"no variant {want!r}; variants: {[k or 'standard' for k in keys]}")
+    return key
+
+
+def cmd_faces(args) -> int:
+    """The flat faces of a part with their ids, for a face template; --highlight draws one."""
+    from . import templates as tp
+    from .project import dims, load, printables, resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    pname, part = tp.pick_part(printables(mod, dims(mod, key)), args.only)
+    res = tp.list_faces(part)
+    if args.json:
+        json.dump(res, sys.stdout, indent=1)
+        print()
+    else:
+        print(f"{script.stem}{'[' + key + ']' if key else ''} {pname}: {len(res['planar'])} flat faces of {res['faces']}")
+        for f in res["planar"]:
+            holes = ", ".join(f"d {h['d']:g} at {tuple(h['center'])}" for h in f["holes"])
+            print(f"  {f['id']:3}  {f.get('side', ''):6} normal {tuple(f['normal'])}  area {f['area']:g} mm^2  "
+                  f"center {tuple(f['center'])}" + (f"  holes: {holes}" if holes else "")
+                  + (f"  +{f['other_openings']} other opening(s)" if f.get("other_openings") else ""))
+        if res["curved"]:
+            print("  curved: " + ", ".join(f"{n} {k}" for k, n in res["curved"].items()))
+    if args.highlight is not None:
+        face, fid = tp.find_face(part, args.highlight)
+        out = script.parent / "out"
+        out.mkdir(exist_ok=True)
+        img = tp.highlight(part, [face], out / f"{script.stem}{'_' + key if key else ''}_face{fid}.png",
+                           f"{script.stem}: face {fid} (red)")
+        print(f"-> {img}")
+    return 0
+
+
+def _triple(text: str, what: str) -> tuple[float, float, float]:
+    try:
+        v = tuple(float(x) for x in text.split(","))
+    except ValueError:
+        v = ()
+    if len(v) != 3:
+        sys.exit(f"{what}: three numbers x,y,z")
+    return v
+
+
+def cmd_template(args) -> int:
+    """Make a fit-test template from a part (--slice, --face or --crop), write it and check it."""
+    from . import templates as tp
+    from .project import dims, load, printables, resolve_part, write_template
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    common = dict(thickness=args.thickness, label=not args.no_label, base=not args.no_base, part=args.only,
+                  name=args.name or "")
+    if args.slice:
+        plane, _, at = args.slice.partition(":")
+        try:
+            spec = tp.Template.slice(plane.upper(), float(at), **common)
+        except ValueError:
+            sys.exit("--slice PLANE:AT, e.g. XY:3 (XY at Z, XZ at Y, YZ at X)")
+    elif args.face:
+        f = args.face
+        spec = tp.Template.face_of(int(f) if f.isdigit() else (_triple(f, "--face") if "," in f else f), **common)
+    else:
+        c, _, sz = args.crop.partition(":")
+        spec = tp.Template.crop(_triple(c, "--crop center"), _triple(sz, "--crop size"), **common)
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    settings = load_settings(script)
+    try:
+        r = write_template(script, key, printables(mod, dims(mod, key)), spec, script.parent / "out",
+                           parse_formats(args.formats) if args.formats else settings.formats, settings)
+    except tp.TemplateError as e:
+        sys.exit(f"template: {e}")
+    rep, info = r["report"], r["info"]
+    print(f"{r['name']}: {rep['x']:.2f} x {rep['y']:.2f} x {rep['z']:.2f} mm, valid={rep['valid']}, "
+          f"{info['pieces']} piece(s), {info['down']} side down"
+          + (" (print orientation)" if info["print_orientation"] else ""))
+    lab = info.get("label")
+    print(f"  label: {lab['text']!r}" if lab else "  label: none")
+    for n in info.get("notes", []):
+        print(f"  note: {n}")
+    worst = 0
+    for f in r["findings"]:
+        if f["level"] != ck.OK:
+            print("  " + ck.Finding(**f).line())
+        worst = max(worst, f["level"] == ck.FAIL)
+    print(f"  -> {len(r['files'])} files in {script.parent / 'out'}")
+    return worst
+
+
 def cmd_printer(args) -> int:
     from . import profiles as pf
     from .config import set_user_setting
@@ -337,6 +436,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft")
     p.add_argument("--up", help="the side that points up in use, for water traps: +X, -Y, ... (default: UP, else +Z)")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("faces", help="list a part's flat faces with their ids (for a face template)")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--variant")
+    p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
+    p.add_argument("--highlight", metavar="ID", help="also draw the part with this face (id or side) in red")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("template", help="a fit-test template: a thin print cut from the part to check size, holes and fits")
+    p.add_argument("part", help="part name or script path")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--slice", metavar="PLANE:AT", help="the part between two planes around AT: XY:3 (Z=3), XZ:0 (Y), YZ:-5 (X)")
+    g.add_argument("--face", metavar="ID", help="one flat face as a plate: an id from `faces`, a side (bottom, top, ...) "
+                                                "or a point x,y,z on it")
+    g.add_argument("--crop", metavar="X,Y,Z:SX,SY,SZ", help="the part inside a box: center and size in mm")
+    p.add_argument("--thickness", type=float, default=1.2, help="mm (default 1.2)")
+    p.add_argument("--no-label", action="store_true", help="no engraved label")
+    p.add_argument("--no-base", action="store_true", help="never add the thin base plate (slice, crop)")
+    p.add_argument("--name", help="the template id in file names (default: from the arguments, e.g. xy3)")
+    p.add_argument("--variant", help="default: the first variant")
+    p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
+    p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
     p = sub.add_parser("styles", help="list the design styles (yours and the built-in ones), or show one")
     p.add_argument("name", nargs="?", help="a style to show, with based_on applied")
     p = sub.add_parser("printer", help="optional printer/material profile (default: generic)")
@@ -457,6 +576,13 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_metrics(args) if args.cmd == "metrics" else cmd_styles(args)
         except ValueError as e:
             sys.exit(str(e))
+    if args.cmd in ("faces", "template"):
+        from .templates import TemplateError
+
+        try:
+            return cmd_faces(args) if args.cmd == "faces" else cmd_template(args)
+        except (TemplateError, FileNotFoundError) as e:
+            sys.exit(f"{args.cmd}: {e}")
     return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step}[args.cmd](args)
 
 

@@ -16,6 +16,7 @@ and optionally:
                                                     # Holes, BedEdge, Gap, Fit
     def original(d) -> Part                         # remixes: the original as placed in the remix
                                                     # (default: what build() loaded with import_model)
+    def templates(d) -> list[Template]              # fit-test templates exported with every variant
 
     if __name__ == "__main__":
         from b123d_print import run
@@ -596,6 +597,11 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         files = export_files(p, out, name, formats)
         summary["parts"][pname or "part"] = report(p)
         summary["files"] += [str(f) for f in files]
+    tf = getattr(mod, "templates", None)
+    for spec in tf(d) if tf else []:
+        r = write_template(script, key, parts, spec, out, formats)
+        summary.setdefault("templates", {})[r["name"]] = r["report"]
+        summary["files"] += r["files"]
     if "png" not in formats:
         return summary
     if asm:
@@ -616,6 +622,39 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
                          f"{title}{', ' + v.title if v.title else ''}")
         summary["files"].append(str(f))
     return summary
+
+
+def write_template(script: Path, key: str, parts: dict, spec, out: Path, formats, settings=None) -> dict:
+    """Make one fit-test template (templates.Template) from the built parts and write it as
+    <name>[_<variant>]_template_<id>.<fmt>; with png also <...>_where.png, the part with the
+    template's source in red. settings: also run the print checks on it ("findings")."""
+    from . import templates as tp
+
+    pname, part = tp.pick_part(parts, spec.part)
+    label_name = script.stem if pname == "part" else f"{script.stem} {pname}"
+    try:
+        tid, made = tp.make(spec, part, label_name)
+    except tp.TemplateError as e:
+        raise tp.TemplateError(f"template {spec.kind} ({_spec_args(spec)}) of {pname}: {e}") from None
+    name = out_name(script.stem, key, f"template_{tid}" if pname == "part" else f"{pname}_template_{tid}")
+    files = [str(f) for f in export_files(made.part, out, name, [f for f in formats if f != "png"])]
+    if "png" in formats:
+        files.append(str(render(made.part, out / f"{name}.png", f"{name} (laid flat for printing)")))
+        files.append(str(tp.highlight(part, [made.where], out / f"{name}_where.png",
+                                      f"{name}: where it comes from (red) on {out_name(script.stem, key, '') or pname}")))
+    res = {"name": name, "id": tid, "part": pname, "variant": key or "standard", "info": made.info,
+           "report": report(made.part), "files": files}
+    if settings is not None:
+        res["findings"] = [finding_dict(f) for f in tp.checks(made, settings)]
+    return res
+
+
+def _spec_args(spec) -> str:
+    if spec.kind == "slice":
+        return f"{spec.plane} at {spec.at:g}"
+    if spec.kind == "face":
+        return f"face {spec.face}"
+    return f"center {tuple(spec.center)}, size {tuple(spec.size)}"
 
 
 def before_after(orig: Part, parts: dict, out: Path, stem: str, size: str = "normal") -> dict:

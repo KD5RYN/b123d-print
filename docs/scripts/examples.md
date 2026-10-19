@@ -30,7 +30,9 @@ A two-part box (base and screw-on lid) for an ESP8285 IR transceiver board. Show
 
 ![Section through the LED](../images/esp_ir_blaster_xz0.6.png)
 
-*Section through the LED: lid cone, board, clearances.*
+*Section through the LED: lid cone, board, clearances.* Its `templates(d)` adds two
+[fit-test templates](../using/templates.md) to every export: the top of the standoffs and lid
+posts (set the board on it), and the lid's inner face (lay it on the base, try the screws).
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/esp_ir_blaster/esp_ir_blaster.py)
 
 ## `tuya_motion_sensor_outdoor_case`

@@ -38,7 +38,7 @@ MAX_SCRIPT_BYTES = 256_000
 INSTRUCTIONS = """\
 Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> export. To remix an existing STL/3MF/STEP: upload_reference ->
+check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export. To remix an existing STL/3MF/STEP: upload_reference ->
 describe_model -> import_model in the script (prompt remix_part). Read the resource
 b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
 print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
@@ -672,6 +672,124 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     return ["\n".join(out), *extra]
 
 
+def _triple(v, what: str) -> list[float] | None:
+    """Three numbers from a list or an "x,y,z" string."""
+    if v is None or v == "":
+        return None
+    try:
+        vals = [float(x) for x in (v.replace(";", ",").split(",") if isinstance(v, str) else v)]
+    except (TypeError, ValueError):
+        vals = []
+    if len(vals) != 3:
+        raise ToolError(f"{what}: three numbers x,y,z in mm")
+    return vals
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def list_faces(name: str, variant: str | None = None, part: str | None = None, highlight: int | str | None = None,
+                     size: str = "normal", inline: bool = True) -> list:
+    """The flat faces of a printable part, for picking one for a face fit-test template
+    (make_template kind='face'): stable ids (1 = the largest; the same geometry always gets the
+    same ids, changed geometry may renumber), outward normal and side (bottom, top, front, back,
+    left, right), area, center, bounding box, round holes (diameter, center) and other
+    openings; curved faces are only counted. part: which printable part (default: the only one).
+    highlight: a face id or side; also returns a picture of the part with that face in red, to
+    confirm the choice with the user before making the template. size: 'normal' or 'small'."""
+    _image_options(size)
+    res = await _job(name, "faces", variant=variant, part=part, highlight=highlight, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    image = res.pop("image", None)
+    res.pop("ok", None)
+    text = json.dumps(res, indent=1)
+    if not image:
+        return [text]
+    return _with_note(_with_image(f"face {res['highlight']} in red: {_show(image)}\n{text}", image, inline), name)
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def make_template(name: str, kind: str, plane: str | None = None, at: float | None = None, face: int | str | None = None,
+                        center: list[float] | str | None = None, size: list[float] | str | None = None,
+                        thickness: float | None = None, label: bool | str = True, base: bool = True,
+                        variant: str | None = None, part: str | None = None, formats: str | None = None,
+                        inline: bool = True) -> list:
+    """A fit-test template: a quick thin print cut from the real part (same hole compensation and
+    clearances) to check size, hole pattern and mating fits before printing the whole part. kind:
+    'slice' (plane XY/XZ/YZ at = Z/Y/X: the part between two planes `thickness` apart, centered
+    on `at`), 'face' (face: an id from list_faces, a side such as 'bottom', or 'x,y,z' on it: that
+    flat face with its holes as a plate; a side means the largest face facing that way) or 'crop' (center, size: x,y,z in mm: the part inside
+    that box, with a thin base plate where it needs one; base=False: never). thickness: mm
+    (default 1.2). label: engrave '<part> <id>' (default), your own text, or false; skipped when
+    there is no room. The template is laid flat (template face down, Z=0) and checked like a
+    part. Writes parts/<name>/out/<name>_template_<id>.* in `formats` (default: the formats
+    setting); with png also <...>_where.png, the part with the template's source in red (returned
+    as the image; inline=False: only the file). Confirm the face or region with the user first
+    (list_faces with highlight)."""
+    kind = (kind or "").lower()
+    if kind not in ("slice", "face", "crop"):
+        raise ToolError("kind: 'slice', 'face' or 'crop'")
+    if isinstance(label, str) and label.strip().lower() in ("", "false", "no", "none", "off", "true", "yes", "on"):
+        label = label.strip().lower() in ("true", "yes", "on")
+    spec: dict = {"kind": kind, "thickness": thickness, "label": label, "base": base, "part": part}
+    if kind == "slice":
+        if not plane or plane.upper() not in ("XY", "XZ", "YZ") or at is None:
+            raise ToolError("a slice needs plane ('XY' at = Z, 'XZ' at = Y, 'YZ' at = X) and at (mm)")
+        spec.update(plane=plane.upper(), at=float(at))
+    elif kind == "face":
+        if face is None or str(face).strip() == "":
+            raise ToolError("a face template needs face: an id from list_faces, a side (bottom, top, front, back, "
+                            "left, right) or a point x,y,z on the face")
+        f = str(face).strip()
+        spec["face"] = int(f) if f.isdigit() else (_triple(f, "face") if "," in f else f)
+    else:
+        c, sz = _triple(center, "center"), _triple(size, "size")
+        if c is None or sz is None:
+            raise ToolError("a crop needs center and size, each x,y,z in mm")
+        spec.update(center=c, size=sz)
+    if formats:
+        try:
+            parse_formats(formats)
+        except ValueError as e:
+            raise ToolError(str(e)) from None
+    res = await _job(name, "template", variant=variant, spec=spec, formats=formats)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    info, r = res["info"], res["report"]
+    lines = [f"Template {res['name']} ({res['variant']}, from {res['part']}): {r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, "
+             f"valid={r['valid']}, {info['pieces']} piece(s), laid with the part's {info['down']} side down"
+             + (" (its print orientation)" if info["print_orientation"] else "")]
+    lab = info.get("label")
+    lines.append(f"Label: '{lab['text']}' engraved {lab['depth']:g} mm deep" if lab else "Label: none")
+    lines += [f"Note: {n}" for n in info.get("notes", [])]
+    findings = res.get("findings", [])
+    failed = any(f["level"] == "fail" for f in findings)
+    lines.append(f"\nChecks: {'FAILED' if failed else 'PASSED'}")
+    lines += [f"  [{f['level'].upper():4}] {f['check']:8} {f['target']}: {f['message']}" for f in findings]
+    lines.append("\nDetails: " + json.dumps({k: v for k, v in info.items() if k not in ("notes",)}, default=str))
+    lines.append("\nFiles:")
+    extra, expires, where = [], None, None
+    for f in res["files"]:
+        if f.endswith("_where.png"):
+            where = f
+        info_f = _file_info(Path(f)) if _http() else None
+        if info_f and "url" in info_f:
+            lines.append(f"  {info_f['path']}  {info_f['url']}")
+            extra.append(_resource_link(info_f))
+            expires = info_f["expires"]
+        else:
+            lines.append(f"  {Path(f).relative_to(_root()).as_posix()}")
+    if expires:
+        lines.append("\n" + _expiry_note(expires))
+    if STATE["ssh_dest"]:
+        lines.append("\n" + _pull_note(name, formats, variant))
+    out = ["\n".join(lines)]
+    if where and inline:
+        out.append(Image(path=where))
+    return _with_note(out + extra, name)
+
+
 def _pull_cmd(name: str, formats: str | None, variant: str | None) -> str:
     import shlex
 
@@ -1011,8 +1129,11 @@ Work in these steps:
 4. Remote server (HTTP or SSH) only, required: {_remote_step()}
 5. Report: overall X x Y x Z, key feature sizes, validity, clearances (per side or total) and
    hole compensation applied, check results and warnings, print orientation, supports needed,
-   and where the files are on my machine. Then offer the design review for the part's style
-   (design_metrics and the design rubric).
+   and where the files are on my machine. If the part mates with something or has a hole
+   pattern, offer a fit-test template first (a thin print cut from the part: make_template;
+   confirm the face or region with me using list_faces' highlight or the template's _where
+   picture). Then offer the design review for the part's style (design_metrics and the design
+   rubric).
 
 The full rules:
 
@@ -1083,7 +1204,8 @@ def verify_part(name: str) -> str:
 section through every pocket, boss, rib, hole and mating feature, and check. Look for: missing
 Wall checks around cuts deeper than their wall, magic numbers outside Dims, missing clearance or
 hole compensation, overhangs that need supports, bed edges with fillets. Report findings
-most serious first; do not change the script unless I ask. When check passes, offer a design
+most serious first; do not change the script unless I ask. When check passes, offer a fit-test
+template (make_template) for its mating faces or hole pattern if it has any, and a design
 review (the design_review prompt) for the part's style.
 
 The full rules:
@@ -1121,6 +1243,31 @@ def design_review(name: str, style: str = "") -> str:
    Remote server (HTTP or SSH) only, required: {_remote_step(name)}
 
 {data("design_review.md")}"""
+
+
+@mcp.prompt()
+def fit_test(name: str, what: str = "") -> str:
+    """Make a fit-test template of a part: a quick thin print of a face, slice or region, to check
+    size, hole pattern and mating fits before the full print."""
+    return f"""I want to test the fit of the part '{name}' before printing all of it.
+What to test: {what or '(suggest it: the faces that mate with something, the hole patterns)'}
+
+1. build_part and render_preview; list_faces('{name}') for the flat faces and their holes.
+2. Propose one or two templates, each with what it checks and how I use it: a face (a mounting
+   face with its holes), a slice (plane and height, e.g. through the top of the standoffs) or a
+   crop (a box around a clip or corner). Show me the face with list_faces(highlight=...), then
+   STOP and wait for my OK.
+3. make_template (kind, plane/at, face or center/size; thickness 1.2 mm unless the fit needs
+   more). Look at the _where picture and the template's render; read its notes and findings
+   (a template printed on its side checks positions, not hole sizes).
+4. If it is a test I will want again for every variant, offer to add it to templates(d).
+5. Remote server (HTTP or SSH) only, required: {_remote_step(name)}
+6. Report: what each template checks, its size, how to use it, what
+   to measure, and where the files are on my machine.
+
+The full rules:
+
+{_rules()}"""
 
 
 @mcp.prompt()
