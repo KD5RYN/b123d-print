@@ -8,6 +8,12 @@
 | `.3mf` | slicers that read it (Bambu Studio, OrcaSlicer, PrusaSlicer); keeps units |
 | `.png` | 6-view preview, assembly render, section views |
 
+!!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
+    That message is expected. The 3MF files are plain, standard 3MF (the shape, in millimeters)
+    without a Bambu project config (printer, filament and plate settings). Click **OK**: the part
+    loads normally and you slice it with your own settings. If a large part lands off the plate,
+    use **Arrange** (A).
+
 Pick them in your config (`formats = ["3mf", "png"]`, see [Settings](settings.md)), per run
 (`b123d-print build --formats step,3mf`), or with `formats=` on the MCP `export` tool. `all`
 means all four. Default: all four.

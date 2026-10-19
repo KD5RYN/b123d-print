@@ -3,6 +3,7 @@
 | Symptom | Fix |
 | --- | --- |
 | First start is very slow, or the client gives up | it is downloading the dependencies; run `uvx --from b123d-print b123d-print-mcp --help` once in a terminal, then restart the client |
+| Bambu Studio says "The 3mf file has invalid config, load geometry data only" | expected: the file has no Bambu project settings, only the shape. Click OK; the part loads and you slice it with your own settings (Arrange with A if it lands off the plate) |
 | Client says `uvx` not found | use the full path from `which uvx` (Windows: `where.exe uvx`) as the command |
 | Model never looks at the renders | your client doesn't pass tool images to the model; open `out/*.png` yourself |
 | `timed out after 120 s` | a slow or endless script; raise `--timeout` if the part is genuinely heavy |
