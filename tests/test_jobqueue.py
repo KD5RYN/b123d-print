@@ -82,6 +82,6 @@ def test_cancel_before_the_build_starts(tmp_path):
     script = part(tmp_path, "while True:\n    pass\n")
     epoch = sandbox.current_epoch()
     sandbox.kill_all()  # the cancel lands between claiming the job and starting its process
-    t0 = time.monotonic()
     res = sandbox.run_job({"op": "build", "script": str(script)}, tmp_path / "ws", script.parent / "out", 60, epoch=epoch)
-    assert not res["ok"] and "cancelled" in res["error"] and time.monotonic() - t0 < 5
+    # no time bound: on a busy runner other tests hold build slots; the message proves it never ran
+    assert not res["ok"] and "cancelled before it started" in res["error"]

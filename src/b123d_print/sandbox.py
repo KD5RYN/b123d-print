@@ -217,6 +217,8 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0, e
             except Exception:
                 pass
 
+        if epoch is not None and current_epoch() != epoch:  # cancelled before it got this far
+            return {"ok": False, "error": "cancelled before it started (server shutting down)"}
         with build_slot():  # shared with every other server process of this user
             if epoch is not None and current_epoch() != epoch:  # cancelled while it waited
                 return {"ok": False, "error": "cancelled before it started (server shutting down)"}
