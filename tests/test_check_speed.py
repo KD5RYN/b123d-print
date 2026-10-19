@@ -195,9 +195,9 @@ def test_deadline_returns_partial_findings(tmp_path):
     script.parent.mkdir(parents=True)
     script.write_text(SLOW, encoding="utf-8")
     before = signal.getsignal(signal.SIGINT)
-    t0 = time.time()
+    # stopped at the deadline: the spinning check is reported as the one running (it would
+    # otherwise end after 60 s with no timeout finding); no wall-clock bound needed
     found = run_checks(load(script), "", load_settings(script), deadline=time.time() + 3)
-    assert time.time() - t0 < 15
     assert signal.getsignal(signal.SIGINT) == before
     wall = [f for f in found if f.check == "wall"]
     assert len(wall) == 1 and wall[0].level == ck.OK  # finished before the limit: kept
@@ -216,14 +216,13 @@ def test_deadline_through_the_worker(tmp_path, monkeypatch):
     script.parent.mkdir(parents=True)
     script.write_text(SLOW, encoding="utf-8")
     out = script.parent / "out"
-    t0 = time.monotonic()
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")  # its soft deadline starts before the slot wait
     res = sandbox.run_job({"op": "check", "script": str(script)}, tmp_path, out, timeout=30)
-    assert res["ok"], res
+    assert res["ok"], res  # stopped at the soft limit: a kill at the hard limit would be ok=False, "timed out"
     found = res["variants"]["standard"]
     assert any(f["check"] == "wall" and f["level"] == "ok" for f in found)
     assert any(f["check"] == "timeout" and f["data"]["running"] == "Slow(part, spins)" for f in found)
     assert not res["passed"]
-    assert time.monotonic() - t0 < 30  # before the hard limit (the soft one is 3 s earlier)
 
 
 def test_check_timeout_option(monkeypatch):
@@ -290,7 +289,9 @@ def test_shares_merge_to_the_sequential_result(remix_ws, monkeypatch, count):
     mod = load(remix_ws)
     seq = run_checks(mod, "", settings)
     monkeypatch.setattr(project, "COST_MIN_SPLIT", 0.0)  # split even this small part
-    shares = [project.check_share(mod, "", settings, (i, count), started=time.time()) for i in range(count)]
+    started = time.time()  # one start for the whole run, as the server passes it: an original that share 0
+    # caches mid-run must not look "cached before" to a later share, or the shares partition differently
+    shares = [project.check_share(mod, "", settings, (i, count), started=started) for i in range(count)]
     assert sum(len(s["assigned"]) for s in shares) == len({a for s in shares for a in s["assigned"]})  # no item twice
     assert sum(bool(s["assigned"]) for s in shares) > 1  # really split
     assert lines(project.merge_shares(shares)) == lines(seq)
@@ -347,6 +348,7 @@ def run_server_check(monkeypatch, root, name, builds, check_timeout=300.0):
     monkeypatch.setitem(m.STATE, "queue", None)
     monkeypatch.setitem(m.STATE, "limiter", None)
     monkeypatch.setattr(sandbox, "MAX_BUILDS", builds)
+    monkeypatch.setattr(sandbox, "SLOT_DIR", root / ".slots")  # its own slots: not queued behind other tests
     return anyio.run(m._check, name, None)
 
 
@@ -365,12 +367,10 @@ def test_timeout_across_workers_keeps_the_finished_shares(tmp_path, monkeypatch)
     script.parent.mkdir(parents=True)
     script.write_text(SLOW_SPLIT, encoding="utf-8")
     (tmp_path / "b123d-print.toml").write_text('parts_dir = "parts"\n', encoding="utf-8")
-    t0 = time.monotonic()
     # 45 s, not less: on a loaded CI runner starting the second worker and building the part can
     # take most of a short budget before its (fast) share finishes; the spinning check still
     # runs into the soft deadline (~40 s) either way
     res = run_server_check(monkeypatch, tmp_path, "slow", 2, check_timeout=45.0)
-    assert time.monotonic() - t0 < 60
     assert res["ok"] and not res["passed"]
     found = res["variants"]["standard"]
     assert any(f["check"] == "wall" and f["level"] == "ok" for f in found)  # the other worker's share

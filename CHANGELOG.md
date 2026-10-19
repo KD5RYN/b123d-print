@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 — unreleased
+
+- The MCP `initialize` response names the server's version (`serverInfo.version` was empty).
+- Releases publish the MCP Registry entry and open the plugin's pin bump on their own.
+
 ## 0.3.2 — 2026-10-19
 
 **Fit-test templates.** A quick thin print cut from the real part, to check its size, hole

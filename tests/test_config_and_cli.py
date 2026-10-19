@@ -146,3 +146,20 @@ def test_plugin_pins_the_released_package():
     assert (ROOT / "plugin/.claude-plugin/icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     junk = [p for p in (ROOT / "plugin").rglob("*") if p.name in (".DS_Store", "Thumbs.db", "desktop.ini")]
     assert not junk, junk
+
+
+def test_initialize_reports_the_package_version():
+    """serverInfo in the MCP initialize response carries the package version (the SDK's default is "")."""
+    from importlib.metadata import version
+
+    import anyio
+    from mcp.client import Client
+
+    from b123d_print.mcp_server import mcp
+
+    async def info():
+        async with Client(mcp) as c:
+            return c.server_info
+
+    got = anyio.run(info)
+    assert got.name == "b123d-print" and got.version == version("b123d-print") != ""

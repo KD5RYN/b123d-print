@@ -270,7 +270,7 @@ def test_build_slot_freed_when_a_holder_dies(tmp_path, monkeypatch):
     assert not got  # still waiting
     p.kill()
     p.wait()
-    t.join(5)
+    t.join(60)  # returns as soon as it has the slot; the outcome below is the test, not the time
     assert got == [0]
 
 

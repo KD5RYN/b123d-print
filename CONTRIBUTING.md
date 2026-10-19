@@ -17,6 +17,34 @@ forced command (sshd simulated), and `sh tests/ssh_e2e.sh` over a real local ssh
 uv run mkdocs serve        # the docs site at http://127.0.0.1:8000, rebuilt as you edit
 ```
 
+## Before you push
+
+```bash
+tools/preflight.sh
+```
+
+It runs what CI runs that can run on your machine: the unit tests in the plain-ASCII locale
+(`LANG=C LC_ALL=C uv run pytest -q -n auto`), the checks on every bundled example, the stdio MCP
+end-to-end test, the real-sshd test (on Linux with bubblewrap and sshd, or anywhere in a Docker
+container), the strict docs build and, when the `claude` CLI is on your PATH,
+`claude plugin validate --strict` on `plugin/` and on the marketplace at the root. It ends with
+one line, `preflight PASS (...)` or `preflight FAIL (...)`, naming each step that passed, failed
+or was skipped, and where its log is. Push only after it passes; a CI run takes about ten
+minutes on three operating systems, and each push to a pull request starts one (a newer push
+cancels the run still going).
+
+CI skips the long jobs for a pull request that touches only `docs/`, Markdown files at the root,
+`mkdocs.yml`, `server.json` or `plugin/`: a quick job runs `tests/test_docs.py`,
+`tests/test_config_and_cli.py` and the docs build, and the other jobs report with their steps
+skipped. `tools/ci_scope.sh` decides (`git diff --name-only main | sh tools/ci_scope.sh` shows
+what CI will do). Pushes to `main` always run everything.
+
+Tests do not assert wall-clock times: CI runners are shared and slow down without warning. Assert
+the outcome (it timed out, the child is gone, the result came before the other) and keep any
+timeout a hang guard well above the expected time. A test that runs builds through
+`sandbox.run_job` gets its own build slots (`monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")`),
+so it does not wait for the builds of tests running beside it.
+
 New checks and example parts should come from something that was actually printed.
 
 ## The docs rule
