@@ -5,7 +5,9 @@ A part script lives at <parts_dir>/<name>/<name>.py and defines:
     @dataclass(frozen=True)
     class Dims: ...                  # UPPER_CASE fields in mm; derived values as properties
     VARIANTS = {"": {}, "big": dict(WIDTH=80.0)}   # overrides only; "" is the standard part
-    def build(d) -> Part | dict[str, Part]          # printable parts, in PRINT orientation
+    def build(d) -> Part | dict[str, Part]          # printable parts, in PRINT orientation; a dict's
+                                                    # values may be zero-argument callables (lazy
+                                                    # pieces: built only when that piece is needed)
 
 and optionally:
 
@@ -32,6 +34,7 @@ import importlib.util
 import sys
 import time
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, is_dataclass, replace
 from pathlib import Path
 from types import ModuleType
@@ -82,27 +85,178 @@ def dims(mod: ModuleType, key: str):
 
 
 def printables(mod: ModuleType, d) -> dict[str, Part]:
-    if hasattr(mod, "build"):
-        r = mod.build(d) if d is not None else mod.build()
-    elif hasattr(mod, "part"):
-        r = mod.part
-    else:
-        raise AttributeError("script defines neither build(d) nor a module-level `part`")
-    return dict(r) if isinstance(r, dict) else {"": r}
+    """Every printable piece of build(d), lazy ones built too ({"": part} for a single part)."""
+    return Pieces(mod, d).parts()
 
 
-def built(mod: ModuleType, d) -> tuple[dict[str, Part], Part | None, list]:
+HEAVY_FACES = 1500  # a piece with more faces than this, or ...
+HEAVY_SECONDS = 10.0  # ... taking longer than this to build, gets HEAVY_HINT in the timing report
+HEAVY_HINT = "dense polyline or many stacked offsets: fewer curve points, a spline, or build once and mirror/copy the result"
+
+
+class Pieces:
+    """The printable pieces of one variant, built when first asked for. build(d) may return a dict
+    whose values are zero-argument callables (lazy pieces): each is called only when its piece is
+    needed, so `parts=` / `--only` builds just those. Plain shapes work as always (build(d) builds
+    them all at once). With a BuildCache, a piece built before from the same inputs is read back
+    instead of built. `stats` holds what each piece cost: faces, seconds (None for a piece of an
+    eager dict: build(d) built them all, in `build_seconds`) and whether it came from the cache."""
+
+    def __init__(self, mod: ModuleType, d, cache: BuildCache | None = None):
+        self.mod, self.d, self.cache = mod, d, cache
+        self.stats: dict[str, dict] = {}
+        self.build_seconds: float | None = None  # how long build(d) itself took, when it ran
+        self.imports: list = []  # what import_model loaded while building (remix.IMPORTED entries)
+        self._raw: dict | None = None
+        self._names: list[str] | None = None
+        self._done: dict[str, Part] = {}
+        self._asm = None
+        self._asm_done = False
+        self._imported = False  # build(d) itself loaded a model: nothing it made is cached
+
+    def names(self) -> list[str]:
+        """The pieces' names in build order ("" for a single part); calls build(d) unless cached."""
+        if self._names is None:
+            got = self.cache.names() if self.cache is not None else None
+            self._names = got if got is not None else list(self._build())
+        return self._names
+
+    def _build(self) -> dict:
+        if self._raw is None:
+            t = time.perf_counter()
+            with self._recording() as rec:
+                if hasattr(self.mod, "build"):
+                    r = self.mod.build(self.d) if self.d is not None else self.mod.build()
+                elif hasattr(self.mod, "part"):
+                    r = self.mod.part
+                else:
+                    raise AttributeError("script defines neither build(d) nor a module-level `part`")
+            self.build_seconds = time.perf_counter() - t
+            self._raw = dict(r) if isinstance(r, dict) else {"": r}
+            self._imported = bool(rec)
+            if self.cache is not None and not self._imported:
+                self.cache.save_names(list(self._raw))
+        return self._raw
+
+    @contextmanager
+    def _recording(self):
+        """Collects what import_model loads inside it (into self.imports too)."""
+        from . import remix
+
+        n0, got = len(remix.IMPORTED), []
+        try:
+            yield got
+        finally:
+            got.extend(remix.IMPORTED[n0:])
+            self.imports.extend(got)
+
+    def part(self, name: str) -> Part:
+        """One piece by its build() name ("" or "part" for a single part)."""
+        if name == "part" and "part" not in self.names() and "" in self.names():
+            name = ""
+        if name in self._done:
+            return self._done[name]
+        raw = self._raw
+        eager = raw is not None and name in raw and not _lazy(raw[name])
+        shape = None
+        if self.cache is not None and not eager:
+            got = self.cache.load(name)
+            if got is not None:
+                shape, self.stats[name] = got[0], {**got[1], "cached": True}
+        if shape is None:
+            raw = self._build()
+            if name not in raw:
+                raise KeyError(f"no part {name or 'part'!r}; parts: {sorted(k or 'part' for k in raw)}")
+            v = raw[name]
+            t = time.perf_counter()
+            with self._recording() as rec:
+                shape = v() if _lazy(v) else v
+            secs = round(time.perf_counter() - t, 2) if _lazy(v) else None
+            self.stats[name] = {"faces": _faces(shape), "seconds": secs, "cached": False}
+            if self.cache is not None and not (self._imported or rec):
+                self.cache.save(name, shape, self.stats[name])
+        self._done[name] = shape
+        return shape
+
+    def parts(self, only=None) -> dict[str, Part]:
+        """{name: piece} in build order: every piece, or the ones named in `only` (a list or a
+        comma-separated string; "part" names a single part)."""
+        names = self.names()
+        if only:
+            want = [w.strip() for w in only.split(",")] if isinstance(only, str) else list(only)
+            known = {(n or "part"): n for n in names}
+            missing = [w for w in want if w and w not in known]
+            if missing:
+                raise KeyError(f"no part(s) {missing}; parts: {sorted(known)}")
+            names = [known[w] for w in dict.fromkeys(want) if w]
+        return {n: self.part(n) for n in names}
+
+    def assembly(self) -> list | None:
+        """assembly(d), read back from the cache when it was saved before (None: no assembly)."""
+        if not self._asm_done:
+            f = getattr(self.mod, "assembly", None)
+            got = self.cache.load_assembly() if f is not None and self.cache is not None else None
+            if got is not None:
+                self._asm = got
+            elif f is not None:
+                t = time.perf_counter()
+                with self._recording() as rec:
+                    self._asm = f(self.d)
+                if self.cache is not None and not rec and self._asm:
+                    self.cache.save_assembly(self._asm, round(time.perf_counter() - t, 2))
+            self._asm_done = True
+        return self._asm
+
+    def timing(self) -> dict:
+        """The timing report: per built piece its faces, seconds and whether it was cached; the
+        build(d) call's seconds when it ran; and HEAVY_HINT for the pieces that need it."""
+        pieces = {(n or "part"): st for n, st in self.stats.items()}
+        hints = [f"{n}: {st['faces']} faces" + (f", {st['seconds']:g} s" if st.get("seconds") is not None else "")
+                 + f": {HEAVY_HINT}" for n, st in pieces.items()
+                 if st["faces"] > HEAVY_FACES or (st.get("seconds") or 0) > HEAVY_SECONDS]
+        eager = [n for n, st in pieces.items() if st.get("seconds") is None and not st.get("cached")]
+        if self.build_seconds is not None and self.build_seconds > HEAVY_SECONDS and len(eager) > 1:
+            hints.append(f"build(d) took {self.build_seconds:.1f} s for {len(eager)} pieces at once: return lazy pieces "
+                         "({'name': lambda: make_name(d)}) to see each piece's time and build one at a time")
+        out = {"pieces": pieces, "hints": hints}
+        if self.build_seconds is not None:
+            out["build_seconds"] = round(self.build_seconds, 2)
+        if self.cache is not None:
+            why = ("not cached: the build loaded a model with import_model (its conversion has its own cache)"
+                   if self.imports else self.cache.skipped)
+            out["cache"] = why or ("off for this call (fresh): rebuilt and saved again" if self.cache.cfg.fresh else "on")
+        return out
+
+
+def _lazy(v) -> bool:
+    from build123d import Shape
+
+    return callable(v) and not isinstance(v, Shape)
+
+
+def _faces(shape) -> int:
+    try:
+        return len(shape.faces())
+    except Exception:  # noqa: BLE001 - not a shape: report() says what is wrong with it
+        return 0
+
+
+def built(mod: ModuleType, d, pieces: Pieces | None = None, only=None) -> tuple[dict[str, Part], Part | None, list]:
     """printables() plus the remix's original: what `original(d)` returns, else what build() loaded
-    with import_model (None for a part that is not a remix), and the import records."""
+    with import_model (None for a part that is not a remix), and the import records.
+    pieces: build through these (lazy, cached) instead of calling build(d) here; only: just these
+    pieces (Pieces.parts)."""
     from . import remix
 
     remix.reset_imports()
-    parts = printables(mod, d)
-    imports = list(remix.IMPORTED)
+    pieces = pieces if pieces is not None else Pieces(mod, d)
+    parts = pieces.parts(only)
+    imports = list(pieces.imports)
     f = getattr(mod, "original", None)
     if f is not None:
+        n0 = len(remix.IMPORTED)
         orig = f(d) if d is not None else f()
-        imports += remix.IMPORTED[len(imports):]
+        imports += remix.IMPORTED[n0:]
     elif imports:
         from build123d import Compound
 
@@ -141,15 +295,16 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
 
 
 def run_checks(mod: ModuleType, key: str, settings: Settings, nudge: bool = True,
-               deadline: float | None = None) -> list[ck.Finding]:
+               deadline: float | None = None, cache: CacheConfig | None = None) -> list[ck.Finding]:
     """Build one variant and run every check. Never raises: errors become findings.
     nudge: also add the setup reminders (hole_comp never measured); callers pass it for the
     first variant only, so a check run says it once.
     deadline: a time.time() by which to stop (the worker's soft limit, below the hard timeout
     that kills it). A check still running then is interrupted; the result is every finding
     finished so far plus a "timeout" FAIL naming the check that was running and those not run.
-    The MCP server runs the same checks split over several workers (check_share, merge_shares)."""
-    return merge_shares([check_share(mod, key, settings, deadline=deadline)], nudge)
+    The MCP server runs the same checks split over several workers (check_share, merge_shares).
+    cache: build through the build cache (the worker)."""
+    return merge_shares([check_share(mod, key, settings, deadline=deadline, cache=cache)], nudge)
 
 
 # A check run is a list of items: each check spec on the printable parts ("<i>:part") and, for a
@@ -162,7 +317,7 @@ COST_MIN_SPLIT = 4.0  # estimated seconds: a smaller check run is not worth spli
 
 
 def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int, int] = (0, 1),
-                deadline: float | None = None, started: float | None = None) -> dict:
+                deadline: float | None = None, started: float | None = None, cache: CacheConfig | None = None) -> dict:
     """Run share `share` = (index, count) of one variant's check items (see partition). started:
     when the check run began; an original's findings cached before then count as free (cached
     later: not, so every share sees the same and computes the same partition). Returns a
@@ -181,8 +336,9 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
         try:
             try:
                 d = dims(mod, key)
-                parts, orig, imports = built(mod, d)
-                asm = assembly(mod, d)
+                pc = make_pieces(mod, key, d, settings, cache)
+                parts, orig, imports = built(mod, d, pc)
+                asm = pc.assembly()
             except CheckTimeout:
                 raise
             except Exception as e:
@@ -550,6 +706,361 @@ def _write_findings(path: Path, findings: list[ck.Finding]) -> None:
         pass
 
 
+NO_CACHE_ENV = "B123D_PRINT_NO_CACHE"  # set (to anything but "" or 0): the worker neither reads nor writes the build cache
+SHAPE_TYPES = ("Part", "Compound", "Solid")  # what the build cache restores (a Box as a Part); others are built every time
+NOT_GEOMETRY = ("root", "formats", "style", "filament_price", "print_flow")  # settings no build reads
+
+
+def no_cache_env() -> bool:
+    import os
+
+    return os.environ.get(NO_CACHE_ENV, "").strip() not in ("", "0")
+
+
+class ReadLog:
+    """The paths opened or listed in this process, recorded by an audit hook. The worker installs it
+    before it loads the part script (and before its own guard, which refuses later hooks), so the
+    build cache knows which files a build read besides the script: a reference model in ref/, a
+    table the script parses. Recording only: it refuses nothing."""
+
+    def __init__(self):
+        self.paths: list[str] = []
+        self.installed = False
+
+    def install(self) -> None:
+        import os
+
+        paths = self.paths
+        self.installed = True
+
+        def hook(event: str, args) -> None:
+            if event in ("open", "os.listdir", "os.scandir") and args and args[0] is not None and not isinstance(args[0], int):
+                try:
+                    paths.append(os.path.abspath(os.fsdecode(args[0])))
+                except Exception:  # noqa: BLE001 - never break the open itself
+                    pass
+
+        sys.addaudithook(hook)
+
+
+@dataclass
+class CacheConfig:
+    """How the worker caches builds (BuildCache). workspace: reading a file in it outside the
+    part's own folder makes a build uncacheable (nothing could tell when that file changed);
+    reads: the ReadLog; fresh: build again and overwrite what is cached, reading none of it."""
+
+    workspace: Path
+    reads: ReadLog
+    fresh: bool = False
+
+
+class BuildCache:
+    """The pieces of one variant (and its assembly), saved after they are built and read back
+    instead of building them again: out/.cache/build-<variant hash>-<key>/, one BREP file and one
+    JSON note per piece. Only the sandboxed worker uses it, and it reads and writes nothing but
+    that folder and the part's own sources.
+
+    The key: every .py file in the part's folder (the script and its helpers), the variant and its
+    Dims, the settings a build can read (hole_comp, clearances, printer, ...), and the versions of
+    b123d-print, build123d and OCP. Each note also lists the other files the build read in the
+    part's folder (ref/ models, data files) with their hashes; a change there is a miss too. A
+    build that read a file elsewhere in the workspace, or loaded a model with import_model (a
+    remix: its conversion has its own cache, and the checks need the original it loaded), is not
+    saved. A missing, changed or broken entry (BREP hash, face count or volume differ) is a miss:
+    the piece is built again. Building a new key removes the variant's older entries."""
+
+    def __init__(self, mod: ModuleType, key: str, d, settings: Settings, cfg: CacheConfig):
+        import hashlib
+        import os
+
+        self.cfg = cfg
+        self.folder = Path(os.path.realpath(Path(mod.__file__).parent))
+        self.out = self.folder / "out"
+        self.root = self.out / ".cache"
+        # never through a link: out/ and out/.cache/ must be what they look like
+        self.ok = (os.path.normcase(os.path.realpath(self.out)) == os.path.normcase(str(self.out))
+                   and not os.path.islink(self.root))
+        self.prefix = f"build-{hashlib.sha256(key.encode()).hexdigest()[:8]}-"
+        self.dir = self.root / (self.prefix + self._key(key, d, settings))
+        self.skipped: str | None = None  # why the last piece was not saved
+        self._pruned = False
+        self._skip = (os.path.realpath(sys.prefix), os.path.realpath(sys.base_prefix), os.path.realpath(sys.exec_prefix),
+                      os.path.realpath(Path(__file__).parent), str(self.out))
+        self._import_dirs = {os.path.normcase(os.path.realpath(p)) for p in sys.path if p}  # listed by imports
+        self._fps: dict[str, str | None] = {}  # fingerprints, once per file in this worker
+
+    def _key(self, key: str, d, settings: Settings) -> str:
+        import hashlib
+        import json
+        import os
+        from dataclasses import asdict
+
+        import build123d
+        import OCP
+
+        src = []
+        for top, dirs, names in os.walk(self.folder):
+            dirs[:] = sorted(x for x in dirs if not (top == str(self.folder) and x == "out") and x != "__pycache__")
+            for n in sorted(names):
+                f = Path(top) / n
+                if n.endswith(".py"):
+                    rel = f.relative_to(self.folder).as_posix()
+                    src.append([rel, "link:" + os.readlink(f) if f.is_symlink() else _file_hash(f)])
+        s = {k: v for k, v in asdict(settings).items() if k not in NOT_GEOMETRY}
+        return hashlib.sha256(json.dumps([CACHE_VERSION, "build", src, key, repr(d), repr(sorted(s.items())),
+                                          code_version(), _file_hash(Path(__file__)), build123d.__version__,
+                                          getattr(OCP, "__version__", "?")]).encode()).hexdigest()[:32]
+
+    # --- reading ---
+
+    def _usable(self, path: Path) -> bool:
+        import os
+
+        return self.ok and not self.cfg.fresh and not os.path.islink(self.dir) and not os.path.islink(path)
+
+    def _note(self, stem: str) -> dict | None:
+        import json
+
+        path = self.dir / f"{stem}.json"
+        if not self._usable(path):
+            return None
+        try:
+            note = json.loads(path.read_text(encoding="utf-8"))
+            return note if isinstance(note, dict) and self._inputs_ok(note["inputs"]) else None
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):  # missing or broken: a miss
+            return None
+
+    def _inputs_ok(self, inputs: dict) -> bool:
+        import os
+
+        for rel, h in inputs.items():
+            real = os.path.realpath(self.folder / rel)
+            if not _within(real, str(self.folder)) or _within(real, str(self.out)) or self._fp(real) != h:
+                return False
+        return True
+
+    def _fp(self, real: str) -> str | None:
+        if real not in self._fps:
+            self._fps[real] = _fingerprint(real)
+        return self._fps[real]
+
+    def _shape(self, stem: str, note: dict):
+        """The piece saved as <stem>.brep, if its hash, faces and volume match the note."""
+        import build123d
+        from build123d import import_brep
+
+        path = self.dir / f"{stem}.brep"
+        if not self._usable(path) or note.get("type") not in SHAPE_TYPES:
+            return None
+        try:
+            if _file_hash(path) != note["sha256"]:
+                return None
+            shape = getattr(build123d, note["type"])(import_brep(path).wrapped)
+            if len(shape.faces()) != note["faces"] or abs(shape.volume - note["volume"]) > 1e-6 * max(1.0, abs(note["volume"])):
+                return None
+            if note.get("label"):
+                shape.label = str(note["label"])
+            if note.get("color"):
+                shape.color = build123d.Color(*note["color"])
+        except Exception:  # noqa: BLE001 - an unreadable BREP or a broken note is a miss, never an error
+            return None
+        return shape
+
+    def names(self) -> list[str] | None:
+        note = self._note("names")
+        names = note.get("names") if note else None
+        return list(names) if isinstance(names, list) and all(isinstance(n, str) for n in names) else None
+
+    def load(self, name: str) -> tuple | None:
+        """(piece, {"faces", "seconds"}) or None."""
+        stem = _stem("piece", name)
+        note = self._note(stem)
+        if note is None or note.get("name") != name:
+            return None
+        shape = self._shape(stem, note)
+        secs = note.get("seconds")
+        return None if shape is None else (shape, {"faces": note["faces"], "seconds": secs if isinstance(secs, (int, float)) else None})
+
+    def load_assembly(self) -> list | None:
+        note = self._note("assembly")
+        if note is None:
+            return None
+        out = []
+        try:
+            for i, it in enumerate(note["items"]):
+                shape = self._shape(f"assembly-{i}", it)
+                if shape is None:
+                    return None
+                out.append(shape if it.get("bare") else (shape, *[tuple(c) if isinstance(c, list) else c for c in it["rest"]]))
+        except (KeyError, TypeError, AttributeError):  # a broken note: a miss
+            return None
+        return out
+
+    # --- writing ---
+
+    def _inputs(self) -> dict | None:
+        """{path in the part's folder: fingerprint} for the files read so far, or None (and why, in
+        `skipped`) when one of them is elsewhere in the workspace."""
+        import os
+
+        ws = os.path.realpath(self.cfg.workspace)
+        out = {}
+        for raw in dict.fromkeys(self.cfg.reads.paths):
+            real = os.path.realpath(raw)
+            if (any(_within(real, s) for s in self._skip) or os.path.basename(real) == "b123d-print.toml"
+                    or os.path.normcase(real) in self._import_dirs):
+                continue  # Python and the libraries, this build's output, settings: all in the key
+            if _within(real, str(self.folder)):
+                if not real.endswith((".py", ".pyc")):  # the sources are in the key
+                    out[Path(os.path.relpath(real, self.folder)).as_posix()] = self._fp(real)
+            elif _within(real, ws):
+                f = Path(real)
+                if f.parent.name == "__pycache__":  # an import looks for the compiled module first: name the source
+                    f = f.parent.parent / (f.name.split(".")[0] + ".py")
+                self.skipped = f"not cached: the build read {Path(os.path.relpath(f, ws)).as_posix()}, outside the part's folder"
+                return None
+        return out
+
+    def _ready(self) -> bool:
+        """May this build write now? Makes the folder and, once, removes the variant's older entries."""
+        import os
+        import shutil
+
+        if not self.ok:
+            return False
+        try:
+            self.dir.mkdir(parents=True, exist_ok=True)
+            if os.path.islink(self.dir):
+                return False
+            if not self._pruned:
+                self._pruned = True
+                for p in self.root.iterdir():
+                    if p.name.startswith(self.prefix) and p.name != self.dir.name and p.is_dir() and not p.is_symlink():
+                        shutil.rmtree(p, ignore_errors=True)
+            return True
+        except OSError:
+            return False
+
+    def _put(self, stem: str, shape) -> dict | None:
+        """Write the BREP; the note's shape fields, or None when it cannot be cached."""
+        import os
+
+        from build123d import export_brep
+
+        import build123d
+
+        kind = next((t for t in SHAPE_TYPES if isinstance(shape, getattr(build123d, t))), None)
+        if kind is None or not self._ready():
+            return None
+        path = self.dir / f"{stem}.brep"
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        try:
+            if not export_brep(shape, tmp):
+                return None
+            h = _file_hash(tmp)
+            os.replace(tmp, path)
+            color = tuple(shape.color) if getattr(shape, "color", None) is not None else None
+            return {"type": kind, "sha256": h, "faces": len(shape.faces()), "volume": shape.volume,
+                    "label": getattr(shape, "label", "") or "", "color": color}
+        except Exception:  # noqa: BLE001 - a cache that cannot be written is no cache, not an error
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return None
+
+    def save_names(self, names: list) -> None:
+        inputs = self._inputs()
+        if inputs is not None and all(isinstance(n, str) for n in names) and self._ready():
+            _write_json(self.dir / "names.json", {"names": names, "inputs": inputs})
+
+    def save(self, name: str, shape, stats: dict) -> None:
+        inputs = self._inputs()
+        if inputs is None or not isinstance(name, str):
+            return
+        stem = _stem("piece", name)
+        fields = self._put(stem, shape)
+        if fields is not None:
+            _write_json(self.dir / f"{stem}.json", {"name": name, **fields, "seconds": stats.get("seconds"), "inputs": inputs})
+
+    def save_assembly(self, items: list, seconds: float) -> None:
+        from build123d import Shape
+
+        inputs = self._inputs()
+        if inputs is None:
+            return
+        notes = []
+        for i, it in enumerate(items):
+            bare = isinstance(it, Shape)
+            shape, rest = (it, []) if bare else (it[0], list(it[1:]) if isinstance(it, (list, tuple)) else None)
+            if rest is None or not all(r is None or isinstance(r, str) or _rgb(r) for r in rest):
+                return  # a color or label the JSON note cannot hold: not cached
+            fields = self._put(f"assembly-{i}", shape)
+            if fields is None:
+                return
+            notes.append({**fields, "bare": bare, "rest": [list(r) if isinstance(r, tuple) else r for r in rest]})
+        _write_json(self.dir / "assembly.json", {"items": notes, "seconds": seconds, "inputs": inputs})
+
+
+def _within(path: str, root: str) -> bool:
+    import os
+
+    p, r = os.path.normcase(path), os.path.normcase(root)
+    return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
+
+
+def _file_hash(path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _fingerprint(real: str) -> str | None:
+    """A file's hash, a folder's sorted entry names (hashed), or None when it does not exist."""
+    import hashlib
+    import os
+
+    try:
+        if os.path.isdir(real):
+            return "dir:" + hashlib.sha256("\n".join(sorted(os.listdir(real))).encode()).hexdigest()
+        return _file_hash(real) if os.path.exists(real) else None
+    except OSError:
+        return "unreadable"
+
+
+def _stem(kind: str, name: str) -> str:
+    import hashlib
+
+    return f"{kind}-{hashlib.sha256(name.encode()).hexdigest()[:16]}"  # no piece name ever becomes a path
+
+
+def _rgb(c) -> bool:
+    return isinstance(c, (list, tuple)) and 3 <= len(c) <= 4 and all(isinstance(x, (int, float)) for x in c)
+
+
+def _write_json(path: Path, data: dict) -> None:
+    import json
+    import os
+
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, default=_plain), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:  # a read-only folder: no cache
+        pass
+
+
+def make_pieces(mod: ModuleType, key: str, d, settings: Settings, cache: CacheConfig | None = None) -> Pieces:
+    """The pieces of one variant, through the build cache when `cache` is given (the worker), the
+    script builds pieces (not a module-level `part`) and B123D_PRINT_NO_CACHE is not set."""
+    use = cache is not None and hasattr(mod, "build") and getattr(mod, "__file__", None) and not no_cache_env()
+    return Pieces(mod, d, BuildCache(mod, key, d, settings, cache) if use else None)
+
+
 INHERITABLE = (ck.Overhang, ck.ThinFeature, ck.Holes, ck.BedEdge, ck.Gap)  # automatic checks also run on the original
 ORIGINAL = "original"
 
@@ -582,15 +1093,22 @@ def setup_findings_for(findings: list[ck.Finding], hole_comp_set: bool) -> list[
                        {"holes": n})]
 
 
-def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None) -> dict:
+def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None,
+                   only=None, cache: CacheConfig | None = None) -> dict:
     """Export every printable part in `formats` (default: the `formats` setting), plus the
-    assembly render and section views when png is among them. Returns a summary."""
-    formats = formats or load_settings(script).formats
+    assembly render and section views when png is among them. Returns a summary, with the timing
+    report (Pieces.timing) under "timing".
+    only: just these pieces (comma-separated or a list): no assembly render, and only the views
+    and templates of those pieces. cache: build through the build cache (the worker)."""
+    settings = load_settings(script)
+    formats = formats or settings.formats
     out = out or script.parent / "out"
     out.mkdir(parents=True, exist_ok=True)
     d = dims(mod, key)
-    parts, orig, _ = built(mod, d)
-    asm = assembly(mod, d)
+    pc = make_pieces(mod, key, d, settings, cache)
+    parts, orig, _ = built(mod, d, pc, only)
+    names = {n or "part" for n in parts}
+    asm = None if only else pc.assembly()
     summary = {"variant": key or "standard", "parts": {}, "files": []}
     for pname, p in parts.items():
         name = out_name(script.stem, key, pname)
@@ -599,9 +1117,12 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         summary["files"] += [str(f) for f in files]
     tf = getattr(mod, "templates", None)
     for spec in tf(d) if tf else []:
+        if only and (spec.part or "part") not in names:
+            continue
         r = write_template(script, key, parts, spec, out, formats)
         summary.setdefault("templates", {})[r["name"]] = r["report"]
         summary["files"] += r["files"]
+    summary["timing"] = pc.timing()
     if "png" not in formats:
         return summary
     if asm:
@@ -613,6 +1134,8 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         summary["original"] = {"score": r["score"], "text": r["text"]}
     vf = getattr(mod, "views", None)
     for i, v in enumerate(vf(d) if vf else []):
+        if only and not (v.parts and set(v.parts) <= names):
+            continue
         if v.parts:
             sel = [(parts[n], None, n or "part") for n in v.parts]
         else:
@@ -687,6 +1210,8 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     ap.add_argument("--variant", choices=[v or "standard" for v in variants(mod)], help="default: all")
     ap.add_argument("--no-check", action="store_true")
     ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png or all (default: the formats setting)")
+    ap.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
+                                                      "those (lazy pieces: the others are never built)")
     args = ap.parse_args(argv)
     settings = load_settings(script)
     worst = 0
@@ -694,18 +1219,33 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     for key in variants(mod):
         if args.variant and variant_key(args.variant) != key:
             continue
-        s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None)
+        s = export_variant(mod, script, key, formats=parse_formats(args.formats) if args.formats else None, only=args.only)
         for pname, r in s["parts"].items():
             print(f"{out_name(script.stem, key, '' if pname == 'part' else pname)}: "
                   f"{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, volume {r['volume']:.1f} mm^3, valid={r['valid']}")
+        for line in timing_lines(s["timing"]):
+            print("  " + line)
         print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
-        if not args.no_check:
+        if args.only and not args.no_check:
+            print("  checks skipped with --only: they need every piece (run without --only, or b123d-print check)")
+        if not args.no_check and not args.only:
             for f in run_checks(mod, key, settings, nudge=not nudged):
                 nudged |= f.check == "hole_comp"
                 if f.level != ck.OK:
                     print("  " + f.line())
                 worst = max(worst, {"ok": 0, "warn": 0, "fail": 1}[f.level])
     sys.exit(worst)
+
+
+def timing_lines(timing: dict) -> list[str]:
+    """The timing report (Pieces.timing) as text lines: one per piece, then the hints."""
+    out = []
+    for name, st in timing["pieces"].items():
+        secs = (f"{st['seconds']:.1f} s" if st.get("seconds") is not None else "built by build(d)")
+        out.append(f"{name}: {st['faces']} faces, {secs}" + (" (cached)" if st.get("cached") else ""))
+    if timing.get("build_seconds") is not None:
+        out.append(f"build(d): {timing['build_seconds']:.1f} s")
+    return out + [f"hint: {h}" for h in timing["hints"]]
 
 
 def find_parts(root: Path, parts_dir: str) -> list[Path]:

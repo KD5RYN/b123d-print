@@ -84,7 +84,8 @@ replaces the default the same way.
 | `B123D_PRINT_FORMATS` | overrides `formats`, e.g. `step,3mf` |
 | `B123D_PRINT_PRINTER` | overrides `printer` |
 | `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
-| `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given |
+| `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given (default 240) |
+| `B123D_PRINT_NO_CACHE` | `1` turns the MCP server's [build cache](../scripts/convention.md#big-and-multi-piece-projects) off: every call builds the part again |
 | `B123D_PRINT_CHECK_TIMEOUT` | the MCP server's time limit for a `check` call in seconds when `--check-timeout` is not given (default 300, or the build limit if that is longer) |
 | `B123D_PRINT_MAX_BUILDS` | the MCP server's `--max-builds`; also holds across all server processes of the user (one per SSH connection) |
 | `B123D_PRINT_TRANSPORT` | the MCP server's `--transport` (`stdio` or `http`) |

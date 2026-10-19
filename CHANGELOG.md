@@ -16,6 +16,35 @@ examples including a 1.5 m curved trim. Sourced.
   size and shape and an offsets table for large or curved ones; ask for a scale in photos;
   record confirmed values in `Dims` with their source and accuracy.
 
+**Big and multi-piece projects** without rebuilding everything for every step
+([docs](https://kd5ryn.github.io/b123d-print/scripts/convention/#big-and-multi-piece-projects)):
+- **Build cache.** The MCP server's sandboxed worker saves each piece it builds (and the
+  assembly) as BREP in the part's `out/.cache/`; `build_part`, `render_preview`, `section`,
+  `check`, `export` and the other tools read it back instead of building again. Keyed by every
+  `.py` file in the part's folder, the variant and its Dims, the settings a build can read, the
+  versions of b123d-print, build123d and OCP, and the hash of every other file the build read in
+  the part's folder. A miss or a broken entry rebuilds. Not cached: builds that read a file
+  elsewhere in the workspace, remixes that load a model (`import_model` has its own cache), and
+  `original(d)`. `fresh=true` on those tools rebuilds; `B123D_PRINT_NO_CACHE=1` turns it off.
+  The cache stays inside the part's `out/` folder and never widens what a script can read or
+  write.
+- **One piece at a time.** `build(d)` may return a dict of zero-argument functions (lazy
+  pieces), each built only when needed. `build_part` gained `parts=`; `parts=` on
+  `render_preview`, `section` and `export` now builds only those pieces. CLI: `b123d-print build
+  --only a,b` and `uv run parts/x/x.py --only a,b`. Plain shapes work as before.
+- **Where the time goes.** `build_part` and `b123d-print build` report each piece's face count
+  and build time (and whether it was cached), with a hint for a piece over ~1,500 faces or
+  ~10 s: dense polyline or many stacked offsets: fewer curve points, a spline, or build once and
+  mirror/copy the result.
+- **The build time limit is now 240 s** (was 120): `--timeout`, `B123D_PRINT_TIMEOUT` and the
+  compose/`.env` examples. That stays under the 300 s an MCP client waits for a result; checks
+  keep their own 300 s limit.
+- The workflow rules (`AGENTS.md`) have a "Big and multi-piece projects" section: build each
+  distinct piece once and mirror it, keep curves to the points they need, use `parts=` instead
+  of inventing variants, read the timing report, consider a script per piece.
+- `tools/bench_multi_piece.py` times build + render + export of a six-piece part with and
+  without the cache.
+
 **Threads, fasteners and gears.** Part scripts can now import two build123d part libraries
 ([docs](https://kd5ryn.github.io/b123d-print/using/threads-fasteners-gears/)):
 [bd_warehouse](https://github.com/gumyr/bd_warehouse) 0.4.0 (Apache-2.0: threads including
