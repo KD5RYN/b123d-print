@@ -131,9 +131,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     if mode == "stdio" and pw is not None:
         page = pw / "parts/box/out/box_view.html"
         html = page.read_text(encoding="utf-8") if page.is_file() else ""
-        expect(str(page) in text(res) and 'id="b123d-model"' in html and "Permission is hereby granted" in html
+        # by name: on Windows the workspace may be an 8.3 short path here and a long one in the result
+        expect(page.name in text(res) and str(page.parent.name) in text(res), "stdio: export names the view HTML it wrote")
+        expect('id="b123d-model"' in html and "Permission is hereby granted" in html
                and "connect-src 'none'" in html and "<script src=" not in html,
-               "stdio: export writes a self-contained, offline view HTML (model, three.js and its license inline) and names it")
+               "stdio: the view HTML is self-contained and offline (model, three.js and its license inline)")
     if pw is not None:
         shutil.rmtree(pw / "parts/box/out")
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "view": "none"})
