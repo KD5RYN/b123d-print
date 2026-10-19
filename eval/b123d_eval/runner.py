@@ -55,7 +55,7 @@ class Endpoint:
     command: list[str] | None = None
     url: str | None = None
     remote_workspace: Path | None = None
-    build_timeout: float = 120.0
+    build_timeout: float = 240.0
 
     @classmethod
     def from_args(cls, cmd: str | None, url: str | None, remote_ws: str | None, build_timeout: float) -> Endpoint:

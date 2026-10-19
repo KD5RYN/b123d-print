@@ -26,7 +26,7 @@ In place of `b123d-print` in any config on this page:
 | Option | Default | Does |
 | --- | --- | --- |
 | `--workspace <folder>` | `$B123D_PRINT_WORKSPACE`, else the current folder | where parts and the workspace config live |
-| `--timeout <seconds>` | `$B123D_PRINT_TIMEOUT`, else 120 | time limit for each build, render, section or export |
+| `--timeout <seconds>` | `$B123D_PRINT_TIMEOUT`, else 240 | time limit for each build, render, section or export (under the 300 s an MCP client waits for a result) |
 | `--check-timeout <seconds>` | `$B123D_PRINT_CHECK_TIMEOUT`, else 300 (or `--timeout` if longer) | time limit for each `check`, which builds the part and runs every check (a remix's original too); shortly before it, the checks stop and return what they found, with a timeout FAIL naming the check that was running ([time limit](../using/checks.md#time-limit)) |
 | `--max-builds <n>` | `$B123D_PRINT_MAX_BUILDS`, else half the CPU cores | build processes at once, across all clients and all of this user's server processes (one per [SSH](ssh.md) connection); more calls wait. A `check` splits over up to this many ([parallel checks](../using/checks.md#time-limit)) |
 | `--transport <mode>` | `$B123D_PRINT_TRANSPORT`, else `stdio` | `stdio` or `http`; `http` serves Streamable HTTP at `/mcp`: see [Over the network](http.md) |

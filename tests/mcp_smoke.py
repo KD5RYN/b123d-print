@@ -108,6 +108,9 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     res = await c.call_tool("build_part", {"name": "box"})
     t = text(res)
     expect('"standard"' in t and '"thin"' in t and '"x": 30.0' in t, "build_part reports both variants and bbox")
+    t = text(await c.call_tool("build_part", {"name": "box"}))
+    expect('"cached": true' in t and '"cached": false' not in t and '"faces": ' in t,
+           "a second build_part reads the part from the build cache, with its face count")
     res = await c.call_tool("render_preview", {"name": "box"})
     im = images(res)
     expect(im and im[0].mime_type == "image/png" and len(base64.b64decode(im[0].data)) > 10_000, "render_preview returns a PNG")
@@ -130,8 +133,8 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
         shutil.rmtree(pw / "parts/box/out")
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf"})
     files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
-    expect(files == ["parts/box/out/box.3mf"] and (pw is None or [p.name for p in (pw / "parts/box/out").iterdir()] == ["box.3mf"]),
-           "export honors formats='3mf'")
+    shown = None if pw is None else [p.name for p in (pw / "parts/box/out").iterdir() if not p.name.startswith(".")]  # not .cache/
+    expect(files == ["parts/box/out/box.3mf"] and (pw is None or shown == ["box.3mf"]), "export honors formats='3mf'")
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "embed": True})
     emb = blobs(res)
     got = next((v for k, v in emb.items() if k.endswith("/parts/box/out/box.3mf")), None)

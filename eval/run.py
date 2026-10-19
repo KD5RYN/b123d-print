@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
             q.add_argument("--mcp-cmd", help="stdio server command (default: this Python's b123d_print.mcp_server); --workspace is appended")
             q.add_argument("--mcp-url", help="Streamable HTTP endpoint instead of stdio")
             q.add_argument("--remote-workspace", help="with --mcp-url: local path of that server's workspace")
-            q.add_argument("--build-timeout", type=float, default=120.0, help="seconds per sandboxed build (stdio)")
+            q.add_argument("--build-timeout", type=float, default=240.0, help="seconds per sandboxed build (stdio)")
             q.add_argument("--max-turns", type=int, default=40)
             q.add_argument("--max-tool-calls", type=int, default=80)
             q.add_argument("--timeout", type=float, default=900.0, help="seconds per item")

@@ -6,7 +6,7 @@
 | Bambu Studio says "The 3mf file has invalid config, load geometry data only" | expected: the file has no Bambu project settings, only the shape. Click OK; the part loads and you slice it with your own settings (Arrange with A if it lands off the plate) |
 | Client says `uvx` not found | use the full path from `which uvx` (Windows: `where.exe uvx`) as the command |
 | Model never looks at the renders | your client doesn't pass tool images to the model; open `out/*.png` yourself |
-| `timed out after 120 s` | a slow or endless script; raise `--timeout` if the part is genuinely heavy |
+| `timed out after 240 s` | a slow or endless script. Read the timing report of `build_part` (or `b123d-print build`), build one piece at a time with `parts=`, and see [big and multi-piece projects](scripts/convention.md#big-and-multi-piece-projects); raise `--timeout` only if the part is genuinely heavy |
 | `[FAIL] timeout ... time limit reached while running ...` | `check` ran out of time; the findings above it are complete. Raise `--check-timeout` (`B123D_PRINT_CHECK_TIMEOUT`), or narrow the check it names ([time limit](using/checks.md#time-limit)) |
 | `blocked in part scripts: ...` | the script tried the network, a subprocess or files outside the workspace; part scripts only need build123d |
 | `unknown setting(s)` | a typo in `config.toml` or `b123d-print.toml`; the message lists the known keys ([Settings](using/settings.md)) |
