@@ -52,6 +52,10 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
   gaps under the clearance (warn), screw holes that do not line up across pieces (fail) or whose
   sizes match no one screw (warn). Run with `check_fit` / `b123d-print fit`, or by listing
   `Mates()` in `checks(d)`.
+- **motion** — a hinge, flip lid, latch or slider moved through its motion against the other
+  pieces of the `assembly(d)`: the first collision and the smallest clearance over the whole
+  motion, with a picture of the worst position. Declared with `Motion(...)` or `Slide(...)` in
+  `checks(d)`; see [Motion clearance](#motion-clearance).
 - **hole_comp** — once per run, a warning when the part has holes but `hole_comp` has never been
   set: they are cut at nominal size and print small. See [Hole compensation](hole-compensation.md).
 
@@ -72,6 +76,61 @@ For a [remix](remix.md) (a script that loads a model with `import_model`) the au
 also run on the original, and findings the original already had are labeled **inherited from
 the original**: reported, never failing the check, not the remix's to fix. An **import** line
 says what was loaded and warns when its units look wrong.
+
+## Motion clearance
+
+A lid that is clear closed and clear open can still hit a wall half-way, and a print-in-place
+hinge whose knuckles clear when flat can close up a gap at 120°. Declare the motion in
+`checks(d)` and `check` sweeps it:
+
+```python
+from b123d_print import Motion, Slide
+
+def checks(d):
+    return [
+        # leaf B turns about the hinge axis (X, at the knuckle center), 0..180 deg, against leaf A
+        Motion("leaf B", axis_point=(0, 0, d.axis_z), axis_dir=(1, 0, 0), start_deg=0, end_deg=180,
+               against=("leaf A",), min_clearance=0.2, label="fold over"),
+        # the drawer slides 60 mm out (+Y) of its case
+        Slide("drawer", direction=(0, 1, 0), distance=60, against=("case",)),
+    ]
+```
+
+The pieces are the ones `assembly(d)` places, stand-ins included, so a lid can be checked
+against the board or the cable it must clear. Motions live in `checks(d)`, not a hook of their
+own: they then run with every `check`, inside its time limit and its split over check workers,
+and `checks(d)` can already name assembly labels.
+
+How it samples: `samples` coarse steps over the range, each pose measured against every
+`against` piece (measure's distance: the gap and its closest points, or the interference
+volume; pairs whose bounding boxes are far apart are skipped). Where two neighbouring poses are
+clear but the piece's farthest point travels further between them than the gap, a collision
+could hide: that step is split, most suspicious first. Then the first contact is bisected to
+about 0.01 mm of travel or, with no collision, the smallest clearance is closed in on.
+`max_evals` (96) caps the poses measured, so a motion costs about that many distance calls.
+
+```text
+[OK  ] motion   leaf B (fold over): clears through 0 deg..180 deg: smallest clearance 0.300 mm at 0 deg (leaf B / leaf A ...; 102 poses, steps up to 3.75 deg) (min 0.2)
+[FAIL] motion   leaf B (fold over): leaf B hits leaf A at 199.7 deg (moving 0 deg..220 deg); interference 227.461 mm^3 at 210.8 deg around (0.0, -14.416, 1.025). ...
+```
+
+The finding's data holds the numbers (`min_clearance`, `min_at`, `min_pair`, `first_contact`,
+`volume`, `worst_at`, the sampled `curve`) and, under `images`, a render of the worst pose (the
+piece see-through where it started, the interference in red) and a section through the worst
+point, across the motion, in the part's `out/` folder.
+
+![The flip_hinge example folded to 220 degrees: leaf B's tip in leaf A](../images/flip_hinge_motion_220.png)
+
+*The [`flip_hinge`](../scripts/examples.md#flip_hinge) example folded 220° instead of 180°: the
+section at the worst angle, the interference in red.*
+
+**Print-in-place hinges.** Sources give at least 0.2–0.3 mm per side between the pin and its
+bore and between knuckles (Fabbaloo's test: 0.1 fused, 0.2 moved; the Prusa forum calls 0.25
+"easy"; 0.1–0.15 only on a tuned printer, and at least one line width across and one layer
+height between layers): the `pip_clearance` setting, 0.3 by default
+([rule F3](../BEST_PRACTICES.md#6-fits-and-clearances)). Measure yours with the
+[fit coupon](../scripts/examples.md#fit_coupon). A Motion with `min_clearance` set holds that gap
+through the whole swing, which the automatic gap check (flat, as printed) cannot.
 
 ## Time limit
 
