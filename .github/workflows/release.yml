@@ -98,7 +98,9 @@ jobs:
             [ "$i" = 10 ] && exit 1
             sleep 30
           done
-          listed
+          # the registry's search lags the publish by a little: give it a few minutes
+          for i in $(seq 12); do listed && exit 0; sleep 15; done
+          echo "published, but the registry's search does not list it yet"; exit 1
 
   plugin-pin:
     # a PR that moves the Claude plugin to the version just uploaded: the pin and version in
