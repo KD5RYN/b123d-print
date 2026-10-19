@@ -25,6 +25,7 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `suggest_orientation(name, variant?, piece?, load?, image?, size?, inline?)` | ranks the ways to put the part on the bed: supports, bed contact, height, print time, bridges, [tip-over](checks.md) and, with a `load` direction or the `structural` style, whether the load runs along the layers; returns the `Rot(x, y, z)` to apply in `build(d)` and how. `piece` picks one printable part, `image` renders the top choice. Changes nothing ([how it ranks](#suggest_orientation)) |
 | `export(name, variant?, formats?, parts?, embed?, fresh?, view?)` | files to `parts/<name>/out/` ([formats](formats.md)), for every part or only `parts="lid"` (only that piece is built); says how many files and how many MB, and suggests narrowing `formats` while it is still the default; over HTTP each file also gets a [download link](../getting-started/http.md#get-the-files) and a resource link, over SSH the result ends with the [`b123d-print pull`](../getting-started/ssh.md#get-the-files) command that copies the part, and `embed=true` puts files up to 2 MB into the result. `view` makes a [3D view](formats.md#3d-view-in-the-browser) per variant to turn in a browser: `"print"` (default: the printable parts on the bed), `"assembly"` (`assembly(d)` with its stand-ins) or `"none"`; over HTTP a signed [view link](../getting-started/http.md#view-in-3d) (no token, expires), locally a self-contained `_view.html` that opens offline, over SSH the `.glb` (then `b123d-print view` at home) |
 | `list_faces(name, variant?, part?, highlight?, size?, inline?)` | the flat faces of a part with stable ids, normal and side, area, center, box and round holes, for a face [fit-test template](templates.md); `highlight` (an id or side) adds a picture with that face in red, to confirm it with you |
+| `list_edges(name, variant?, part?, highlight?, face?, kind?, convexity?, near?, radius?, limit?, size?, inline?)` | the edges of a part with stable ids, for a fillet or chamfer: type (line, circle, arc, ellipse, spline), length, start and end or center and radius, `convexity` (convex: outside edge; concave: inside corner; tangent: a smooth joint such as a fillet's side; seam) and the two faces it joins (flat ones by their `list_faces` id). Filters: `face` (id, side or point: its edges), `kind`, `convexity`, `near` (`x,y,z`: edges within `radius` mm, nearest first); `limit` caps the list. `highlight` (ids such as `3,4,7` or `3-6`) adds a picture with them in red and a `selector`: a build123d expression that selects exactly those edges, re-evaluated on the part, to paste into the script instead of the ids (see below) |
 | `measure(name, kind, a?, b?, at?, direction?, face?, face2?, frame?, variant?, image?, size?, inline?)` | precise measurements in mm with the points they were taken at. `kind` `distance`: the gap between pieces or assembly labels `a` and `b` (stand-ins too), or their interference volume, box and depth when they overlap; `wall`: the thickness through point `at` (into the part, or along `direction`) and the gaps and walls beyond; `faces`: the distance between two parallel flat faces `face` and `face2` (ids from `list_faces`) or their angle; `hole`: the holes in flat face `face` or at `at`, modeled diameter, the size it prints at after `hole_comp`, through or blind depth. `frame` `print` or `assembly` (default: the assembly for two labels, else the piece as built); `image` adds a picture with what was measured in red |
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
 | `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result; over HTTP it also lists the [view links](../getting-started/http.md#view-in-3d) of the views `export` made. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
@@ -146,6 +147,33 @@ script, and reports what changed in the build.
 **Measurements.** `measure` answers "does it fit" with numbers: the gap between the lid and the
 box in the assembly, the wall left around a counterbore, the width of a slot between two faces,
 the size and depth of a hole.
+
+## Choosing edges for fillets and chamfers
+
+A fillet that fails, or rounds the wrong edges, usually comes from a selector that does not pick
+the edges meant. `list_edges` (CLI `b123d-print edges`) lists them instead: each edge with an id,
+its type, length and end points, whether it is **convex** (an outside edge), **concave** (an
+inside corner, the one to fillet for strength) or **tangent** (already smooth), and the two faces
+it joins, flat ones by their `list_faces` id. Narrow the list with `face="top"`,
+`convexity="concave"`, `kind="circle"` or `near="x,y,z"`, then show the chosen ones:
+
+```text
+list_edges("bracket", convexity="concave", highlight="4,5")
+edges [4, 5] in red: ...
+selector: concave_edges(part).filter_by(Axis.Y)
+import: from b123d_print.edges import concave_edges
+```
+
+Ids are only for choosing: they change when the model changes. The `selector` is what goes in the
+script. It is the shortest chain of `filter_by`, `group_by` and `sort_by` on `part.edges()`, on the
+edges of an outermost face (`part.faces().sort_by(Axis.Z)[-1].edges()`) or on
+`convex_edges(part)` / `concave_edges(part)`, joined with `+` when one chain is not enough, and it
+was evaluated on the part to check it selects exactly those edges. A chain through a middle group
+(`group_by(Axis.X)[2]`) says so (`stable: false`): it can shift when edges are added along that
+axis. When no chain fits, the edges are selected by their midpoints, which move with the
+dimensions: write those points from `Dims`, or fillet in several calls. The selector was found on
+the finished part; to fillet at an earlier step, check `len(...)` of the selection there. In
+Python: `from b123d_print.edges import list_edges, selector`.
 
 ## Prompts
 

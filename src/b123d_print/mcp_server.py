@@ -49,6 +49,7 @@ before reporting. render_preview and section return PNG images.
 A failed result carries a DIAGNOSIS (cause, where, fixes): read it before changing the script;
 diagnose_failure looks deeper. Change a dimension with set_params (params lists them), not a
 rewrite. Check fits and walls with measure, not by eye.
+Fillets and chamfers: list_edges (highlight=ids) gives a verified selector for the edges you mean.
 Several pieces: return lazy pieces from build(d) ({"name": lambda: piece(d)}) and pass parts= to
 build_part, render_preview, section and export to work on one; built pieces are cached, so later
 calls reuse them (fresh=True rebuilds). build_part reports each piece's time and faces.
@@ -939,6 +940,42 @@ async def list_faces(name: str, variant: str | None = None, part: str | None = N
     if not image:
         return [text]
     return _with_note(_with_image(f"face {res['highlight']} in red: {_show(image)}\n{text}", image, inline), name)
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def list_edges(name: str, variant: str | None = None, part: str | None = None,
+                     highlight: list[int] | int | str | None = None, face: int | str | None = None,
+                     kind: str | None = None, convexity: str | None = None, near: list[float] | str | None = None,
+                     radius: float = 1.0, limit: int = 200, size: str = "normal", inline: bool = True) -> list:
+    """The edges of a printable part, to pick the ones for a fillet or chamfer by id instead of
+    guessing a selector: stable ids (1 = the longest; changed geometry may renumber), type (line,
+    circle, arc, ellipse, spline), length, start and end (or center and radius), convexity (convex:
+    an outside edge; concave: an inside corner; tangent: a smooth joint such as a fillet's side;
+    seam), the turn between its faces and the two faces it joins (flat faces by their list_faces
+    id, curved ones by type). Filters: face (an id, side or 'x,y,z' as in list_faces: its edges),
+    kind, convexity, near ('x,y,z': edges within `radius` mm, nearest first); limit caps the list.
+    part: which printable part. highlight: edge ids ('3,4,7', '3-6' or a list): also returns a
+    picture with them in red and `selector`, a build123d expression (filter_by/group_by/sort_by
+    on part.edges(), one face's edges or convex_edges/concave_edges(part)) that selects exactly
+    those edges, verified on the part; put that in the script, never the ids (they change when the model changes).
+    size: 'normal' or 'small'."""
+    _image_options(size)
+    if isinstance(face, str) and "," in face:
+        face = _triple(face, "face")
+    res = await _job(name, "edges", variant=variant, part=part, highlight=highlight, face=face, kind=kind,
+                     convexity=convexity, near=_triple(near, "near"), radius=radius, limit=limit, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    image = res.pop("image", None)
+    res.pop("ok", None)
+    text = json.dumps(res, indent=1)
+    if not image:
+        return [text]
+    sel = res["selector"]
+    head = (f"edges {sel['ids']} in red: {_show(image)}\nselector: {sel['expr']}\n"
+            + (f"import: {sel['import']}\n" if sel.get("import") else "") + f"({sel['note']})")
+    return _with_note(_with_image(f"{head}\n{text}", image, inline), name)
 
 
 @mcp.tool(structured_output=False)

@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, metrics, orient, styles, faces, template, view, compare, to-step, config, list,
+"""`b123d-print` command line: init, new, build, check, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
 and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -337,6 +337,48 @@ def cmd_faces(args) -> int:
         out.mkdir(exist_ok=True)
         img = tp.highlight(part, [face], out / f"{script.stem}{'_' + key if key else ''}_face{fid}.png",
                            f"{script.stem}: face {fid} (red)")
+        print(f"-> {img}")
+    return 0
+
+
+def cmd_edges(args) -> int:
+    """The edges of a part with their ids, for a fillet or chamfer; --highlight draws chosen ones
+    and prints a selector for them."""
+    from . import edges as ed, templates as tp
+    from .project import dims, load, printables, resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    pname, part = tp.pick_part(printables(mod, dims(mod, key)), args.only)
+    near = [float(x) for x in args.near.split(",")] if args.near else None
+    if near is not None and len(near) != 3:
+        sys.exit("edges: --near x,y,z in mm")
+    face = int(args.face) if args.face and args.face.strip().isdigit() else args.face
+    if isinstance(face, str) and "," in face:
+        face = [float(x) for x in face.split(",")]
+    res = ed.list_edges(part, face, args.kind, args.convexity, near, args.radius, args.limit)
+    sel = ed.selector(part, args.highlight) if args.highlight else None
+    if args.json:
+        json.dump({**res, **({"selector": sel} if sel else {})}, sys.stdout, indent=1)
+        print()
+    else:
+        counts = ", ".join(f"{n} {k}" for k, n in res["counts"].items())
+        print(f"{script.stem}{'[' + key + ']' if key else ''} {pname}: {res['matched']} of {res['total']} edges ({counts})")
+        for line in ed.text(res):
+            print(line)
+        if res.get("note"):
+            print(f"  ({res['note']})")
+    if sel:
+        chosen, ids = ed.find_edges(part, args.highlight)
+        out = script.parent / "out"
+        out.mkdir(exist_ok=True)
+        img = ed.highlight(part, chosen, out / f"{script.stem}{'_' + key if key else ''}_edges{'-'.join(map(str, ids[:6]))}.png",
+                           f"{script.stem}: edges {ed.id_text(ids)} (red)")
+        if not args.json:
+            print(f"selector: {sel['expr']}" + (f"\n  {sel['import']}" if sel.get("import") else "")
+                  + f"\n  ({sel['note']})")
         print(f"-> {img}")
     return 0
 
@@ -788,6 +830,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
     p.add_argument("--highlight", metavar="ID", help="also draw the part with this face (id or side) in red")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("edges", help="list a part's edges with their ids, convexity and faces (for a fillet or chamfer)")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--variant")
+    p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
+    p.add_argument("--face", metavar="ID", help="only the edges of this face: an id or side from `faces`, or x,y,z on it")
+    p.add_argument("--kind", help="only this type: line, circle, arc, ellipse, spline")
+    p.add_argument("--convexity", help="only convex (outside), concave (inside corners), tangent or seam edges")
+    p.add_argument("--near", metavar="X,Y,Z", help="only edges within --radius mm of this point, nearest first")
+    p.add_argument("--radius", type=float, default=1.0, help="mm for --near (default 1)")
+    p.add_argument("--limit", type=int, default=200, help="list at most this many (default 200)")
+    p.add_argument("--highlight", metavar="IDS", help="draw these edges (3,4,7 or 3-6) in red and print a selector for them")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("template", help="a fit-test template: a thin print cut from the part to check size, holes and fits")
     p.add_argument("part", help="part name or script path")
     g = p.add_mutually_exclusive_group(required=True)
@@ -968,11 +1022,11 @@ def main(argv: list[str] | None = None) -> int:
             return {"diagnose": cmd_diagnose, "params": cmd_params, "set": cmd_set, "measure": cmd_measure}[args.cmd](args)
         except (ParamError, TemplateError, FileNotFoundError) as e:
             sys.exit(f"{args.cmd}: {e}")
-    if args.cmd in ("faces", "template"):
+    if args.cmd in ("faces", "edges", "template"):
         from .templates import TemplateError
 
         try:
-            return cmd_faces(args) if args.cmd == "faces" else cmd_template(args)
+            return {"faces": cmd_faces, "edges": cmd_edges, "template": cmd_template}[args.cmd](args)
         except (TemplateError, FileNotFoundError) as e:
             sys.exit(f"{args.cmd}: {e}")
     return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step, "fit": cmd_fit,

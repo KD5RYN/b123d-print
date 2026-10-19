@@ -8,7 +8,7 @@ actually printed; several rules exist because a print failed without them.
 ## Tools
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
-`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `make_template`,
+`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `list_edges`, `make_template`,
 `trace_outline`, `recipe`). Otherwise
 use the CLI:
 
@@ -30,6 +30,9 @@ use the CLI:
 the script; `diagnose_failure` looks deeper. **Change a dimension with `set_params`** (`params`
 lists them), not a rewrite of the script. **Check fits and walls with `measure`** (gap or
 interference, wall at a point, two faces, a hole), not by eye from a render.
+**Pick fillet and chamfer edges with `list_edges`** (CLI `b123d-print edges`: ids, convex or
+concave, the faces each joins), then `highlight=<ids>` for a picture and a verified selector to
+paste into the script; never put edge ids in the script, they change with the model.
 
 ## The part script
 
