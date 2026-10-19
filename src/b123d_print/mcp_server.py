@@ -22,6 +22,7 @@ import re
 import signal
 import sys
 import time
+from importlib.metadata import version as _dist_version
 from pathlib import Path
 
 import anyio
@@ -107,7 +108,9 @@ def _in_use(name: str | None, start: bool) -> None:
     handoff.touch(STATE["root"] / "workspaces" / name)
 
 
-mcp = MCPServer("b123d-print", instructions=INSTRUCTIONS, middleware=[_request_workspace])
+# version: what initialize reports as serverInfo.version (the SDK default is "")
+mcp = MCPServer("b123d-print", version=_dist_version("b123d-print"), instructions=INSTRUCTIONS,
+                middleware=[_request_workspace])
 STATE: dict = {"root": Path.cwd(), "timeout": 120.0, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
@@ -379,9 +382,7 @@ def _styles() -> dict:
 
 
 def _pkg_version() -> str:
-    from importlib.metadata import version
-
-    return version("b123d-print")
+    return _dist_version("b123d-print")
 
 
 def _printer_summary(s) -> dict:

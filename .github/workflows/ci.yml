@@ -12,36 +12,100 @@ env:
 permissions:
   contents: read
 
+# one run per branch or PR: a new push cancels the run still going for the old one (never on main,
+# where every merge gets its full run)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   # Everything below runs in parallel; each job does one thing, so the slowest job (not the sum)
   # sets the wait. GitHub-hosted runners only: on a public repo, self-hosted runners would run
   # fork PRs' code.
 
+  changes:
+    # A pull request that touches only docs/, root *.md, mkdocs.yml, server.json or plugin/ runs
+    # the quick job; the jobs below still start (so every check name reports) but skip their
+    # steps. Pushes to main always run everything.
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2  # a PR checks out its merge commit: parent 1 is the base, so HEAD^1..HEAD is the PR
+      - id: scope
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            git diff --name-only HEAD^1 HEAD | sh tools/ci_scope.sh >> "$GITHUB_OUTPUT"
+          else
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
+  quick:
+    # docs-only changes: the docs and config/plugin drift tests and the strict docs build
+    needs: changes
+    runs-on: ubuntu-latest
+    env:
+      FULL: ${{ needs.changes.outputs.full }}
+      NO_MKDOCS_2_WARNING: "1"
+    steps:
+      - if: env.FULL == 'true'
+        run: echo 'Code changed, so the full set runs instead of this job'
+      - uses: actions/checkout@v7
+        if: env.FULL != 'true'
+      - uses: astral-sh/setup-uv@v7
+        if: env.FULL != 'true'
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+        if: env.FULL != 'true'
+      - name: Docs, config and plugin tests
+        if: env.FULL != 'true'
+        run: uv run pytest -q tests/test_docs.py tests/test_config_and_cli.py
+      - name: Docs build
+        if: env.FULL != 'true'
+        run: uv run mkdocs build --strict
+
   unit:
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
       - name: Linux sandbox (bubblewrap)
-        if: runner.os == 'Linux'
+        if: env.FULL == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           # Ubuntu 24.04 blocks unprivileged user namespaces by default; bwrap needs them
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: uv sync --frozen
+        if: env.FULL == 'true'
       - name: Unit tests (parallel)
+        if: env.FULL == 'true'
         run: uv run pytest -q -n auto
       - name: Checks on every bundled example
+        if: env.FULL == 'true'
         run: uv run b123d-print check
 
   e2e:
     # the MCP end-to-end test, one job per transport
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     strategy:
       fail-fast: false
       matrix:
@@ -57,48 +121,73 @@ jobs:
     name: e2e (${{ matrix.os }}, ${{ matrix.mode }})
     runs-on: ${{ matrix.os }}
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
       - name: Linux sandbox (bubblewrap)
-        if: runner.os == 'Linux'
+        if: env.FULL == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: uv sync --frozen
+        if: env.FULL == 'true'
       - name: MCP end to end (${{ matrix.what }})
+        if: env.FULL == 'true'
         run: uv run python tests/mcp_smoke.py ${{ matrix.flag }}
         env:
           B123D_PRINT_EXPECT_SANDBOX: ${{ runner.os == 'Linux' && 'bubblewrap' || runner.os == 'macOS' && 'sandbox-exec' || 'Job Object' }}
 
   ssh:
     # a real sshd (as the runner user, on localhost) and a key line written by setup-ssh
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     runs-on: ubuntu-latest
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
-      - run: |
+      - if: env.FULL == 'true'
+        run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap openssh-server
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           sudo mkdir -p /run/sshd
       - run: uv sync --frozen
+        if: env.FULL == 'true'
       - name: MCP end to end over real ssh
+        if: env.FULL == 'true'
         run: sh tests/ssh_e2e.sh
         env:
           B123D_PRINT_EXPECT_SANDBOX: bubblewrap
 
   wheel:
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     runs-on: ubuntu-latest
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
       - run: uv build
+        if: env.FULL == 'true'
       - name: MCP end to end from the built wheel via uvx
+        if: env.FULL == 'true'
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
@@ -106,14 +195,23 @@ jobs:
           B123D_PRINT_EXPECT_SANDBOX=bubblewrap B123D_PRINT_SMOKE_CMD="uvx --from $(ls dist/*.whl) b123d-print-mcp" uv run python tests/mcp_smoke.py
 
   docker:
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     runs-on: ubuntu-latest
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
       - run: docker build -t b123d-print-mcp .
+        if: env.FULL == 'true'
       - name: MCP end to end against the container
+        if: env.FULL == 'true'
         run: |
           uv sync --frozen
           # same /tmp path inside and outside, so the test can look at the files the server wrote
@@ -122,19 +220,30 @@ jobs:
 
   docker-compose:
     # the two-container HTTP setup: front + network-less worker
+    needs: changes
+    env:
+      FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
     runs-on: ubuntu-latest
     steps:
+      - if: env.FULL != 'true'
+        run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
       - uses: actions/checkout@v7
+        if: env.FULL == 'true'
       - uses: astral-sh/setup-uv@v7
+        if: env.FULL == 'true'
         with:
           enable-cache: true
       - run: docker build -t b123d-print-mcp .
+        if: env.FULL == 'true'
       - name: The compose example is valid
+        if: env.FULL == 'true'
         run: cd deploy && B123D_PRINT_IMAGE=b123d-print-mcp docker compose config -q
       - name: HTTP mode refuses to start without a token
+        if: env.FULL == 'true'
         run: |
           if docker run --rm -e B123D_PRINT_TRANSPORT=http b123d-print-mcp; then echo "started without a token"; exit 1; fi
       - name: MCP end to end over HTTP through the two-container compose setup (front + network-less worker)
+        if: env.FULL == 'true'
         working-directory: deploy
         run: |
           uv sync --frozen

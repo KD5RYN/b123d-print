@@ -65,8 +65,8 @@ def test_cancel_stops_running_builds(tmp_path, worker):
         time.sleep(0.05)
     time.sleep(1.0)  # let the worker process start
     jobqueue.cancel_all(worker)
-    t.join(60)  # well under the build's own 60 s timeout would be nicer, but CI runners vary;
-    # the result proves the cancel stopped it (an uncancelled endless loop ends "timed out")
+    t.join(120)  # no time budget: an uncancelled endless loop would end "timed out" at 60 s,
+    # so the result, not the wait, proves the cancel stopped it
     assert not t.is_alive() and not out["res"]["ok"] and "timed out" not in out["res"].get("error", "")
 
 

@@ -62,3 +62,88 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/release_notes.py --backfill
+
+  mcp-registry:
+    # the MCP Registry entry (io.github.KD5RYN/b123d-print) from server.json; after PyPI, because
+    # the registry checks the mcp-name line in the package's README on PyPI. GitHub OIDC: no token stored.
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PUBLISHER_VERSION: "1.8.1"
+      # sha256 of mcp-publisher_linux_amd64.tar.gz, from registry_1.8.1_checksums.txt of that release
+      PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install mcp-publisher (pinned, checksum verified)
+        run: |
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v$PUBLISHER_VERSION/mcp-publisher_linux_amd64.tar.gz"
+          echo "$PUBLISHER_SHA256  mcp-publisher.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher && rm mcp-publisher.tar.gz
+      - name: server.json is this version
+        run: test "$(jq -r .version server.json)" = "${GITHUB_REF_NAME#v}"
+      - run: ./mcp-publisher login github-oidc
+      - name: Publish (retried while PyPI's API catches up with the upload; the registry reads the package from it)
+        run: |
+          listed() {
+            curl -fsS "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.KD5RYN/b123d-print" |
+              jq -e --arg v "${GITHUB_REF_NAME#v}" '[.servers[].server.version] | index($v) != null' > /dev/null
+          }
+          listed && { echo "already listed (a re-run)"; exit 0; }
+          for i in $(seq 10); do
+            ./mcp-publisher publish && break
+            [ "$i" = 10 ] && exit 1
+            sleep 30
+          done
+          listed
+
+  plugin-pin:
+    # a PR that moves the Claude plugin to the version just uploaded: the pin and version in
+    # plugin/pyproject.toml, the pin in plugin/.mcp.json, and plugin/uv.lock
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v7
+      - name: Set the pin
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          sed -i -E "s/^version = \".*\"/version = \"$v\"/; s/b123d-print==[0-9][0-9.]*/b123d-print==$v/" plugin/pyproject.toml
+          sed -i -E "s/b123d-print==[0-9][0-9.]*/b123d-print==$v/" plugin/.mcp.json
+          grep -q "\"b123d-print==$v\"" plugin/pyproject.toml && grep -q "\"b123d-print==$v\"" plugin/.mcp.json
+      - name: Lock (retried while PyPI's index catches up with the upload)
+        run: |
+          for i in $(seq 20); do
+            uv lock --directory plugin --refresh-package b123d-print && exit 0
+            sleep 30
+          done
+          exit 1
+      - name: Open the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"; branch="release/plugin-pin-$v"
+          git diff --quiet && { echo "the plugin already pins $v"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "plugin: run b123d-print $v"
+          git push --force origin "$branch"
+          gh pr view "$branch" > /dev/null 2>&1 && { echo "PR for $branch exists, updated"; exit 0; }  # a re-run
+          gh pr create --base main --head "$branch" --title "plugin: run b123d-print $v" --body "$(cat <<BODY
+          Moves the Claude plugin to the release just uploaded to PyPI: \`b123d-print==$v\` and \`version\` in
+          \`plugin/pyproject.toml\`, the pin in \`plugin/.mcp.json\`, and \`plugin/uv.lock\` (\`uv lock --directory plugin\`).
+          Opened by \`release.yml\` for $GITHUB_REF_NAME.
+
+          A PR opened with GITHUB_TOKEN does not start CI. Close and reopen it to run CI; the run is short,
+          because a change that touches only \`plugin/\` runs only the quick job.
+          BODY
+          )"
