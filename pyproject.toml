@@ -9,10 +9,12 @@ license-files = ["LICENSE", "THIRD_PARTY.md", "src/b123d_print/data/viewer/three
 keywords = ["cad", "3d-printing", "build123d", "mcp", "llm"]
 requires-python = "==3.12.*"
 dependencies = [
+    "bd_warehouse==0.4.0",  # threads, fasteners, holes, gears, V-slot parts for part scripts (Apache-2.0)
     "build123d==0.13.0",
     "matplotlib==3.11.2",
     "mcp==2.3.0",
     "numpy==2.5.4",
+    "py_gearworks==0.0.24",  # involute spur, helical, herringbone, bevel gears and racks for part scripts (Apache-2.0)
     "scipy==1.18.1",  # already required by build123d; compare uses its k-d tree
 ]
 
