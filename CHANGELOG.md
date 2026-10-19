@@ -2,6 +2,32 @@
 
 ## 0.3.4 — unreleased
 
+**Fix and adjust parts with fewer rewrites and less guessing**
+([docs](https://kd5ryn.github.io/b123d-print/using/tools/#build-failures-dimensions-and-measurements)):
+- **Build-failure diagnosis.** A failed `build_part`, `render_preview`, `section`, `check` or
+  `export` result now carries a `DIAGNOSIS`: the likely cause, where (file, line, function, code
+  and the piece being built), the evidence read from the failing build123d call, and specific
+  fixes ("fillet r 3 on edges between faces 4 mm wide: try r <= 1.9 (R in Dims: set_params(...))").
+  Covers fillets and chamfers, 2D offsets (splines: offset a polyline), 3D offsets and shells,
+  booleans (coplanar, tangent, slivers, "Unable to clean"), lofts, sweeps, extrusions, missing
+  `Dims` fields, `build()` returning the wrong type, empty selections, missing imports, and
+  timeouts, which now name the piece that was building (the worker reports its progress). A
+  build that runs but is invalid, empty, 2D or off the bed gets `problems` in `build_part`.
+  New tool `diagnose_failure` (CLI `b123d-print diagnose`): each piece built on its own, the
+  largest fillet radius that works, bad faces and edges, tiny edges and sliver faces of an
+  invalid solid, and whether `fix()` repairs it.
+- **Change one dimension.** New tools `params` (the `Dims` fields with type, value and source
+  comment, derived values, variant overrides; read from the ast, never run) and `set_params`
+  (an exact in-place edit of the defaults, or of a variant's overrides, that keeps comments and
+  formatting; refuses unknown fields, expression defaults and wrong types; rebuilds and reports
+  size and volume before and after, with the call that undoes it). CLI: `b123d-print params`,
+  `b123d-print set <part> FIELD=VALUE`.
+- **Measure.** New tool `measure` (CLI `b123d-print measure`): the gap between two pieces or
+  assembly labels (stand-ins included) or their interference volume, a wall's thickness at a
+  point, the distance or angle between two flat faces from `list_faces`, and a hole's diameter,
+  printed size after `hole_comp` and depth; in mm with the points, and an optional highlight
+  picture.
+
 **Measuring for the AI**, a new guide ([docs](https://kd5ryn.github.io/b123d-print/using/measuring/)):
 how to measure a real object and hand the numbers over, especially large, complex or curved
 parts. Which method for which part (calipers, a flatbed scan or a photo on a grid, profile

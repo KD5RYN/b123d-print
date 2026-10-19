@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import traceback
+import warnings
 from pathlib import Path
 
 # Import everything heavy before the hook goes in, so library start-up (which may legitimately
@@ -30,6 +31,7 @@ import ctypes  # noqa: E402,F401  (opens the process handle at import; must happ
 import lib3mf  # noqa: E402,F401  (3MF export)
 
 from b123d_print import checks as ck  # noqa: E402
+from b123d_print import diagnose  # noqa: E402
 from b123d_print.config import load_settings, parse_formats  # noqa: E402
 from b123d_print.project import (  # noqa: E402
     CacheConfig,
@@ -51,6 +53,8 @@ from b123d_print.render import render, report, section_view, side_by_side  # noq
 from b123d_print import compare as cmp  # noqa: E402  (scipy's k-d tree, loaded before the guard)
 from b123d_print import metrics  # noqa: E402
 from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
+from b123d_print import measure  # noqa: E402  (measure)
+from b123d_print.project import Pieces  # noqa: E402
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 
 BLOCKED_EVENTS = (
@@ -222,11 +226,23 @@ def do_describe(job: dict) -> dict:
     return res
 
 
-def do(job: dict) -> dict:
+def _usage_error(e: BaseException) -> bool:
+    """An error in what the tool was asked (a wrong piece, variant, face or measurement)."""
+    msg = str(e)
+    return (isinstance(e, (measure.MeasureError, templates.TemplateError))
+            or (isinstance(e, KeyError) and (msg.startswith(("'no part", "'no variant", '"no part', '"no variant'))
+                                              or "no part(s)" in msg or "no variant" in msg)))
+
+
+def do(job: dict, warned: list | None = None) -> dict:
     if job["op"] == "compare":
         return do_compare(job)
     if job["op"] == "describe":
         return do_describe(job)
+    if job["op"] == "diagnose":  # loads the script itself, so a script that fails to load is diagnosed too
+        want = job.get("variant")
+        return diagnose.deep(Path(job["script"]), None if want is None else ("" if want in ("", "standard") else want),
+                             job.get("parts"), job.get("deadline"), warned if warned is not None else [])
     script = Path(job["script"])
     mod = load(script)
     keys = list(variants(mod))
@@ -254,6 +270,10 @@ def do(job: dict) -> dict:
                 "parts": {(n or "part"): report(p) for n, p in parts.items()},
                 "dims": {f: getattr(d, f) for f in d.__dataclass_fields__} if d is not None else None,
             }
+            problems = {(n or "part"): pr for n, p in parts.items()
+                        if (pr := diagnose.shape_problems(n or "part", p, v["parts"][n or "part"]))}
+            if problems:  # it built, but not into something printable: say what and how to fix it
+                v["problems"] = problems
             if not only:  # the assembly needs every piece
                 v["assembly"] = [lbl for _, _, lbl in (pc.assembly() or [])]
             v["timing"] = pc.timing()
@@ -319,6 +339,9 @@ def do(job: dict) -> dict:
         spec = tp.Template(**{f: v for f, v in job["spec"].items() if v is not None})
         fmts = parse_formats(job["formats"]) if job.get("formats") else settings.formats
         return write_template(script, k, _for_pick(pc, spec.part), spec, out, fmts, settings)
+    if op == "measure":
+        q = dict(job["query"])
+        return {"variant": k or "standard", **measure.run(pc, q, settings, out, tag, size)}
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
         return {"variants": [export_variant(mod, script, kk, out, fmts, only=only, cache=cache)
@@ -333,13 +356,26 @@ def main() -> int:
     READS.install()  # before the guard, which refuses any later audit hook
     if job.get("guard", True):
         install_guard(job["writable"])
-    try:
-        res = {"ok": True, **do(job)}
-    except BaseException as e:  # noqa: BLE001 - report everything, including SystemExit from scripts
-        tb = traceback.format_exc()
-        # keep the frames from the part script (and below), drop the b123d-print plumbing above it
-        lines = tb.splitlines()
-        res = {"ok": False, "error": f"{type(e).__name__}: {e}", "traceback": "\n".join(lines[-40:])}
+    # what is being built, for a timeout's diagnosis (the server reads these lines when the worker is killed)
+    Pieces.progress = lambda msg: print(diagnose.PROGRESS + msg, file=sys.stderr, flush=True)
+    with warnings.catch_warnings(record=True) as warned:
+        warnings.simplefilter("always")
+        try:
+            res = {"ok": True, **do(job, warned)}
+            if diagnose.warning_texts(warned):
+                res["warnings"] = diagnose.warning_texts(warned)
+        except BaseException as e:  # noqa: BLE001 - report everything, including SystemExit from scripts
+            tb = traceback.format_exc()
+            # keep the frames from the part script (and below), drop the b123d-print plumbing above it
+            lines = tb.splitlines()
+            res = {"ok": False, "error": f"{type(e).__name__}: {e}", "traceback": "\n".join(lines[-40:])}
+            if _usage_error(e):  # the tool's arguments, not the script: nothing to diagnose
+                res["usage_error"] = True
+            elif job.get("script"):
+                try:
+                    res["diagnosis"] = diagnose.from_exception(e, job["script"], diagnose.warning_texts(warned))
+                except Exception:  # noqa: BLE001 - the error itself is what matters
+                    pass
     with open(result_path, "w", encoding="utf-8") as f:
         json.dump(res, f, default=str)
     return 0

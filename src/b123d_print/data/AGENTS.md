@@ -19,6 +19,13 @@ use the CLI:
 - `b123d-print to-step <file.stl>` — convert a mesh to STEP and report what the conversion did
 - `b123d-print faces <name>` / `b123d-print template <name> --slice XY:3 | --face ID | --crop x,y,z:sx,sy,sz`
   — list flat faces; make a fit-test template (see below)
+- `b123d-print diagnose <name>`, `b123d-print params <name>`, `b123d-print set <name> FIELD=VALUE`,
+  `b123d-print measure <name> --distance A,B | --wall x,y,z | --faces ID,ID | --hole ID` — as below
+
+**After a failed build, read its `DIAGNOSIS`** (cause, where, fixes with numbers) before changing
+the script; `diagnose_failure` looks deeper. **Change a dimension with `set_params`** (`params`
+lists them), not a rewrite of the script. **Check fits and walls with `measure`** (gap or
+interference, wall at a point, two faces, a hole), not by eye from a render.
 
 ## The part script
 

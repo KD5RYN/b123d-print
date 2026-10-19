@@ -285,6 +285,179 @@ def cmd_template(args) -> int:
     return worst
 
 
+def cmd_diagnose(args) -> int:
+    """diagnose_failure on the command line: each piece built on its own, with its diagnosis."""
+    import warnings
+
+    from . import diagnose
+    from .project import resolve_part, variant_key
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    with warnings.catch_warnings(record=True) as warned:
+        warnings.simplefilter("always")
+        try:
+            res = diagnose.deep(script, variant_key(args.variant), args.only, None, warned)
+        except KeyError as e:
+            sys.exit(f"diagnose: {e.args[0]}")
+    if args.json:
+        json.dump(res, sys.stdout, indent=1, default=str)
+        print()
+    else:
+        print(diagnose.deep_text(res, script.stem))
+    bad = res.get("error") or res.get("assembly_error") or any(
+        not p["ok"] or p.get("problems") for p in res.get("pieces", {}).values())
+    return 1 if bad else 0
+
+
+def cmd_params(args) -> int:
+    """The Dims fields of a part (read from the script, not run)."""
+    from .params import read
+    from .project import resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    info = read(script.read_text(encoding="utf-8"))
+    if args.json:
+        json.dump(info, sys.stdout, indent=1, ensure_ascii=False)
+        print()
+        return 0
+    print(f"{script.stem}: Dims (line {info['class_line']})")
+    for f in info["fields"]:
+        val = f["default"] if f["literal"] else f"{f['default']}  (expression)"
+        print(f"  {f['name']:16} {f['type']:10} = {val}" + (f"  # {f['comment']}" if f.get("comment") else ""))
+    for d in info["derived"]:
+        print(f"  {d['name']:16} derived from {', '.join(d['uses']) or '?'}" + (f"  ({d['doc']})" if d.get("doc") else ""))
+    for k, ov in info.get("variants", {}).items():
+        if ov:
+            print(f"  variant {k}: " + ", ".join(f"{n}={v}" for n, v in ov.items()))
+    return 0
+
+
+def _value(text: str):
+    """A FIELD=VALUE value: a Python literal (40, 2.5, True, (1, 2), "x"), else the text itself."""
+    import ast
+
+    try:
+        return ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        return text
+
+
+def cmd_set(args) -> int:
+    """set_params on the command line: change Dims defaults (or a variant's overrides) in place."""
+    from .params import set_values
+    from .project import dims, load, printables, resolve_part, variant_key, variants
+    from .render import report
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    values = {}
+    for pair in args.values:
+        name, eq, val = pair.partition("=")
+        if not eq or not name.strip():
+            sys.exit(f"set: {pair!r}: give FIELD=VALUE")
+        values[name.strip()] = _value(val.strip())
+
+    def sizes() -> dict | None:
+        if args.no_build:
+            return None
+        mod = load(script)
+        keys = list(variants(mod))
+        k = variant_key(args.variant) if args.variant else keys[0]
+        try:
+            return {n or "part": report(p) for n, p in printables(mod, dims(mod, k)).items()}
+        except Exception as e:  # noqa: BLE001 - say it, the edit still happens
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    src = script.read_bytes().decode("utf-8")
+    new, changes, notes = set_values(src, values, args.variant)
+    before = sizes()
+    script.write_text(new, encoding="utf-8", newline="")
+    for c in changes:
+        where = f"VARIANTS[{c['variant']!r}]" if c.get("variant") else "Dims"
+        print(f"{c['field']} ({where}, line {c['line']}): {c['old'] if c['old'] is not None else '(not set)'} -> {c['new']}")
+    for n in notes:
+        print(f"note: {n}")
+    after = sizes()
+    if after is None:
+        return 0
+    if "error" in after:
+        print(f"build FAILED: {after['error']} (the change is saved; run `b123d-print diagnose {script.stem}`)")
+        return 1
+    for pname, r in after.items():
+        o = (before or {}).get(pname) if before and "error" not in before else None
+        was = f"{o['x']:.2f} x {o['y']:.2f} x {o['z']:.2f} -> " if o else ""
+        vol = f"{o['volume']:.1f} -> {r['volume']:.1f}" if o else f"{r['volume']:.1f}"
+        print(f"  {pname}: {was}{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, volume {vol} mm^3, valid={r['valid']}")
+        for pr in diagnose_problems(pname, r):
+            print(f"  PROBLEM: {pr}")
+    return 0
+
+
+def diagnose_problems(name: str, rep: dict) -> list[str]:
+    """Problems readable from a report alone (the CLI has the report, not the shape)."""
+    out = []
+    if not rep["valid"]:
+        out.append(f"{name} is not a valid solid: b123d-print diagnose shows which faces are bad")
+    if rep["volume"] <= 0:
+        out.append(f"{name} has zero volume")
+    elif abs(rep["min"][2]) > 1e-3:
+        out.append(f"{name}'s bottom is at Z={rep['min'][2]:g}, not on the bed (Z=0)")
+    return out
+
+
+def cmd_measure(args) -> int:
+    """measure on the command line: a gap, a wall, two faces or a hole, in mm with the points."""
+    from . import measure as ms
+    from .project import Pieces, dims, load, resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    q: dict = {"frame": args.frame, "a": args.of, "image": args.image}
+    if args.distance:
+        a, _, b = args.distance.partition(",")
+        q.update(kind="distance", a=a.strip(), b=b.strip())
+    elif args.wall:
+        q.update(kind="wall", at=_triple(args.wall, "--wall"))
+    elif args.faces:
+        f1, _, f2 = args.faces.partition(",")
+        q.update(kind="faces", face=int(f1) if f1.strip().isdigit() else f1.strip(),
+                 face2=int(f2) if f2.strip().isdigit() else f2.strip())
+    else:
+        h = args.hole
+        q.update(kind="hole", face=None if h in (None, "") else (int(h) if h.isdigit() else h))
+    if args.at:
+        q["at"] = _triple(args.at, "--at")
+    if args.dir:
+        q["direction"] = _triple(args.dir, "--dir")
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    out = script.parent / "out"
+    if args.image:
+        out.mkdir(exist_ok=True)
+    tag = "_".join(x for x in (script.stem, key) if x)
+    try:
+        res = ms.run(Pieces(mod, dims(mod, key)), {k: v for k, v in q.items() if v is not None}, load_settings(script),
+                     out, tag)
+    except (ms.MeasureError, KeyError) as e:
+        sys.exit(f"measure: {e.args[0] if isinstance(e, KeyError) else e}")
+    except Exception as e:  # noqa: BLE001 - the part does not build: say why, as build_part would
+        from . import diagnose
+
+        print(f"measure: the part failed to build: {type(e).__name__}: {e}")
+        print(diagnose.text(diagnose.from_exception(e, script), script.stem))
+        return 1
+    if args.json:
+        json.dump(res, sys.stdout, indent=1)
+        print()
+    else:
+        print(res["summary"])
+        if res.get("image"):
+            print(f"-> {res['image']}")
+    return 0
+
+
 def cmd_printer(args) -> int:
     from . import profiles as pf
     from .config import set_user_setting
@@ -464,6 +637,37 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant", help="default: the first variant")
     p.add_argument("--part", dest="only", metavar="NAME", help="which printable part (default: the only one)")
     p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all (default: the formats setting)")
+    p = sub.add_parser("diagnose", help="a failed or broken build: each piece built on its own, with the likely cause "
+                                        "and fixes; exit 1 if a piece fails or has a problem")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--variant", help="default: the first variant")
+    p.add_argument("--only", metavar="PIECES", help="comma-separated piece names: only those")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("params", help="list a part's Dims fields (type, value, source comment) and variant overrides")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("set", help="change Dims values in the script in place (FIELD=VALUE ...), then build and show "
+                                   "what changed")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("values", nargs="+", metavar="FIELD=VALUE", help="e.g. WIDTH=42 R=1.9 (Python literals)")
+    p.add_argument("--variant", help="change this variant's override in VARIANTS instead of the default")
+    p.add_argument("--no-build", action="store_true", help="only edit the script")
+    p = sub.add_parser("measure", help="measure a built part in mm: a gap or interference, a wall, two faces, a hole")
+    p.add_argument("part", help="part name or script path")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--distance", metavar="A,B", help="gap (or interference) between two pieces or assembly labels")
+    g.add_argument("--wall", metavar="X,Y,Z", help="wall thickness at a point (into the part, or along --dir)")
+    g.add_argument("--faces", metavar="ID,ID", help="distance or angle between two flat faces (ids or sides from `faces`)")
+    g.add_argument("--hole", nargs="?", const="", metavar="FACE", help="holes in a flat face (id or side), or the hole "
+                                                                        "nearest --at")
+    p.add_argument("--of", metavar="NAME", help="the piece (or assembly label) for --wall, --faces, --hole")
+    p.add_argument("--at", metavar="X,Y,Z", help="a point at the hole (--hole)")
+    p.add_argument("--dir", metavar="DX,DY,DZ", help="the direction for --wall")
+    p.add_argument("--frame", default="auto", choices=("auto", "print", "assembly"),
+                   help="print (as build() returns it) or assembly (as assembly(d) places it); default auto")
+    p.add_argument("--variant", help="default: the first variant")
+    p.add_argument("--image", action="store_true", help="also draw the part with what was measured in red (out/)")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("styles", help="list the design styles (yours and the built-in ones), or show one")
     p.add_argument("name", nargs="?", help="a style to show, with based_on applied")
     p = sub.add_parser("printer", help="optional printer/material profile (default: generic)")
@@ -584,6 +788,14 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_metrics(args) if args.cmd == "metrics" else cmd_styles(args)
         except ValueError as e:
             sys.exit(str(e))
+    if args.cmd in ("diagnose", "params", "set", "measure"):
+        from .params import ParamError
+        from .templates import TemplateError
+
+        try:
+            return {"diagnose": cmd_diagnose, "params": cmd_params, "set": cmd_set, "measure": cmd_measure}[args.cmd](args)
+        except (ParamError, TemplateError, FileNotFoundError) as e:
+            sys.exit(f"{args.cmd}: {e}")
     if args.cmd in ("faces", "template"):
         from .templates import TemplateError
 
