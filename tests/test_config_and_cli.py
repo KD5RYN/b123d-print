@@ -96,3 +96,25 @@ def test_human_size():
     from b123d_print.mcp_server import _human_size
 
     assert (_human_size(512), _human_size(34_000), _human_size(2_500_000)) == ("512 B", "34 KB", "2.5 MB")
+
+
+def test_mcp_subcommand_starts_the_server_cli(capsys):
+    """`b123d-print mcp ...` is the MCP server (what `uvx b123d-print mcp` runs for registry clients)."""
+    import pytest
+
+    with pytest.raises(SystemExit) as e:
+        main(["mcp", "--help"])
+    assert e.value.code == 0 and "b123d-print-mcp" in capsys.readouterr().out
+
+
+def test_server_json_matches_the_package():
+    """The MCP Registry entry, the package and the plugin always carry the same version and name."""
+    import json
+    import tomllib
+
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    plugin = json.loads((ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
+    assert server["version"] == server["packages"][0]["version"] == version == plugin["version"]
+    assert server["packages"][0]["identifier"] == "b123d-print"
+    assert f"mcp-name: {server['name']}" in (ROOT / "README.md").read_text(encoding="utf-8")

@@ -1,5 +1,7 @@
 # b123d-print
 
+<!-- mcp-name: io.github.KD5RYN/b123d-print -->
+
 [![PyPI](https://img.shields.io/pypi/v/b123d-print.svg)](https://pypi.org/project/b123d-print/)
 [![CI](https://github.com/KD5RYN/b123d-print/actions/workflows/ci.yml/badge.svg)](https://github.com/KD5RYN/b123d-print/actions/workflows/ci.yml)
 [![Docs](https://github.com/KD5RYN/b123d-print/actions/workflows/docs.yml/badge.svg)](https://kd5ryn.github.io/b123d-print/)
@@ -77,6 +79,12 @@ It will probably ask to run a few commands (to install uv and add the server): t
 
    ```bash
    claude mcp add b123d-print -- uvx --from b123d-print b123d-print-mcp --workspace ~/parts
+   ```
+
+   Or install the Claude Code plugin (server + skill) in one step:
+
+   ```text
+   /plugin install b123d-print --marketplace KD5RYN/b123d-print
    ```
 
    Claude Desktop (Settings → Developer → Edit Config):

@@ -47,7 +47,7 @@ While 0.x, the part-script convention may still change; say so in the release no
 ## Cutting a release
 
 1. Wait for CI to be green on `main`.
-2. Bump `version` in `pyproject.toml` and `.claude-plugin/plugin.json`, run `uv lock`, merge.
+2. Bump `version` in `pyproject.toml`, `.claude-plugin/plugin.json` and `server.json` (both `version` fields; a test keeps them equal), run `uv lock`, merge.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z` → `release.yml` waits for approval of the `pypi`
    environment, then uploads to PyPI and pushes `ghcr.io/kd5ryn/b123d-print-mcp:X.Y.Z` + `latest`.
 4. The release notes write themselves: the `github-release` job turns the version's
@@ -55,3 +55,19 @@ While 0.x, the part-script convention may still change; say so in the release no
    tags). The release refuses to start if that section is missing or still says "unreleased",
    so date it in step 2. Preview: `python tools/release_notes.py X.Y.Z`.
 5. Update the pinned-version examples in the docs (`b123d-print==0.2.0`) if they should follow.
+
+## MCP Registry
+
+The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as
+`io.github.KD5RYN/b123d-print`, described by `server.json` (clients start it with
+`uvx b123d-print mcp`). The registry checks ownership through the `mcp-name:` line at the top of
+the README, which PyPI shows as the package description, so publish the registry entry only
+**after** the PyPI release of that version:
+
+```bash
+brew install mcp-publisher
+mcp-publisher login github     # device login in the browser, as KD5RYN
+mcp-publisher publish          # reads server.json
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.KD5RYN/b123d-print"
+```
+
