@@ -689,7 +689,14 @@ async def ssh_checks(c, ssh_cmd: list[str], dest: str, pw: Path | None, expect) 
                        capture_output=True, text=True, timeout=120)
     names = sorted(p.relative_to(got).as_posix() for p in got.rglob("*") if p.is_file())
     same = pw is None or all((got / n).read_bytes() == (pw / n).read_bytes() for n in names)
-    expect(r.returncode == 0 and names == ["parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"] and same,
+    base = ["parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"]
+    if pw is not None:  # everything the server has for that variant and those formats (templates included)
+        from b123d_print.handoff import part_files
+
+        want = sorted(f"parts/box/{rel}" for rel, _ in part_files(pw, "parts", "box", "standard", ["3mf", "stl"]))
+    else:
+        want = names if set(base) <= set(names) else base
+    expect(r.returncode == 0 and names == want and set(base) <= set(names) and same,
            f"b123d-print pull copies the part into parts/box/ byte for byte ({names}{'' if r.returncode == 0 else ': ' + r.stderr[-500:]})")
     shutil.rmtree(got, ignore_errors=True)
     r = subprocess.run(ssh_cmd + [dest, "version"], capture_output=True, text=True, timeout=60)
