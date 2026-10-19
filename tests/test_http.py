@@ -212,3 +212,38 @@ def test_no_reply_before_the_body_over_a_real_socket():
     finally:
         srv.should_exit = True
         t.join(10)
+
+
+def test_workspace_named_once_and_used_as_authorized(tmp_path):
+    """The workspace is resolved once, in TokenAuth, and the tools use exactly that one: a request
+    naming it twice (or differently in the query and the header) is refused, so a token for one
+    workspace can never run in another (a repeated ?workspace= used to pass auth on the first value
+    and run in the last)."""
+    from types import SimpleNamespace
+
+    from b123d_print import mcp_server as m
+
+    p = tmp_path / "tokens.toml"
+    alice, bob = tokens.generate(), tokens.generate()
+    tokens.write(p, {"alice": tokens.Token("alice", tokens.digest(alice), ["alice"]),
+                     "bob": tokens.Token("bob", tokens.digest(bob), ["bob"])}, "s")
+    app = TokenAuth(inner, tokens.Store(p))
+    assert call(app, "/mcp", bearer(alice), b"workspace=alice") == 200 and SEEN["b123d_workspace"] == "alice"
+    assert call(app, "/mcp", bearer(alice), b"workspace=alice&workspace=bob") == 400
+    assert call(app, "/mcp", bearer(alice), b"workspace=alice&workspace=") == 400
+    assert call(app, "/mcp", bearer(alice), b"workspace=bob&workspace=alice") == 400
+    assert call(app, "/mcp", bearer(alice) + [(b"x-b123d-workspace", b"bob")], b"workspace=alice") == 400
+    assert call(app, "/mcp", bearer(alice) + [(b"x-b123d-workspace", b"alice")] * 2) == 400
+    assert call(app, "/mcp", bearer(alice) + [(b"x-b123d-workspace", b"alice")], b"workspace=alice") == 200
+    assert call(app, "/mcp", bearer(alice)) == 200 and SEEN["b123d_workspace"] == "alice"  # its one workspace
+
+    # the tools read the workspace TokenAuth put in the scope, never the query string again
+    seen = {}
+
+    async def call_next(ctx):
+        seen["ws"] = m._WORKSPACE.get()
+        return {}
+
+    req = SimpleNamespace(query_params={"workspace": "bob"}, headers={}, scope={"state": {"b123d_workspace": "alice"}})
+    asyncio.run(m._request_workspace(SimpleNamespace(request=req), call_next))
+    assert seen["ws"] == "alice"
