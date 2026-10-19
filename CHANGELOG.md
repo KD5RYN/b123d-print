@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.4 — unreleased
+## 0.3.4 — 2026-10-19
 
 **Fix and adjust parts with fewer rewrites and less guessing**
 ([docs](https://kd5ryn.github.io/b123d-print/using/tools/#build-failures-dimensions-and-measurements)):

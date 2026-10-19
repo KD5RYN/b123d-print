@@ -8,13 +8,13 @@
     "url": "https://github.com/KD5RYN/b123d-print",
     "source": "github"
   },
-  "version": "0.3.3",
+  "version": "0.3.4",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "b123d-print",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
