@@ -120,6 +120,86 @@ def cmd_check(args) -> int:
     return worst
 
 
+def cmd_fit(args) -> int:
+    """Fit between the pieces of each part's assembly(d): interference and hole alignment."""
+    from . import fit
+    from .project import load, variant_key, variants
+
+    worst, out = 0, []
+    for script in _targets(args):
+        settings = load_settings(script)
+        mod = load(script)
+        if not hasattr(mod, "assembly"):
+            if args.parts:
+                print(f"{script.stem}: no assembly(d), nothing to fit")
+            continue
+        for key in variants(mod):
+            if args.variant and variant_key(args.variant) != key:
+                continue
+            r = fit.run_fit(mod, key, settings, hole_tol=args.hole_tol)
+            out.append({"part": script.stem, "variant": r["variant"], "findings": [f.__dict__ for f in r["findings"]]})
+            if not args.json:
+                print(fit.text(r, script.stem, args.verbose))
+            if any(f.level == ck.FAIL for f in r["findings"]):
+                worst = 1
+    if args.json:
+        json.dump(out, sys.stdout, indent=1, default=str)
+        print()
+    elif not out:
+        print("no part with an assembly(d)")
+    return worst
+
+
+def cmd_trace(args) -> int:
+    """Trace a flat object in a scan or photo into an outline in mm (the same as trace_outline)."""
+    from . import trace as tr
+
+    def nums(v, n, what):
+        if v is None:
+            return None
+        vals = [float(x) for x in v.split(",")]
+        if len(vals) != n:
+            sys.exit(f"trace: {what} takes {n} comma-separated numbers")
+        return vals
+
+    ref = args.reference
+    if ref and "," in ref:
+        ref = nums(ref, 2, "--reference")
+    scale = tr.Scale(dpi=args.dpi, grid=args.grid, reference=ref, points=nums(args.points, 4, "--points"),
+                     distance=args.distance)
+    image = Path(args.image)
+    try:
+        res = tr.trace(image, scale, tolerance=args.tolerance, smooth=args.smooth, threshold=args.threshold,
+                       invert=True if args.invert else None, pick=nums(args.pick, 2, "--pick"))
+    except tr.TraceError as e:
+        sys.exit(f"trace: {e}")
+    out = Path(args.out) if args.out else image.parent
+    tr.write(res, out, image.stem, title=image.name)
+    if args.json:
+        json.dump(res.as_dict(), sys.stdout, indent=1, default=str)
+        print()
+    else:
+        print(tr.text(res))
+        for f in res.files.values():
+            print(f"  -> {f}")
+    return 0
+
+
+def cmd_recipes(args) -> int:
+    """List the recipes, or print one (code, example, printing notes, sources)."""
+    from . import recipes
+
+    if not args.name:
+        for r in recipes.RECIPES.values():
+            print(f"{r.name:15} {r.title}")
+        return 0
+    try:
+        print(recipes.get(args.name).text())
+    except KeyError as e:
+        sys.exit(e.args[0])
+    return 0
+
+
 def cmd_metrics(args) -> int:
     """Design metrics and the style's findings for each part (rough estimates; never fails)."""
     from . import metrics
@@ -680,6 +760,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--load", help="the bending or tension direction as build(d) returns the part: X, 'along Y', XZ, 1,0,1")
     p.add_argument("--image", action="store_true", help="also render the top choice to out/<part>_orient.png")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("fit", help="fit between the pieces of assembly(d): overlaps, gaps under the clearance, hole alignment")
+    p.add_argument("parts", nargs="*", help="part names or script paths (default: all with an assembly)")
+    p.add_argument("--variant")
+    p.add_argument("--hole-tol", type=float, help="largest axis offset of partner holes, mm (default 0.2)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("-v", "--verbose", action="store_true", help="also list the pairs that fit")
+    p = sub.add_parser("trace", help="trace a flat object in a scan or photo into an outline in mm (JSON, py snippet, overlay PNG)")
+    p.add_argument("image", help="a PNG, JPEG, TIFF or BMP")
+    p.add_argument("--dpi", type=float, help="scan resolution (default: read from the file)")
+    p.add_argument("--grid", type=float, metavar="MM", help="grid cell size in mm (a cutting mat, graph paper)")
+    p.add_argument("--reference", metavar="card|L,S", help="a reference object beside it: card (85.60 x 53.98) or its sides in mm")
+    p.add_argument("--points", metavar="X1,Y1,X2,Y2", help="two pixels (origin top left) a known --distance apart")
+    p.add_argument("--distance", type=float, metavar="MM", help="mm between --points")
+    p.add_argument("--tolerance", type=float, default=0.2, help="mm the simplified outline may deviate (default 0.2)")
+    p.add_argument("--smooth", action="store_true", help="spline through-points instead of a polyline")
+    p.add_argument("--pick", metavar="X,Y", help="a pixel inside the object to trace (default: the largest object)")
+    p.add_argument("--threshold", type=float, help="gray level 0..1 (default: automatic)")
+    p.add_argument("--invert", action="store_true", help="the object is lighter than the background")
+    p.add_argument("-o", "--out", help="folder for the outputs (default: next to the image)")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("recipes", help="list the recipe library, or show one recipe's code, notes and sources")
+    p.add_argument("name", nargs="?")
     p = sub.add_parser("faces", help="list a part's flat faces with their ids (for a face template)")
     p.add_argument("part", help="part name or script path")
     p.add_argument("--variant")
@@ -873,8 +975,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_faces(args) if args.cmd == "faces" else cmd_template(args)
         except (TemplateError, FileNotFoundError) as e:
             sys.exit(f"{args.cmd}: {e}")
-    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step,
-            "view": cmd_view}[args.cmd](args)
+    return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step, "fit": cmd_fit,
+            "trace": cmd_trace, "recipes": cmd_recipes, "view": cmd_view}[args.cmd](args)
 
 
 if __name__ == "__main__":

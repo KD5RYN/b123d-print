@@ -175,6 +175,24 @@ every part; does nothing in generic mode.
 | `part` | — | part name |
 | `margin` | `0.0` | mm kept free at each bed edge |
 
+## `Mates`
+
+[Fit between the pieces](../using/fit.md) of `assembly(d)`: overlaps, gaps under the clearance
+and hole alignment across pieces. Not automatic: list it in `checks(d)` to run it with `check`
+(the `check_fit` tool and `b123d-print fit` run it on any script with an assembly, with the
+arguments given here). `from b123d_print import Mates`.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `clearance` | `None` | mm per side two pieces must keep apart unless they touch; default the `clearance` setting |
+| `hole_tol` | `0.2` | mm: partner holes further off-axis fail |
+| `joints` | `()` | male/female pairs that are intentional fits: `("peg", "socket")`, `("peg", "socket", 0.1)`, `{"male": ..., "female": ..., "clearance": ...}` or objects with `male`/`female`/`clearance`; also read from the script's `joints(d)` |
+| `ignore` | `()` | label pairs meant to overlap (a screw stand-in in its pilot hole) |
+| `tol` | `0.01` | mm³ of overlap allowed |
+| `max_pairs` | `60` | at most this many close pairs are measured, nearest first |
+| `align` | `True` | also check hole alignment |
+| `part` | `"assembly"` | the name findings are reported under |
+
 ## `View`
 
 Not a check: a cross-section saved as a PNG with every export, returned by `views(d)`.

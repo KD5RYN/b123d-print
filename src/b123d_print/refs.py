@@ -1,4 +1,5 @@
-"""Reference files: the original model a remix starts from (an STL, 3MF or STEP someone downloaded).
+"""Reference files: the original model a remix starts from (an STL, 3MF or STEP someone downloaded),
+or a scan or photo of a flat object to trace (PNG, JPEG, TIFF, BMP).
 
 They live in the part's own folder, `<parts_dir>/<part>/ref/<file>`, so a part script reads them
 with `import_model("ref/bracket.stl")` and the sandbox (which can read the workspace) lets it.
@@ -21,7 +22,9 @@ import secrets
 import stat
 from pathlib import Path
 
-SUFFIXES = (".stl", ".3mf", ".step", ".stp")
+MODEL_SUFFIXES = (".stl", ".3mf", ".step", ".stp")
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")  # scans and photos to trace (= trace.IMAGE_SUFFIXES)
+SUFFIXES = MODEL_SUFFIXES + IMAGE_SUFFIXES
 MAX_BYTES = 50_000_000  # per file; a 100k-triangle binary STL is 5 MB
 REF_DIR = "ref"
 SHARED_DIR = "refs"  # workspace-wide reference folder (read only by import_model; nothing writes it)
@@ -54,6 +57,11 @@ def sniff(data: bytes, filename: str) -> None:
     elif suffix == ".3mf":
         if not data.startswith(b"PK\x03\x04"):
             raise RefError(f"{filename}: not a 3MF (a 3MF is a zip file)")
+    elif suffix in IMAGE_SUFFIXES:
+        magic = {".png": (b"\x89PNG\r\n\x1a\n",), ".jpg": (b"\xff\xd8\xff",), ".jpeg": (b"\xff\xd8\xff",),
+                 ".tif": (b"II*\x00", b"MM\x00*"), ".tiff": (b"II*\x00", b"MM\x00*"), ".bmp": (b"BM",)}[suffix]
+        if not data.startswith(magic):
+            raise RefError(f"{filename}: not a {suffix[1:].upper()} image")
     elif not head.lstrip().startswith(b"ISO-10303-21"):
         raise RefError(f"{filename}: not a STEP file (no ISO-10303-21 header)")
 

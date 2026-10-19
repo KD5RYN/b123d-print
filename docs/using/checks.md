@@ -48,6 +48,10 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
 - **probe** — material must be present (or absent) in a small box: "the roof is closed",
   "the cable channel is clear". The result shows the box against the part's bounding box; a box
   entirely outside the part fails (expected solid) or warns (expected empty).
+- **mate**, **align** — the [fit between pieces](fit.md) of an `assembly(d)`: overlaps (fail),
+  gaps under the clearance (warn), screw holes that do not line up across pieces (fail) or whose
+  sizes match no one screw (warn). Run with `check_fit` / `b123d-print fit`, or by listing
+  `Mates()` in `checks(d)`.
 - **hole_comp** — once per run, a warning when the part has holes but `hole_comp` has never been
   set: they are cut at nominal size and print small. See [Hole compensation](hole-compensation.md).
 
@@ -58,6 +62,8 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
 
 **valid**, **overlap**, **overhang** (with **bridge**), **thin**, **holes**, **bed edge**,
 **tip-over**, **gap** and **fit** run on every part on their own; **wall** and **probe** run where the script
+
+**gap** and **fit** run on every part on their own; **wall**, **probe** and **mate** / **align** run where the script
 asks for them in `checks(d)`, which can also change or narrow the automatic ones — see the
 [Checks API](../scripts/checks-api.md). The rules behind each check, with their sources, are in
 [Design rules](../BEST_PRACTICES.md).
