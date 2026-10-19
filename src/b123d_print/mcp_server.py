@@ -597,10 +597,11 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
     """Design numbers for the design review, per printable part: size and proportions, filament
     (simple estimate, roughly +-20 %) and cost, print time (rough estimate), supports, shallow
     slopes that show layer steps, edge treatment (sharp / filleted / chamfered shares, distinct
-    radii and chamfer sizes), mirror symmetry, screw sizes, seam corners and water traps; then the
-    suggestions the part's style triggers, each citing its DS-* rule. Run it after check passes.
-    style: override the part's STYLE (functional, modern, least_cost, rugged, soft, or a style
-    file of the user's: list_parts shows them). up: the
+    radii and chamfer sizes), mirror symmetry, screw sizes, seam corners, water traps, inside
+    corners, hole edge distance and slenderness across the layers (and the thinnest walls for a
+    style that asks); then the suggestions the part's style triggers, each citing its DS-* rule.
+    Run it after check passes. style: override the part's STYLE (functional, modern, least_cost,
+    rugged, soft, structural, or a style file of the user's: list_parts shows them). up: the
     direction that points up in use for the water-trap check (+X, -Y, ...; default the script's UP,
     else +Z). as_json: the full numbers as JSON instead of the text report. Changes nothing."""
     if style:
@@ -1117,8 +1118,8 @@ Work in these steps:
    source (typed by me / read from a photo / estimate). List features you can see that have no
    dimension. Flag any conflict between a photo and a typed number (typed wins). Ask about
    anything missing or ambiguous. If I have said nothing about how it should look, ask once
-   for a style: functional (default), modern/minimal, least cost, rugged/outdoor or
-   soft/handheld (it goes in Dims as STYLE). Then STOP and wait for my confirmation. Do not
+   for a style: functional (default), modern/minimal, least cost, rugged/outdoor,
+   soft/handheld or structural/load-bearing (it goes in Dims as STYLE). Then STOP and wait for my confirmation. Do not
    model yet.
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a source comment). Mating features get CLEARANCE (0.2 mm
@@ -1221,7 +1222,7 @@ def design_review(name: str, style: str = "") -> str:
     pick = f"Use the style '{style}'." if style else (
         "Use the part's STYLE (design_metrics reports it and where it came from). If it came from the default "
         "and I never chose one, ask me once: functional (default), modern/minimal, least cost, rugged/outdoor, "
-        "soft/handheld, or one of my own styles (list_parts shows them).")
+        "soft/handheld, structural/load-bearing, or one of my own styles (list_parts shows them).")
     return f"""Review the design of the part '{name}'. {pick}
 
 1. check('{name}') first. If anything FAILs, stop and report the failures: the design review

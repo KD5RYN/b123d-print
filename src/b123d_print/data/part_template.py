@@ -24,7 +24,7 @@ class Dims:
     BED_CHAMFER: float = 0.5  # bed edges: chamfer, not fillet
     CLEARANCE: float = clearance(__file__)  # mating gap, per side
     HOLE_COMP: float = hole_comp(__file__)  # added to hole diameters when cutting (from config)
-    STYLE: str = ""  # design review: functional, modern, least_cost, rugged, soft ("" = workspace, else functional)
+    STYLE: str = ""  # design review: functional, modern, least_cost, rugged, soft, structural ("" = workspace, else functional)
 
     # --- Derived ---
     # @property

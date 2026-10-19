@@ -51,7 +51,7 @@ An unknown key is an error, so typos don't pass silently.
 | `printer` | `""` (generic) | optional [printer profile](printer-profiles.md) |
 | `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
 | `formats` | all four | what export writes: `step`, `stl`, `3mf`, `png` ([formats](formats.md)) |
-| `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft` or [your own](design-review.md#custom-styles) |
+| `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` or [your own](design-review.md#custom-styles) |
 | `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
 | `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |
 | `parts_dir` | `"parts"` | folder in the workspace that holds `<name>/<name>.py` |

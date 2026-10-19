@@ -33,7 +33,7 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    thin print of a face, slice or region of the real part, minutes instead of hours. It shows you
    the face or region in red before making it.
 6. **A design review, if you want one.** Once the checks pass, the model can review the part for
-   the style you chose (functional, modern, least cost, rugged, soft, or your own) and suggest
+   the style you chose (functional, modern, least cost, rugged, soft, structural, or your own) and suggest
    changes with rough filament and time numbers. It changes nothing without your OK. See
    [Design review](design-review.md).
 

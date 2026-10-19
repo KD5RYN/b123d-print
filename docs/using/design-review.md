@@ -17,9 +17,12 @@ The rules it applies, with their sources, are on [Design styles and review](../D
 | `least_cost` | spares, prototypes, many copies | less support, pocketed bulk, several copies when a small part is all layer time |
 | `rugged` | outdoors, in a car, dropped | ASA (or PETG in shade) instead of PLA, no water traps, rounded corners, inserts and stainless screws |
 | `soft` | held in the hand | rounded edges, grips 30-40 mm across, no gently domed tops that show layer steps |
+| `structural` | brackets, mounts, clamps, hooks, hinges, gears, tool holders | the load along the layers, filleted inside corners (r ≥ half the wall), walls ≥ 3 lines and 4-6 walls in the slicer, gussets, inserts and washers |
 
 The industrial look (chamfers and exposed standard screws) is `functional` with
-`EDGES = "chamfer"`. You can also [write your own styles](#custom-styles).
+`EDGES = "chamfer"`. `structural` is about the load path; `rugged` about sun, water and heat:
+a bracket outdoors may need both, so pick the one that matters more and ask about the other.
+You can also [write your own styles](#custom-styles).
 
 Pick one per part, in the script's `Dims`:
 
@@ -99,6 +102,10 @@ which field.
 | `outdoor_material` | true/false | suggest ASA or PETG when the material is PLA or not set (DS-R1) |
 | `max_water_cm3` | number | suggest a drain when the part holds more water than this with `UP` up (DS-R3) |
 | `curved_supports_note` | true/false | note that organic supports scar curved faces less (DS-H2) |
+| `max_sharp_inside_share` | number | suggest when more of the inside (concave) corner length than this is sharp (DS-T3) |
+| `min_inside_radius_ratio` | number | suggest when an inside fillet's radius is less than this × the thinner wall it joins (DS-T3) |
+| `min_wall_lines` | number | suggest when a wall is thinner than this many line widths (DS-T4); turns on the wall measurement |
+| `max_z_slenderness` | number | note when a run standing on a small XY section is more slender than this (DS-T1; 5.6 = a round post 5 diameters tall) |
 
 Shares are fractions (0.9 = 90 %). The built-in files are in
 [`src/b123d_print/data/styles/`](https://github.com/KD5RYN/b123d-print/tree/main/src/b123d_print/data/styles):
@@ -151,6 +158,10 @@ findings:
 | economy | parts, faces; round holes matched to likely screw sizes (a guess) |
 | seam corners | share of layers whose outline has a sharp corner where the seam can hide |
 | water traps | water left in the part with `UP` up (voxel grid, drains sideways and down) |
+| inside corners | inside (concave) edges: sharp, filleted, chamfered shares; the smallest fillet radius over the wall it joins |
+| walls | the thinnest walls in line widths, for a style with `min_wall_lines` (the ThinFeature sections; takes seconds) |
+| hole edge distance | for each screw hole, axis to the nearest edge of the material, in hole diameters (reported only) |
+| slenderness | how tall a run stands on a small XY section: the run over the square root of the section's area |
 
 Use the estimates to compare two versions of a part and to see what dominates (supports,
 infill, layer count), not as a quote: a slicer gives the real numbers.

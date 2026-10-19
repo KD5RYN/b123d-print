@@ -1,7 +1,7 @@
 """Design styles: small TOML files that say what the design review looks for.
 
-The built-in styles (functional, modern, least_cost, rugged, soft) ship as the same kind of
-file a user writes. Lookup, first found wins:
+The built-in styles (functional, modern, least_cost, rugged, soft, structural) ship as the same
+kind of file a user writes. Lookup, first found wins:
 
   1. the workspace:  <workspace>/styles/<name>.toml
   2. the user:       ~/.config/b123d-print/styles/<name>.toml
@@ -25,7 +25,10 @@ from .config import user_config_path
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 ALIASES = {"minimal": "modern", "modern/minimal": "modern", "least cost": "least_cost", "cost": "least_cost",
            "outdoor": "rugged", "rugged/outdoor": "rugged", "handheld": "soft", "soft/handheld": "soft",
-           "industrial": "functional"}  # industrial = functional with EDGES = "chamfer"
+           "industrial": "functional",  # industrial = functional with EDGES = "chamfer"
+           "strong": "structural", "load_bearing": "structural", "load-bearing": "structural",
+           "load bearing": "structural",
+           "heavy_duty": "structural", "heavy-duty": "structural", "heavy duty": "structural", "structural/load-bearing": "structural"}
 EDGE_PREFS = ("", "chamfer", "fillet")
 
 
@@ -57,6 +60,10 @@ class Style:
     outdoor_material: bool = False
     max_water_cm3: float | None = None
     curved_supports_note: bool = False
+    max_sharp_inside_share: float | None = None
+    min_inside_radius_ratio: float | None = None
+    min_wall_lines: float | None = None
+    max_z_slenderness: float | None = None
     source: str = ""  # where it was loaded from (not a file field)
 
 
@@ -79,6 +86,10 @@ THRESHOLDS = {
     "outdoor_material": ("suggest", "DS-R1", "material PLA or not set"),
     "max_water_cm3": ("suggest", "DS-R3", "water the part holds with UP up, cm3"),
     "curved_supports_note": ("note", "DS-H2", "supports on a part (curved faces scar)"),
+    "max_sharp_inside_share": ("suggest", "DS-T3", "share of inside (concave) edge length left sharp"),
+    "min_inside_radius_ratio": ("suggest", "DS-T3", "smallest inside fillet radius / the thinner wall it joins"),
+    "min_wall_lines": ("suggest", "DS-T4", "thinnest wall in line widths (knife edges apart)"),
+    "max_z_slenderness": ("note", "DS-T1", "run standing on a small XY section / sqrt(its area)"),
 }
 _TEXT = ("label", "description", "based_on", "edges", "review")
 _BOOLS = {f.name for f in fields(Style) if f.type == "bool"}

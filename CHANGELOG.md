@@ -2,6 +2,23 @@
 
 ## 0.3.3 — unreleased
 
+**A `structural` design style** for parts that carry load: brackets, mounts, clamps, hooks,
+hinges, gears, tool holders (also `strong`, `load_bearing`, `heavy_duty`). New sourced rules
+DS-T1..T11 in the [design guide](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/#34-structural-load-bearing)
+(load along the layers, walls before infill, filleted inside corners, wall thickness, ribs,
+bolted joints, hole edge distance, material and heat, annealing, snap fits, slicer settings).
+- `design_metrics` measures four more things for every part: **inside corners** (sharp,
+  filleted, chamfered shares, and the smallest fillet radius over the wall it joins), **hole
+  edge distance** (screw holes, in diameters), **slenderness across the layers** (a long run
+  standing on a small section) and, for a style that sets `min_wall_lines`, the **thinnest
+  walls** in line widths.
+- New style-file thresholds `max_sharp_inside_share`, `min_inside_radius_ratio`,
+  `min_wall_lines` and `max_z_slenderness`; `structural` uses them (0.1, 0.5, 3 lines, 5.6).
+- New example `shelf_bracket`: an L with a brace, lying on its side, filleted and clean under
+  the new style.
+- **Fixed:** the edge metric (M7) counted inside (concave) edges as sharp outside edges, so
+  `max_sharp_edge_share` and `min_treated_edge_share` (rugged, soft, modern) over-reported parts
+  with inside corners.
 - The MCP `initialize` response names the server's version (`serverInfo.version` was empty).
 - Releases publish the MCP Registry entry and open the plugin's pin bump on their own.
 

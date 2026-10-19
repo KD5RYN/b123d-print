@@ -41,7 +41,7 @@ class Settings:
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews)
-    style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft or your own
+    style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py

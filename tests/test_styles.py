@@ -23,7 +23,7 @@ def write(folder, name, text):
 
 def test_builtins_load_and_cover_every_threshold():
     names = S.available()
-    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft"} and set(names.values()) == {"built-in"}
+    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft", "structural"} and set(names.values()) == {"built-in"}
     used = set()
     for n in names:
         st = S.load_style(n)
@@ -31,6 +31,8 @@ def test_builtins_load_and_cover_every_threshold():
         used |= {k for k in S.THRESHOLDS if getattr(st, k) not in (None, False)}
     assert used == set(S.THRESHOLDS), "every threshold is used by some built-in style"
     assert S.load_style("rugged").max_sharp_edge_share == 0.0
+    st = S.load_style("structural")
+    assert st.min_inside_radius_ratio == 0.5 and st.min_wall_lines == 3 and st.max_screw_sizes is None
     assert S.load_style("").name == "functional"
 
 
@@ -103,6 +105,7 @@ def test_custom_style_drives_the_findings(dirs):
 def test_aliases():
     assert S.normalize("Modern/Minimal") == "modern" and S.normalize("industrial") == "functional"
     assert S.normalize("least cost") == "least_cost"
+    assert {S.normalize(n) for n in ("strong", "load_bearing", "Load-Bearing", "heavy_duty", "heavy duty")} == {"structural"}
     with pytest.raises(S.StyleError):
         S.normalize("../etc/passwd")
 

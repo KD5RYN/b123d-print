@@ -2,14 +2,14 @@
 
 The rules, their sources and the reasoning are in DESIGN_GUIDE
 (https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). IDs: [DS-G*] general, [DS-S*] FDM
-surfaces, [DS-C*] cost, [DS-R*] rugged, [DS-H*] handheld. Thresholds marked "proposed" are the
-project's starting values, not sourced numbers. The review never fails a part: findings are
+surfaces, [DS-C*] cost, [DS-R*] rugged, [DS-H*] handheld, [DS-T*] structural. Thresholds marked
+"proposed" are the project's starting values, not sourced numbers. The review never fails a part: findings are
 **suggest** (worth changing for this style) or **note** (information, a trade-off).
 
 ## In the part script
 
-- `STYLE` in `Dims`: `"functional"` (default), `"modern"`, `"least_cost"`, `"rugged"`, `"soft"`
-  or a style file's name. A variant can override it. Else the workspace `style` setting, else
+- `STYLE` in `Dims`: `"functional"` (default), `"modern"`, `"least_cost"`, `"rugged"`, `"soft"`,
+  `"structural"` or a style file's name. A variant can override it. Else the workspace `style` setting, else
   functional.
 - `EDGES` (optional, `Dims` or module): `"chamfer"` or `"fillet"`, the edge language the part
   should use. Functional with `EDGES = "chamfer"` and exposed standard screws is the
@@ -43,8 +43,9 @@ project's starting values, not sourced numbers. The review never fails a part: f
 Each style is a small TOML file: its thresholds produce the suggestions in `design_metrics`, and
 its `review` text (printed at the end of `design_metrics`) is the rubric to apply. Built in:
 `functional` (default: does its job, prints well, looks deliberate), `modern` (few elements, one
-radius language), `least_cost` (least filament and time), `rugged` (sun, water, drops) and
-`soft` (held in the hand). The user's own styles live in `~/.config/b123d-print/styles/` or the
+radius language), `least_cost` (least filament and time), `rugged` (sun, water, drops),
+`soft` (held in the hand) and `structural` (carries load: the load along the layers, filleted
+inside corners, walls and screws). The user's own styles live in `~/.config/b123d-print/styles/` or the
 workspace's `styles/` folder (`list_parts` lists them); `based_on` starts one from another, and a
 file with a built-in's name replaces it.
 

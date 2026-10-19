@@ -234,19 +234,24 @@ def test_build_slot_limits_across_processes(tmp_path, monkeypatch):
     """Two slots: two other processes hold them, so a third caller waits until one lets go."""
     monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
     # Order, not wall-clock: under a loaded CI runner the holders start at different times, so
-    # the test checks that our slot came only AFTER the short holder let go of its slot.
+    # the test checks that our slot came only AFTER the short holder let go of its slot. A holder
+    # lets go when its `go` file appears (never, for the long one), not after a fixed sleep: a
+    # slow-starting second holder once outlasted a 1 s sleep.
     hold = ("import sys, time; from pathlib import Path; from b123d_print import sandbox; "
             "sandbox.SLOT_DIR = Path(sys.argv[1]); s = sandbox.build_slot(2, poll=0.02); s.__enter__(); "
-            "print('held', flush=True); time.sleep(float(sys.argv[2])); "
+            "print('held', flush=True); go = Path(sys.argv[2]); t0 = time.time()\n"
+            "while not go.exists() and time.time() - t0 < 60: time.sleep(0.02)\n"
             "Path(sys.argv[3]).write_text(repr(time.time())); s.__exit__(None, None, None)")
     released = tmp_path / "released"
-    procs = [subprocess.Popen([sys.executable, "-c", hold, str(tmp_path / "slots"), t, str(released)],
+    go = tmp_path / "go"
+    procs = [subprocess.Popen([sys.executable, "-c", hold, str(tmp_path / "slots"), str(g), str(released)],
                               stdout=subprocess.PIPE, text=True)
-             for t in ("1.0", "30")]
+             for g in (go, tmp_path / "never")]
     try:
         for p in procs:
             assert p.stdout.readline().strip() == "held"
         assert not released.exists()  # both slots are taken now
+        threading.Timer(0.5, go.touch).start()  # the short holder lets go while we wait
         with sandbox.build_slot(2, poll=0.02) as slot:
             got = time.time()
         assert released.exists(), "got a slot while both were still held"

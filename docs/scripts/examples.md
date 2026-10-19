@@ -63,6 +63,19 @@ this part broke through a 0.05 mm skin there.
 *Section just past the face, where the wall check looks.*
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/plate_2gang_to_1gang/plate_2gang_to_1gang.py)
 
+## `shelf_bracket`
+
+![Shelf bracket: an L with a diagonal brace, lying on its side](../images/shelf_bracket.png)
+
+The [`structural` style](../using/design-review.md) in one part: an L bracket with a diagonal
+brace that prints lying on its side, so the shelf's load bends the arms along the layers, not
+across them. Every inside corner is filleted at half the wall or more, the outside corner is
+inside radius + wall, the arms are 6 mm (13 lines), and the screw holes are teardrops at least
+2.5 diameters from every edge. `b123d-print metrics shelf_bracket` has no findings for it;
+the same L with sharp corners, or standing up, gets them ([DS-T*](../DESIGN_GUIDE.md#34-structural-load-bearing)).
+An example with estimated sizes: not printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/shelf_bracket/shelf_bracket.py)
+
 ## `testblock`
 
 The smallest complete example: a block with a rounded notch, a few measured dimensions, one
