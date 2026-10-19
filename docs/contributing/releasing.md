@@ -41,7 +41,7 @@ and how to cut the next release.
 4. **Claude plugin pin**: after the PyPI upload the workflow opens a pull request that moves the
    plugin to the new version.
 
-Versioning: semver; bump `version` in `pyproject.toml`, `plugin/.claude-plugin/plugin.json` and `server.json` together (the plugin's pin and lock follow after the upload, in their own pull request),
+Versioning: semver; bump `version` in `pyproject.toml` and `server.json` together (the plugin's version, pin and lock follow after the upload, in their own pull request),
 tag `vX.Y.Z`, the workflow does the rest (it checks that the tag matches `pyproject.toml`).
 While 0.x, the part-script convention may still change; say so in the release notes when it does.
 
@@ -50,12 +50,13 @@ While 0.x, the part-script convention may still change; say so in the release no
 There is no separate release commit: the version bump and the dated changelog go into the last
 feature pull request of the release.
 
-1. In that pull request, bump `version` in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`
-   and `server.json` (both `version` fields; a test keeps them all equal), run `uv lock`, and
+1. In that pull request, bump `version` in `pyproject.toml` and `server.json` (both `version`
+   fields; a test keeps them equal), run `uv lock`, and
    date the version's `CHANGELOG.md` section (`## X.Y.Z — YYYY-MM-DD`). The release refuses to
    start if that section is missing or still says "unreleased"; preview the notes with
-   `python tools/release_notes.py X.Y.Z`. Leave `plugin/pyproject.toml`, `plugin/.mcp.json` and
-   `plugin/uv.lock` alone: their pin can only move once the version is on PyPI.
+   `python tools/release_notes.py X.Y.Z`. Leave everything in `plugin/` alone: its pin can only
+   move once the version is on PyPI, and the plugin's own `version` (in `plugin.json`) is the
+   server version it runs, so a release does not change the plugin the Claude directory sees.
 2. Merge it, then tag the merge commit: `git tag vX.Y.Z <merge commit> && git push origin vX.Y.Z`.
 3. `release.yml` starts and waits for approval of the `pypi` environment. Approve the deployment
    once CI on `main` is green for that commit. Then, without anything more from you:
@@ -65,10 +66,12 @@ feature pull request of the release.
       (and creates missing pages for older tags);
     - `mcp-registry` publishes `server.json` to the MCP Registry;
     - `plugin-pin` opens a pull request on `release/plugin-pin-X.Y.Z` that sets `version` and the
-      `b123d-print==X.Y.Z` pin in `plugin/pyproject.toml`, the pin in `plugin/.mcp.json`, and
+      `b123d-print==X.Y.Z` pin in `plugin/pyproject.toml`, the pin in `plugin/.mcp.json`, the
+      `version` in `plugin/.claude-plugin/plugin.json`, and
       runs `uv lock --directory plugin` (a test checks the lock matches the pin and is no newer
       than the package).
-4. Merge the plugin-pin pull request. A pull request opened by the workflow's `GITHUB_TOKEN` does
+4. Merge the plugin-pin pull request (it is the plugin's new version in the Claude directory; hold it
+   while a directory review of the previous version is still open). A pull request opened by the workflow's `GITHUB_TOKEN` does
    not start CI on its own: close and reopen it to run CI. It touches only `plugin/`, so only
    the quick job runs.
 5. Update the pinned-version examples in the docs (`b123d-print==X.Y.Z`) if they should follow.
