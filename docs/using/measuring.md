@@ -48,7 +48,8 @@ calipers for the clip that holds it.
   anything printed; give 0.05 only for the mating sizes you measured with calipers. Over 100 mm,
   0.5 mm is usually enough.
 - **Measure three times and average** anything that matters, from slightly different places
-  (CNC Kitchen does this even for calibration prints).
+  (CNC Kitchen does this even for calibration prints; NIST calls the spread of repeated
+  readings a Type A uncertainty).
   If the three readings disagree by more than your accuracy, the part isn't the shape you
   think (tapered, oval, warped): say so.
 - **Mark each value CONFIRMED or estimated.** "Confirmed" means measured, ideally twice;
@@ -63,7 +64,8 @@ A caliper has four ways to measure: the big **outside jaws**, the small **inside
 holes and slots), the **depth rod** out of the end, and the **step** (the end of the sliding jaw
 against the end of the body, for a step height).
 
-- **Zero it** with the jaws closed and clean, every time you pick it up.
+- **Zero it** with the outside jaws closed and clean, every time you pick it up (Mitutoyo
+  specifies a caliper's accuracy with the zero set on the outside faces).
 - **Measure close to the beam.** Use the part of the jaws nearest the scale, not the tips: any
   play in the slide tips the jaw, and the error grows with the distance from the beam (Abbe
   error; a micrometer avoids it, a caliper can't). Gentle, even pressure, the same every time
@@ -148,14 +150,15 @@ against the part before printing (see [Verify before the full print](#verify-bef
 - **Distances along a curve vs straight**: give the straight distance (chord) and, separately,
   the length along the surface if it matters (a trim that must cover a curved edge).
 - **Check square with diagonals**, or with 3-4-5: 300 mm along one side, 400 mm along the other,
-  500 mm between the marks (use the largest multiple that fits; keep the tape taut).
+  500 mm between the marks (scale it up for long sides: 600-800-1000; keep the tape taut).
 - **Make a cardboard template** of the outline from your numbers before printing anything (see
   below): it catches a wrong reading in minutes.
 
 ### 3D scans and photogrammetry
 
 - **Phone LiDAR / "3D scanner" apps** capture the overall shape quickly, but published tests
-  of them report errors around a centimetre, and up to ~10 cm in places. Good for a reference
+  of five iOS apps on a corridor and a street found errors of about 1 cm in some areas and
+  about 10 cm in others. Good for a reference
   shape, not for a fit.
 - **Photogrammetry** (many overlapping photos, processed into a mesh) comes out at an arbitrary
   scale: it is only as good as the reference you put in the scene. Include a ruler, or two
@@ -330,32 +333,32 @@ class Dims:
 
 ## Sources
 
-The advice above is common workshop practice; these are the sources checked for it. Many sites
-block automated access, so each is marked: **read** (fetched and read) or *search result only*
-(the claim was seen in search results; the page could not be fetched to confirm it).
+The advice above is common workshop practice; these are the sources checked for it. Each
+was fetched and read for the claim in its row, except where marked *not fetched*.
 
-| Topic | Source | |
-| --- | --- | --- |
-| Caliper handling, repeat three times, outside + inside averaged, shrinkage per material, sub-0.1 mm is precise enough | CNC Kitchen, [Calibration cubes are bad](https://www.cnckitchen.com/blog/calibration-cubes-are-bad-this-is-how-you-calibrate-your-3d-printer) | **read** |
-| Clamping pressure as the caliper's main error, tool ~10× finer than the tolerance, temperature | Xometry, [What is metrology](https://www.xometry.com/resources/blog/metrology/) | **read** |
-| Abbe error: calipers don't follow Abbe's principle, measure near the beam | Keyence, [Abbe principle](https://www.keyence.com/ss/products/measure-sys/measurement-selection/basic/abbe-principle.jsp); MMS, [Errors in hand-held measuring instruments](https://www.mmsonline.com/articles/understanding-errors-in-hand-held-measuring-instruments) | *search result only* |
-| Inside diameter: rock for the largest reading, measure in several directions | EngineerFix, [How to measure inside diameter](https://engineerfix.com/how-to-measure-inside-diameter-accurately/) | *search result only* |
-| The tape's sliding hook (its thickness, inside vs outside) | Art of Manliness, [Tape measure guide](https://www.artofmanliness.com/skills/manly-know-how/tape-measure-guide/); [US patent 4,466,194](https://patents.google.com/patent/US4466194A) | *search result only* |
-| Radius and feeler gauges | [Using a radius gauge](https://www.grant-trebbin.com/2016/07/using-radius-gauge.html); Flexco, [feeler gauges](https://services.flexco.com/?p=43639) | *search result only* |
-| Flexible curves for tracing | Lee Valley, [Flexible curves](https://www.leevalley.com/en-us/shop/tools/hand-tools/marking-and-measuring/marking-accessories/32536-flexible-curves) | *search result only* |
-| Table of offsets: stations, half-breadths from the centreline, heights from a baseline | Off Center Harbor, [Lofting handouts (PDF)](https://offcenterharbor.com/wp-content/uploads/2021/11/Master-Class_Lofting-Handouts.pdf); WoodenBoat, [Merrywing offsets](https://skills.woodenboat.com/?p=646) | *search result only* |
-| Perspective comes from distance (step back, zoom in); barrel distortion at short focal lengths | Wikipedia, [Perspective distortion](https://en.wikipedia.org/wiki/Perspective_distortion), [Distortion (optics)](https://en.wikipedia.org/wiki/Distortion_(optics)) | *search result only* |
-| ID-1 card, 85.60 × 53.98 mm | Wikipedia, [ISO/IEC 7810](https://en.wikipedia.org/wiki/ISO/IEC_7810) | *search result only* |
-| Flatbed scan into CAD at a known DPI, with a reference in the scan | [hackaday.io project 53520](https://hackaday.io/project/53520/instructions) | *search result only* |
-| Scaling a model to a measured length in the slicer | Prusa, [Measurement tool](https://help.prusa3d.com/article/measurement-tool_399451) | **read** |
-| Photogrammetry has arbitrary scale; scanner checked against a caliper-measured ball bar | CNC Kitchen, [10 tips for better 3D scans](https://www.cnckitchen.com/blog/3d-scanning-tips-creality-raptor) | **read** |
-| Phone LiDAR apps: ~1 cm typical, ~10 cm in places | ISPRS Archives, [XLVIII-2-W8-2024, p. 431](https://isprs-archives.copernicus.org/articles/XLVIII-2-W8-2024/431/2024/) | *search result only* |
-| Scale bars in photogrammetry | Agisoft, [Coded targets and scale bars (PDF)](https://www.agisoft.com/pdf/PS_1.1_Tutorial%20(IL)%20-%20Coded%20Targes%20and%20Scale%20Bars.pdf) | *search result only* |
-| Datums, measuring from them limits accumulated tolerance | Xometry, [True position tolerance](https://www.xometry.com/resources/machining/true-position-tolerance/) | **read** |
-| Chain vs baseline dimensioning, stack-up | GD&T Basics, [Tolerance stackup](https://www.gdandtbasics.com/tolerance-stackup) | *search result only* |
-| FDM accuracy: "at least 0.2 mm", fits from 0.3 mm, no universal value | Prusa, [Modeling with 3D printing in mind](https://help.prusa3d.com/article/modeling-with-3d-printing-in-mind_164135) | **read** |
-| FDM accuracy: desktop ±0.5 % (≥ ±0.5 mm), industrial ±0.25 % | Protolabs, [Desktop and industrial FDM](https://www.protolabs.com/resources/blog/a-brief-look-at-desktop-and-industrial-fdm-3d-printing/) | **read** |
-| 3-4-5 and equal diagonals for square | EngineerFix, [Squaring with 3-4-5](https://engineerfix.com/how-to-square-a-fence-using-the-3-4-5-method/) | *search result only* |
-
-Mitutoyo, Starrett, NIST and the Bambu Lab wiki were not reachable for this page; the
-*search result only* rows are worth re-checking from an open network.
+| Topic | Source |
+| --- | --- |
+| Caliper handling (parallel jaws, steady pressure, thumb wheel), repeat three times, outside + inside averaged cancels extrusion error, shrinkage per material | CNC Kitchen, [Calibration cubes are bad](https://www.cnckitchen.com/blog/calibration-cubes-are-bad-this-is-how-you-calibrate-your-3d-printer) |
+| Zero set on the outside faces; accuracy checked from near the beam to the jaw tips | Mitutoyo, [Accuracy and calibration of calipers (PDF)](https://www.mitutoyo.com/webfoo/wp-content/uploads/15003A.pdf) |
+| Clamping pressure as the caliper's main scatter; temperature; a tool ~10× finer than the tolerance | Xometry, [What is metrology](https://www.xometry.com/resources/blog/metrology/) |
+| Abbe's principle: micrometers follow it, calipers don't | Keyence, [Abbe's principle](https://www.keyence.com/ss/products/measure-sys/measurement-selection/basic/abbe-principle.jsp) |
+| Caliper scale out of line with the jaws: measure as close to the rail as possible | MMS, [Errors in hand-held measuring instruments](https://www.mmsonline.com/articles/understanding-errors-in-hand-held-measuring-instruments) |
+| Inside diameter: rock the jaws for the largest reading | EngineerFix, [How to measure inside diameter](https://engineerfix.com/how-to-measure-inside-diameter-accurately/) |
+| Repeated readings as a (Type A) uncertainty | NIST, [Technical Note 1297, section 2](https://www.nist.gov/pml/nist-technical-note-1297/nist-tn-1297-2-classification-components-uncertainty) |
+| The tape's hook slides by its thickness (true zero inside and out); burning an inch | Art of Manliness, [Tape measure guide](https://www.artofmanliness.com/skills/manly-know-how/tape-measure-guide/); Stanley, [US patent 4,466,194](https://patents.google.com/patent/US4466194A) |
+| Radius gauge: hold it to the light, look for gaps | Grant Trebbin, [Using a radius gauge](https://www.grant-trebbin.com/2016/07/using-radius-gauge.html) |
+| Feeler gauge: the blade that slides with a slight drag | AIMS Industrial, [Feeler gauge guide](https://aimsindustrial.com.au/collections/feeler-gauge-guide) |
+| Flexible curves for tracing | Lee Valley, [Flexible curves](https://www.leevalley.com/en-us/shop/tools/hand-tools/marking-and-measuring/marking-accessories/32536-flexible-curves) (*not fetched*: HTTP 429) |
+| Table of offsets: stations at equal spacing, heights above a baseline, half-breadths from the centreline | Off Center Harbor, [Lofting handouts (PDF)](https://offcenterharbor.com/wp-content/uploads/2021/11/Master-Class_Lofting-Handouts.pdf); WoodenBoat, [Laying down](https://skills.woodenboat.com/?p=646) |
+| Perspective comes from distance, not the lens; barrel distortion worst at wide angle | Wikipedia, [Perspective distortion](https://en.wikipedia.org/wiki/Perspective_distortion), [Distortion (optics)](https://en.wikipedia.org/wiki/Distortion_%28optics%29) |
+| ID-1 card, 85.60 × 53.98 mm | Wikipedia, [ISO/IEC 7810](https://en.wikipedia.org/wiki/ISO/IEC_7810) |
+| Flatbed scan at a known DPI, scaled to true size in CAD | [hackaday.io project 53520](https://hackaday.io/project/53520/instructions) |
+| Scaling a model to a measured length in the slicer | Prusa, [Measurement tool](https://help.prusa3d.com/article/measurement-tool_399451) |
+| Photogrammetry has arbitrary scale; a scanner checked against a caliper-measured ball bar | CNC Kitchen, [10 tips for better 3D scans](https://www.cnckitchen.com/blog/3d-scanning-tips-creality-raptor) |
+| Phone LiDAR apps: ~1 cm in some areas, ~10 cm in others | Treccani et al., [ISPRS Archives XLVIII-2-W8-2024, p. 431](https://isprs-archives.copernicus.org/articles/XLVIII-2-W8-2024/431/2024/) |
+| Scale bars between markers at a known distance | Agisoft, [Coded targets and scale bars (PDF)](https://www.agisoft.com/pdf/PS_1.1_Tutorial%20%28IL%29%20-%20Coded%20Targes%20and%20Scale%20Bars.pdf) |
+| Datums set the origin; positions from datums limit accumulated tolerance | Xometry, [True position tolerance](https://www.xometry.com/resources/machining/true-position-tolerance/) |
+| Chain dimensioning sums the tolerances; baseline doesn't | GD&T Basics, [Tolerance stackup](https://www.gdandtbasics.com/tolerance-stackup) |
+| FDM accuracy "at least 0.2 mm"; fits from 0.3 mm; no universal value | Prusa, [Modeling with 3D printing in mind](https://help.prusa3d.com/article/modeling-with-3d-printing-in-mind_164135) |
+| FDM accuracy: desktop ±0.5 % (no better than ±0.5 mm), industrial ±0.25 % | Protolabs, [Desktop and industrial FDM](https://www.protolabs.com/resources/blog/a-brief-look-at-desktop-and-industrial-fdm-3d-printing/) |
+| 3-4-5 (scaled up for long sides) and equal diagonals | EngineerFix, [Squaring with 3-4-5](https://engineerfix.com/how-to-square-a-fence-using-the-3-4-5-method/) |
