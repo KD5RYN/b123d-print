@@ -32,6 +32,12 @@ from pathlib import Path
 WINDOWS = sys.platform == "win32"
 _LIVE: set[subprocess.Popen] = set()  # running workers, so a server shutdown can stop them
 _LIVE_LOCK = threading.Lock()
+_EPOCH = 0  # bumped by kill_all(): a build claimed before a cancel must not start after it
+
+
+def current_epoch() -> int:
+    with _LIVE_LOCK:
+        return _EPOCH
 
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "b123d-print"
 # builds at once across every server process of this user (each SSH session runs its own server);
@@ -159,7 +165,7 @@ def soft_margin(timeout: float) -> float:
     return min(30.0, max(3.0, 0.1 * timeout))
 
 
-def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -> dict:
+def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0, epoch: int | None = None) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     mpl = CACHE / "matplotlib"
@@ -211,7 +217,11 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
             except Exception:
                 pass
 
+        if epoch is not None and current_epoch() != epoch:  # cancelled before it got this far
+            return {"ok": False, "error": "cancelled before it started (server shutting down)"}
         with build_slot():  # shared with every other server process of this user
+            if epoch is not None and current_epoch() != epoch:  # cancelled while it waited
+                return {"ok": False, "error": "cancelled before it started (server shutting down)"}
             if WINDOWS:
                 proc = _popen_windows(cmd, env, tmp, timeout)
             else:
@@ -219,6 +229,9 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = 120.0) -
                                         start_new_session=True, preexec_fn=limits)
             with _LIVE_LOCK:
                 _LIVE.add(proc)
+                cancelled = epoch is not None and _EPOCH != epoch  # kill_all ran while it started
+            if cancelled:
+                _killpg(proc)
             try:
                 stdout, stderr = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -384,8 +397,11 @@ def _close_job(proc: subprocess.Popen) -> None:
 
 
 def kill_all() -> int:
-    """Stop every running worker (server shutdown). Returns how many were running."""
+    """Stop every running worker (server shutdown). Returns how many were running. Builds that
+    were claimed but had not started their process yet see the new epoch and do not start."""
+    global _EPOCH
     with _LIVE_LOCK:
+        _EPOCH += 1
         procs = list(_LIVE)
     for p in procs:
         _killpg(p)
