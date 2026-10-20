@@ -74,8 +74,13 @@ def _notes(mod, d) -> list[str]:
     return [str(v)] if isinstance(v, str) else [str(x) for x in v]
 
 
-def sheet(mod, d, parts: dict, settings, title: str) -> str:
+def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, variant: str = "",
+          hardware_resolved: bool = False) -> str:
     """The Markdown text of the print sheet for the built pieces `parts` ({name: Part})."""
+    from . import hardware
+
+    if not hardware_resolved:
+        hardware_items = hardware.declared(mod, d)
     p = mt.Params.from_settings(settings)
     style, _ = mt.resolve_style(mod, d, settings)
     named = {(k or "part"): v for k, v in parts.items()}
@@ -163,6 +168,7 @@ def sheet(mod, d, parts: dict, settings, title: str) -> str:
     L.append(f"- **Fits:** clearance {settings.clearance:g} mm per side (sliding), press fit {settings.press_fit:g}, "
              f"free fit {settings.free_fit:g}, print-in-place {settings.pip_clearance:g}. They assume the "
              "slicer's flow and elephant's-foot compensation are tuned; the CAD is at nominal size.")
+    L += hardware.markdown(hardware_items, variant)
     notes = _notes(mod, d)
     if many or notes or hasattr(mod, "assembly"):
         L += ["", "## Assembly and notes", ""]

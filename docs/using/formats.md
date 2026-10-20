@@ -9,6 +9,7 @@
 | `.png` | 6-view preview, assembly render, section views |
 | `.glb` | binary glTF: web pages, three.js, Blender, Windows 3D Viewer, AR; one named, colored node per piece, in meters (glTF's unit) and Y-up (glTF's axes); a tessellated mesh, not an exact solid. Not in the default set: ask for it with `formats="glb"` or `all` |
 | `_print.md` | the [print sheet](slicing.md#the-print-sheet): size, filament and time estimates, supports, tip-over, walls and infill, fits and hole compensation, assembly notes, for the slicer. Not in the default set: `formats="print"` or `all` |
+| `_hardware.json` | the declared whole-assembly [hardware BOM](../scripts/convention.md#declared-hardware): versioned JSON metadata, with variant and confirmation status; opt in with `formats="hardware"` or `all` |
 | `_view.glb`, `_view.html` | the [3D view](#3d-view-in-the-browser): `export` writes one per variant (`view=`) |
 
 !!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
@@ -19,7 +20,7 @@
 
 Pick them in your config (`formats = ["3mf", "png"]`, see [Settings](settings.md)), per run
 (`b123d-print build --formats step,3mf`), or with `formats=` on the MCP `export` tool. `all`
-means all six (`step`, `stl`, `3mf`, `png`, `glb`, `print`). Default: `step`, `stl`, `3mf` and `png`.
+means all seven (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`). Default: `step`, `stl`, `3mf` and `png`.
 What to do with the files in the slicer: [From part to print](slicing.md).
 
 Files go to `parts/<name>/out/`. A variant's files carry its key as a suffix, and section

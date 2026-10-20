@@ -19,6 +19,7 @@ and optionally:
     def original(d) -> Part                         # remixes: the original as placed in the remix
                                                     # (default: what build() loaded with import_model)
     def templates(d) -> list[Template]              # fit-test templates exported with every variant
+    def hardware(d) -> list[Hardware]              # declared bought parts for the whole assembly
 
     if __name__ == "__main__":
         from b123d_print import run
@@ -351,7 +352,16 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                 d = dims(mod, key)
                 pc = make_pieces(mod, key, d, settings, cache)
                 parts, orig, imports = built(mod, d, pc)
+                imported_before_assembly = len(pc.imports)
                 asm = pc.assembly()
+                # Assembly-only imports (e.g. bought hardware) need their conversion warnings,
+                # but are never the remix original. Do not repeat a build's identical import.
+                seen_imports = {(i.file, i.units, i.scale, i.faces_after) for i in imports}
+                for _, info in pc.imports[imported_before_assembly:]:
+                    identity = (info.file, info.units, info.scale, info.faces_after)
+                    if identity not in seen_imports:
+                        imports.append(info)
+                        seen_imports.add(identity)
             except CheckTimeout:
                 raise
             except Exception as e:
@@ -1421,7 +1431,8 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
                    only=None, cache: CacheConfig | None = None) -> dict:
     """Export every printable part in `formats` (default: the `formats` setting), plus the
     assembly render and section views when png is among them, and the print sheet
-    (<name>[_<variant>]_print.md, printsheet.py) when print is. Returns a summary, with the timing
+    (<name>[_<variant>]_print.md, printsheet.py) when print is, and whole-assembly BOM JSON
+    (<name>[_<variant>]_hardware.json) when hardware is. Returns a summary, with the timing
     report (Pieces.timing) under "timing".
     only: just these pieces (comma-separated or a list): no assembly render, and only the views
     and templates of those pieces. cache: build through the build cache (the worker)."""
@@ -1432,6 +1443,9 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     d = dims(mod, key)
     pc = make_pieces(mod, key, d, settings, cache)
     outputs = Outputs(pc.cache) if pc.cache is not None else None
+    from . import hardware
+
+    hardware_items = hardware.declared(mod, d) if {"print", "hardware"}.intersection(formats) else None
     parts, orig, _ = built(mod, d, pc, only)
     names = {n or "part" for n in parts}
     asm = None if only or "png" not in formats else pc.assembly()  # only the renders use it
@@ -1452,7 +1466,13 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         from . import printsheet
 
         title = out_name(script.stem, key, "")
-        f = printsheet.write(mod, d, parts, settings, out, out_name(script.stem, key, "print"), title)
+        text = printsheet.sheet(mod, d, parts, settings, title, hardware_items=hardware_items,
+                                variant=key, hardware_resolved=True)
+        f = _export_text(out / f"{out_name(script.stem, key, 'print')}.md", text, outputs)
+        summary["files"].append(str(f))
+    if "hardware" in formats:
+        text = hardware.json_text(hardware_items, key)
+        f = _export_text(out / f"{out_name(script.stem, key, 'hardware')}.json", text, outputs)
         summary["files"].append(str(f))
     summary["timing"] = pc.timing()
     if "png" not in formats:
@@ -1483,6 +1503,15 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         f = outputs.write(f, outputs.key("section", v.plane, v.at, caption, sel), draw) if outputs is not None else draw()
         summary["files"].append(str(f))
     return summary
+
+
+def _export_text(path: Path, text: str, outputs: Outputs | None) -> Path:
+    """Cache by final text: declaration, dimensions, notes and settings cannot leave stale BOMs."""
+    def write():
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    return outputs.write(path, outputs.key("text", text), write) if outputs is not None else write()
 
 
 def write_template(script: Path, key: str, parts: dict, spec, out: Path, formats, settings=None,
@@ -1565,7 +1594,7 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=f"Build {script.stem}")
     ap.add_argument("--variant", choices=[v or "standard" for v in variants(mod)], help="default: all")
     ap.add_argument("--no-check", action="store_true")
-    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png,glb,print or all (default: the formats setting)")
+    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png,glb,print,hardware or all (default: the formats setting)")
     ap.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
                                                       "those (lazy pieces: the others are never built)")
     args = ap.parse_args(argv)

@@ -105,3 +105,15 @@ It lists, from the part as built:
 It uses the cheap estimates from [`design_metrics`](design-review.md) and the tip-over check,
 not the full check run: run `check` for the verdict. The numbers are the same rough estimates;
 the slicer's are the real ones.
+
+If the script defines `hardware(d)`, the sheet includes a **Declared hardware** table: exact
+specifications and quantities supplied by the author for the **whole selected variant assembly**,
+even when `parts=` / `--only` exports one piece. Hole-based screw classes remain inferred advice,
+not a shopping list. An empty specification says **Needs confirmation**; never guess a screw
+length, thread, head or insert model from a hole or imported mesh.
+
+Add `hardware` to the formats (`formats="3mf,print,hardware"`) for the matching
+`<name>[_<variant>]_hardware.json`. Both artifacts go home through the existing export links,
+`download_part` and SSH `pull` (include both `print,hardware` when filtering formats).
+See [declared hardware](../scripts/convention.md#declared-hardware) for the hook, custom imported
+stand-ins and JSON format. A script with no hook keeps its existing print sheet.

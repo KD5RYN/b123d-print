@@ -101,6 +101,17 @@ def test_pull_tree_serves_the_whole_part(ws):
         assert code == 1 and out == b"" and "refused" in err, bad
 
 
+def test_hardware_format_handoff(ws):
+    out = ws / "parts/box/out"
+    (out / "box_print.md").write_bytes(b"declared hardware table")
+    (out / "box_hardware.json").write_bytes(b'{"schema_version": 1}')
+    for request, expected in (("pull box --formats hardware", {"box_hardware.json"}),
+                              ("pull box --tree --formats print,hardware",
+                               {"box.py", "out/box_print.md", "out/box_hardware.json"})):
+        code, data, err = run_serve(ws, request)
+        assert code == 0 and set(untar(data)) == expected, err
+
+
 def test_workspace_is_pinned_by_the_key(ws, tmp_path):
     """The client's command can never pick another workspace: only the key line's --workspace counts."""
     other = tmp_path / "other"
