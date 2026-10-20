@@ -280,24 +280,22 @@ jobs:
           # diagnostic: can bubblewrap set up a namespace inside the worker container? a fresh /proc
           # is refused when the container masks parts of /proc, so the worker falls back to an empty
           # /proc; show both so the log says which path is in use (prints the exit code either way)
-          # non-fatal (the step runs under `bash -e`; a fresh /proc is expected to fail here)
+          # the worker runs each job in its own bubblewrap namespace; a fresh /proc is refused where
+          # the container masks /proc, so it falls back to an empty /proc (non-fatal probes, the
+          # step runs under `bash -e`)
           echo "bwrap probe (fresh /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --proc /proc \
             --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --proc exit: 0" || echo "bwrap --proc exit: $?"
           echo "bwrap probe (empty /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --tmpfs /proc \
             --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
-          echo "worker python resolves to:"
-          docker compose exec -T worker sh -lc 'readlink -f "$(command -v python)"; python -c "import sys; print(sys.executable)"' || true
-          # decisive diagnostic: build the exact bwrap argv the worker uses for a job and exec the
-          # interpreter through it, so the log shows which bind fails or whether /opt is shadowed
-          docker compose exec -T worker python -c 'import os,sys,subprocess; from b123d_print import sandbox; exe=sys.executable; mini=["bwrap","--unshare-user","--ro-bind","/","/","--dev","/dev","--tmpfs","/proc","--unshare-net","--unshare-pid","--die-with-parent"]; full=sandbox.linux_bwrap([os.environ.get("TMPDIR","/tmp")], sandbox._python_roots()+["/work"], proc=False); print("exe:",exe,"isfile:",os.path.isfile(exe)); rm=subprocess.run(mini+[exe,"-c","print(1)"],capture_output=True,text=True); print("minimal rc:",rm.returncode,"err:",rm.stderr.strip()[-400:]); print("full argv:"," ".join(full)); rf=subprocess.run(full+[exe,"-c","print(1)"],capture_output=True,text=True); print("full rc:",rf.returncode,"err:",rf.stderr.strip()[-700:])' || true
-          # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
-          # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
-          # makes the smoke assert the worker really is sandboxed and not silently falling back
+          # the worker must actually be running in bubblewrap (not silently falling back to the hook
+          # only). list_parts reports the FRONT's sandbox (which is none, as it runs no scripts), so
+          # assert the worker's own startup line instead.
+          (cd deploy && docker compose logs worker | grep -q "sandbox: Linux bubblewrap") \
+            || { echo "worker is not using bubblewrap"; (cd deploy && docker compose logs worker | tail -40); exit 1; }
           cd .. && B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" \
             B123D_PRINT_SMOKE_WORKSPACE_DIR="$B123D_PRINT_PARTS" B123D_PRINT_TOKENS_FILE="$B123D_PRINT_CONFIG/tokens.toml" \
-            B123D_PRINT_EXPECT_SANDBOX=bubblewrap \
             B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py \
             || { (cd deploy && docker compose logs worker | tail -120; echo "--- front ---"; docker compose logs b123d-print | tail -40); exit 1; }
           (cd deploy && docker compose logs b123d-print | grep -q " ci POST /mcp ") || { echo "token name not in the log"; exit 1; }
