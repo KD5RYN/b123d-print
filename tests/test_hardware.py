@@ -1,6 +1,7 @@
 """Declared assembly hardware, optional JSON export, and explicit nonprintable stand-ins."""
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -247,7 +248,7 @@ def hardware(d):
     result = sandbox.run_job({"op": "export", "script": str(script), "formats": "print,hardware"},
                              tmp_path, script.parent / "out", timeout=120)
     assert result["ok"], result
-    assert {p.rsplit("/", 1)[-1] for p in result["variants"][0]["files"]} == {"plate_print.md", "plate_hardware.json"}
+    assert {Path(p).name for p in result["variants"][0]["files"]} == {"plate_print.md", "plate_hardware.json"}
     assert json.loads((script.parent / "out/plate_hardware.json").read_text())["items"][0]["needs_confirmation"] is True
 
 
