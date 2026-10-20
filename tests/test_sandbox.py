@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+from pathlib import Path
 
 from b123d_print import sandbox
 
@@ -50,6 +51,17 @@ def test_bwrap_binds_the_folders_a_job_needs():
         assert ("--bind", w) in pairs, (w, cmd)
     for r in ("/ws", "/py"):
         assert ("--ro-bind-try", r) in pairs, (r, cmd)
+
+
+def test_bwrap_never_tmpfs_over_root(monkeypatch):
+    # a container running as a uid with no passwd entry gets HOME=/; a tmpfs over / would wipe the
+    # dynamic loader and the interpreter could not start. The home-hide must be skipped then.
+    monkeypatch.setattr(sandbox, "_real", lambda p: "/" if str(p) in ("/", str(Path.home())) else os.path.realpath(str(p)))
+    monkeypatch.setattr(sandbox.Path, "home", classmethod(lambda cls: Path("/")))
+    cmd = sandbox.linux_bwrap(["/ws/out"], ["/ws", "/usr/local"], proc=False)
+    pairs = list(zip(cmd, cmd[1:]))
+    assert ("--tmpfs", "/") not in pairs, cmd
+    assert ("--ro-bind", "/") in pairs  # the root is still bound read-only
 
 
 def test_bwrap_command_proc_variants():
