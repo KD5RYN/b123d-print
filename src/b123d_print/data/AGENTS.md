@@ -283,12 +283,21 @@ Locally (stdio) everything is already in the project folder:
 Over **HTTP or SSH** that same layout lives on the server, and the server is a workbench, not
 storage: its copy is a **temporary working copy, deleted after some days unused** (the results
 say how many). Use **only the MCP tools and the links they return**: the server gives **no
-shell, ssh or scp access**, so never try them. Before reporting, always:
+shell, ssh or scp access**, so never try them.
+
+**A part is not done until its files are on the user's machine: after export, call
+download_part (embed=True if your shell has no network) and unzip into the project folder,
+unless the user says to leave them on the server.** A remote `export` or `make_template` result
+ends with this as its **NEXT STEP**. Before reporting, always:
 
 1. `download_part("<name>")`. Over HTTP it returns one link (no token, it expires): run
    `curl -fLo <name>.zip '<link>'` and unzip it **in the project folder** (`unzip -o <name>.zip`;
    Windows: `tar -xf <name>.zip`); it creates `parts/<name>/...` as above. Over SSH it returns
    the `b123d-print pull <name> --from ...` command: run it in the project folder.
+   **If your shell has no network or is sandboxed** (Antigravity/agy, web and mobile clients),
+   call `download_part("<name>", embed=True)`: the zip (up to 8 MB) comes inside the result, and
+   your client saves it to a file; run `unzip -o <saved zip> -d <project folder>` (one command,
+   no `&&` or `|`).
 2. Check the files exist on the user's machine (e.g. list `parts/<name>/out/`).
 3. Then report, saying where the files are.
 
@@ -298,7 +307,9 @@ not on their machine yet. `variant=` and `formats=` narrow the `out/` files; per
 
 ## Printer profile (optional)
 
-By default b123d-print is in generic mode. If the user has set a printer (`list_parts` shows it, or
+By default b123d-print is in generic mode. When `list_parts` shows no printer (generic mode), offer
+the first-run setup once before the first part (the `setup_workspace` prompt; CLI `b123d-print
+setup`): printer, material, formats, style, then the calibration coupons. If the user has set a printer (`list_parts` shows it, or
 `b123d-print printer show`), use it: keep the part inside the build volume in print orientation
 (the `fit` check fails otherwise — split the part or turn it), make walls whole multiples of the
 line width, and read the material notes (e.g. PLA is not for outdoor or hot places). Change the

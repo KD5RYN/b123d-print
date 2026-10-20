@@ -214,8 +214,15 @@ unzip -o bracket.zip          # in the project folder; on Windows: tar -xf brack
 the zip is made when the link is fetched, so it holds the files as they are then. Like the other
 links it needs no token, opens only that part (with that filter) in that workspace, and expires.
 The server's instructions, `AGENTS.md` and the prompts make this the required last step of
-remote work: `download_part`, unzip, check the files are there, then report. Results show
-workspace-relative paths (`parts/bracket/out/bracket.3mf`), never the server's own folders.
+remote work: `download_part`, unzip, check the files are there, then report. The results of
+`export` and `make_template` end with a **NEXT STEP** that says so, with the exact call. Results
+show workspace-relative paths (`parts/bracket/out/bracket.3mf`), never the server's own folders.
+
+**No network in the agent's shell?** Some clients run shell commands in a sandbox without
+network ([Antigravity's `agy`](mcp-clients.md#antigravity-agy-cli-and-ide), for one), so `curl`
+fails. `download_part("bracket", embed=True)` puts the zip itself (up to 8 MB; narrow it with
+`formats=` if it is bigger) into the MCP result; the client saves it to a file, and
+`unzip -o <saved zip> -d <project folder>` writes the same layout offline.
 
 Single files, too:
 
@@ -329,7 +336,7 @@ names vary, check your client's docs):
 }
 ```
 
-Per-client snippets (Zed, Windsurf, LM Studio, Grok, claude.ai, ChatGPT) are in
+Per-client snippets (Antigravity, Gemini CLI, Zed, Windsurf, LM Studio, Grok, claude.ai, ChatGPT) are in
 [Connect your MCP client](mcp-clients.md#which-clients).
 
 ### Clients that can't send a header

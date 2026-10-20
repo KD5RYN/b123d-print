@@ -44,6 +44,9 @@ validation:
 
 nav:
   - Home: index.md
+  - Start here:
+      - "Tutorial: your first part": tutorials/first-bracket.md
+      - "Tutorial: remix a downloaded STL": tutorials/remix-stl.md
   - Getting started:
       - Quick start: getting-started/quick-start.md
       - Connect your MCP client: getting-started/mcp-clients.md

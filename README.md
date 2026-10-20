@@ -114,11 +114,18 @@ It will probably ask to run a few commands (to install uv and add the server): t
    Cursor, VS Code, Gemini CLI, Codex and others: [Connect your MCP client](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/).
 3. Restart the assistant.
 
+**Tell it your printer:** ask *"Set up b123d-print for my printer"* (the `setup_workspace`
+prompt; `b123d-print setup` in a terminal): printer, material, export formats, style, then the
+calibration coupons.
+
 **Then ask:** *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."* The files land in
 your parts folder under `parts/<name>/out/`, ready for your slicer. The first start downloads a
 few hundred MB and can take a few minutes ([Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/)).
 The assistant checks its work by looking at its renders, so use a client that passes tool
 images to the model (Claude Desktop and Claude Code do).
+
+**Follow a whole session:** [your first part, a shelf bracket](https://kd5ryn.github.io/b123d-print/tutorials/first-bracket/)
+from install to print, and [remix a downloaded STL](https://kd5ryn.github.io/b123d-print/tutorials/remix-stl/).
 
 **Scope: parts for FDM 3D printing, nothing else.** Everything is built around a printed part:
 print orientation with the bed at Z=0, hole compensation, mating clearance, calibration coupons,
@@ -169,7 +176,8 @@ Not needed for most people. To keep the parts on a home server and design from a
 
 | | |
 | --- | --- |
-| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, claude.ai, ChatGPT, Gemini CLI, Cursor, VS Code, Codex, Grok, Windsurf, Zed, LM Studio) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
+| **Start here** | [Tutorial: your first part](https://kd5ryn.github.io/b123d-print/tutorials/first-bracket/) · [Tutorial: remix a downloaded STL](https://kd5ryn.github.io/b123d-print/tutorials/remix-stl/) |
+| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, claude.ai, ChatGPT, Gemini CLI, Antigravity, Cursor, VS Code, Codex, Grok, Windsurf, Zed, LM Studio) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Advanced** | [Which mode?](https://kd5ryn.github.io/b123d-print/advanced/) · [Remote over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) |
 | **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [Measuring for the AI](https://kd5ryn.github.io/b123d-print/using/measuring/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [From part to print](https://kd5ryn.github.io/b123d-print/using/slicing/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) · [Fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/) |
 | **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |

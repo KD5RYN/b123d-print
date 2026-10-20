@@ -31,7 +31,7 @@ jobs:
     outputs:
       full: ${{ steps.scope.outputs.full }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2  # a PR checks out its merge commit: parent 1 is the base, so HEAD^1..HEAD is the PR
       - id: scope
@@ -42,6 +42,15 @@ jobs:
             echo "full=true" >> "$GITHUB_OUTPUT"
           fi
           cat "$GITHUB_OUTPUT"
+      - name: Actions and base images are pinned (commit SHA, image digest)
+        # every `uses:` is owner/repo@<40-hex sha> (local ./ actions excepted) and every image in
+        # the Dockerfile has @sha256:; see docs/contributing/releasing.md#pinned-actions-and-images
+        run: |
+          bad=$(grep -nE '^[[:space:]-]*uses:' .github/workflows/*.yml | grep -vE 'uses:[[:space:]]*\./' |
+                grep -vE 'uses:[[:space:]]*[^[:space:]@]+@[0-9a-f]{40}([[:space:]]|$)' || true)
+          bad="$bad$(grep -nE '^(FROM|COPY --from=)' Dockerfile | grep -vE '@sha256:[0-9a-f]{64}' || true)"
+          [ -z "$bad" ] || { printf 'Not pinned by commit SHA or digest:\n%s\n' "$bad"; exit 1; }
+          echo "all actions and base images pinned"
 
   quick:
     # docs-only changes: the docs and config/plugin drift tests and the strict docs build
@@ -53,9 +62,9 @@ jobs:
     steps:
       - if: env.FULL == 'true'
         run: echo 'Code changed, so the full set runs instead of this job'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL != 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL != 'true'
         with:
           enable-cache: true
@@ -80,9 +89,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true
@@ -123,9 +132,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true
@@ -151,9 +160,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true
@@ -178,9 +187,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true
@@ -202,9 +211,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true
@@ -227,9 +236,9 @@ jobs:
     steps:
       - if: env.FULL != 'true'
         run: echo 'Docs-only change, steps skipped (the quick job runs its tests)'
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.FULL == 'true'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         if: env.FULL == 'true'
         with:
           enable-cache: true

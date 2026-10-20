@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, new, build, check, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
+"""`b123d-print` command line: init, setup, new, build, check, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
 and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -679,6 +679,91 @@ def cmd_printer(args) -> int:
     return 1
 
 
+def _ask(question: str, default: str = "") -> str:
+    try:
+        a = input(f"{question}{f' [{default}]' if default else ''}: ").strip()
+    except EOFError:
+        a = ""
+    return a or default
+
+
+def _pick_printer(words: str) -> str:
+    """A printer name from search words: the exact name, the only match, or one picked from a list."""
+    from . import profiles as pf
+
+    if words in pf.available("printers"):
+        return words
+    hits = pf.search("printers", words)
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        print(f"  no printer matches {words!r}")
+        return _pick_printer(_ask("Printer (words to search, blank for generic)")) if sys.stdin.isatty() else ""
+    for i, h in enumerate(hits[:20], 1):
+        print(f"  {i:2}. {h}")
+    if len(hits) > 20:
+        print(f"  ... {len(hits) - 20} more; add words to narrow it")
+    a = _ask("Number or more words (blank for generic)")
+    if a.isdigit() and 1 <= int(a) <= min(20, len(hits)):
+        return hits[int(a) - 1]
+    return _pick_printer(f"{words} {a}") if a else ""
+
+
+def cmd_setup(args) -> int:
+    from . import setup as st
+
+    root, _ = workspace(args.root)
+    if args.workspace:
+        init_workspace(root)
+        path = root / WORKSPACE_FILE
+    else:
+        path = user_config_path()
+    s = load_settings(root)
+    given = {"printer": args.printer, "material": args.material, "formats": args.formats, "style": args.style,
+             "hole_comp": args.hole_comp, "hole_comp_h": args.hole_comp_h}
+    ask = not args.no_input and sys.stdin.isatty()
+    if ask:
+        print(f"b123d-print setup: answers go to {path}. Press Enter to keep the value in brackets.")
+        if args.printer is None:
+            words = _ask("Printer (words to search, e.g. 'bambu a1'; blank for generic)", s.printer)
+            given["printer"] = _pick_printer(words) if words else ""
+        elif args.printer:
+            given["printer"] = _pick_printer(args.printer)
+        if args.material is None:
+            given["material"] = _ask("Material (pla, petg, asa, abs, tpu or your own)", s.material or "pla")
+        if args.formats is None:
+            given["formats"] = _ask("Export formats (3mf for Bambu/Orca/Prusa, step to edit in other CAD, png, stl, glb, print)",
+                                    ",".join(s.formats))
+        if args.style is None:
+            given["style"] = _ask("Default style (functional, modern, least_cost, rugged, soft, structural)", s.style or "functional")
+        if args.hole_comp is None:
+            given["hole_comp"] = _ask("Measured hole compensation in mm (blank if not measured yet)")
+    elif args.printer and args.printer not in ("generic", "none"):
+        from .profiles import available, search
+
+        hits = search("printers", args.printer)
+        if args.printer not in available("printers") and len(hits) == 1:  # search words with one match
+            given["printer"] = hits[0]
+    try:
+        changes = st.plan(given, path, args.overwrite)
+    except (KeyError, ValueError) as e:
+        sys.exit(f"setup: {str(e).strip(chr(34))}")
+    conflicts = [c for c in changes if c.conflict]
+    overwrite = args.overwrite
+    if conflicts and not overwrite and ask:
+        for c in conflicts:
+            print(f"  {c.key} is {c.old} in {c.where}; the new answer is {c.new}")
+        overwrite = _ask("Replace these? (y/N)", "n").lower().startswith("y")
+        if overwrite:
+            changes = st.plan(given, path, True)
+    written = st.apply(changes, overwrite)
+    print(st.report(changes, written) or "  nothing to write")
+    if any(c.conflict for c in changes) and not overwrite:
+        print("Existing values were kept; run again with --overwrite to replace them.")
+    print(st.next_steps(load_settings(root).hole_comp != 0))
+    return 0
+
+
 def cmd_compare(args) -> int:
     from .compare import Criteria, compare, render_comparison
 
@@ -910,6 +995,17 @@ def build_parser() -> argparse.ArgumentParser:
     q = psub.add_parser("calibrate", help="store a value measured with a calibration coupon for the active printer + material")
     q.add_argument("key", choices=CALIBRATED)
     q.add_argument("value", type=float)
+    p = sub.add_parser("setup", help="first-run setup: printer, material, export formats, default style, hole compensation "
+                                     "(asks, or takes flags); never replaces a value without --overwrite or a yes")
+    p.add_argument("--printer", help="a printer profile name or search words ('generic' for none)")
+    p.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
+    p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all")
+    p.add_argument("--style", help="functional, modern, least_cost, rugged, soft, structural or your own")
+    p.add_argument("--hole-comp", help="measured hole compensation, mm (with a printer: stored for it and the material)")
+    p.add_argument("--hole-comp-h", help="the same for horizontal holes")
+    p.add_argument("--workspace", action="store_true", help="write to this workspace's b123d-print.toml (default: your user config)")
+    p.add_argument("--overwrite", action="store_true", help="replace values already set there")
+    p.add_argument("--no-input", action="store_true", help="never ask: write only the flags given (default when stdin is not a terminal)")
     p = sub.add_parser("compare", help="compare a part with a reference (STL/3MF/STEP); exit 1 if it fails the thresholds")
     p.add_argument("reference")
     p.add_argument("candidate")
@@ -997,6 +1093,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_printer(args)
         except (KeyError, ValueError) as e:
             sys.exit(str(e).strip('"'))
+    if args.cmd == "setup":
+        return cmd_setup(args)
     if args.cmd in ("setup-ssh", "ssh-serve", "pull", "push"):
         return cmd_ssh(args)
     if args.cmd == "examples":
