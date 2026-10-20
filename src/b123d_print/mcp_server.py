@@ -31,7 +31,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
+from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console, user_config_path
 from .project import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
@@ -434,7 +434,8 @@ def _printer_summary(s) -> dict:
     from .profiles import load_material, load_printer
 
     if not s.printer:
-        return {"mode": "generic", "note": "no printer profile: no build-volume check; use_printer to set one"}
+        return {"mode": "generic", "note": "no printer profile: no build-volume check, generic limits. Offer the user "
+                                           "setup (the setup_workspace prompt: printer, material, formats, style, calibration)"}
     out = {"mode": "printer", **load_printer(s.printer).as_dict()}
     if s.material:
         out["material"] = load_material(s.material).as_dict()
@@ -475,6 +476,41 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     except (KeyError, ValueError) as e:
         raise ToolError(str(e).strip('"')) from None
     return json.dumps(_printer_summary(load_settings(_root())), indent=1)
+
+
+@mcp.tool()
+def save_setup(printer: str = "", material: str = "", formats: str = "", style: str = "", hole_comp: float | None = None,
+               hole_comp_h: float | None = None, overwrite: bool = False) -> str:
+    """Save the user's first-run answers (the setup_workspace prompt): printer (a name from
+    use_printer's search), material, formats ("3mf,png"), default style, and a MEASURED hole_comp /
+    hole_comp_h (with a printer: stored for it and the material). Written where use_printer writes.
+    A value already set there is kept and listed as a conflict: ask the user, then call again with
+    overwrite=True. Empty arguments change nothing."""
+    from . import setup as st
+
+    path = user_config_path()
+    if STATE["transport"] == "http" or STATE["ssh_dest"]:  # shared server: this workspace only
+        init_workspace(_root())
+        path = _root() / WORKSPACE_FILE
+    answers = {"printer": printer, "material": material, "formats": formats, "style": style,
+               "hole_comp": hole_comp, "hole_comp_h": hole_comp_h}
+    try:
+        changes = st.plan(answers, path, overwrite)
+    except (KeyError, ValueError) as e:
+        raise ToolError(str(e).strip('"')) from None
+    written = st.apply(changes, overwrite)
+    conflicts = [c for c in changes if c.conflict and c not in written]
+    s = load_settings(_root())
+    return json.dumps({
+        "written": [{"key": c.key, "value": c.new, "was": c.old, "file": _scrub(str(c.where))} for c in written],
+        "unchanged": [c.key for c in changes if c.same],
+        "conflicts": [{"key": c.key, "now": c.old, "answer": c.new} for c in conflicts],
+        **({"next": "these are already set: ask the user, then save_setup(..., overwrite=True) to replace them"} if conflicts else {}),
+        "printer": _printer_summary(s),
+        "settings": {"formats": list(s.formats), "style": s.style or "functional", "hole_comp": s.hole_comp,
+                     "hole_comp_h": s.hole_comp_h, "clearance": s.clearance},
+        "calibration": st.next_steps(s.hole_comp != 0),
+    }, indent=1)
 
 
 def _human_size(n: int) -> str:
@@ -1748,6 +1784,36 @@ What to test: {what or '(suggest it: the faces that mate with something, the hol
 The full rules:
 
 {_rules()}"""
+
+
+@mcp.prompt()
+def setup_workspace() -> str:
+    """First-run setup: ask the user for the printer, material, export formats and default style,
+    save them with save_setup, then offer the calibration coupons in order."""
+    return """Set up b123d-print for me before we design anything. Ask one short question at a time
+and keep my answers; skip a question I have already answered.
+1. list_parts: read the printer, settings and formats in effect. If a printer is already set,
+   tell me which and ask whether to keep it.
+2. Printer: ask which printer I have, then use_printer(search='<my words>') and let me pick one
+   name from the matches (or 'generic' for none). Do not guess a printer.
+3. Material: pla, petg, asa, abs, tpu or one of my own (it sets notes and, for some, the clearance).
+4. Formats: what my slicer and other CAD want: 3mf for Bambu Studio, OrcaSlicer and PrusaSlicer,
+   step to edit the part in other CAD (Onshape, Fusion, FreeCAD), stl for anything else, png
+   previews, print for a print sheet. Default: step,stl,3mf,png.
+5. Default style for parts that set none: functional (default), modern/minimal, least_cost,
+   rugged/outdoor, soft/handheld or structural/load-bearing.
+6. Hole compensation: ask whether I have measured it with the hole coupon. Only a measured value
+   counts: never guess or copy one.
+7. save_setup with my answers. If it reports conflicts (values already set), show them and ask
+   before calling it again with overwrite=True.
+8. Offer the calibration coupons, in this order, one at a time: hole_coupon (hole compensation:
+   the calibrate_hole_comp prompt walks through it), fit_coupon (the fits), overhang_bridge_coupon
+   (the overhang angle and bridge length). For each: new_part('<name>', example='<name>'), export
+   it, say how to measure it, and store the result (save_setup for hole_comp, or the
+   `b123d-print printer calibrate <key> <value>` command save_setup lists).
+9. Remote server (HTTP or SSH) only: the settings are saved in this workspace on the server;
+   coupons are brought home like any part (download_part).
+10. Report what is set, where it is saved, and what calibration is still to do."""
 
 
 @mcp.prompt()

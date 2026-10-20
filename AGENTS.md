@@ -297,7 +297,9 @@ not on their machine yet. `variant=` and `formats=` narrow the `out/` files; per
 
 ## Printer profile (optional)
 
-By default b123d-print is in generic mode. If the user has set a printer (`list_parts` shows it, or
+By default b123d-print is in generic mode. When `list_parts` shows no printer (generic mode), offer
+the first-run setup once before the first part (the `setup_workspace` prompt; CLI `b123d-print
+setup`): printer, material, formats, style, then the calibration coupons. If the user has set a printer (`list_parts` shows it, or
 `b123d-print printer show`), use it: keep the part inside the build volume in print orientation
 (the `fit` check fails otherwise — split the part or turn it), make walls whole multiples of the
 line width, and read the material notes (e.g. PLA is not for outdoor or hot places). Change the
