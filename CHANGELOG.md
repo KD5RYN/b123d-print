@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.6 — unreleased
+## 0.3.6 — 2026-10-20
 
 - **From part to print** ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/), #65): a new
   page on taking an exported part into Bambu Studio, OrcaSlicer and PrusaSlicer: which file (3MF,
