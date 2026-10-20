@@ -696,6 +696,13 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
                                       cb.call_tool("render_preview", {"name": "only_in_b"}))
         both = time.monotonic() - t0
         expect(images(ra) and images(rb), f"two clients render at the same time ({both:.1f} s; one build {one:.1f} s)")
+        if wsroot is not None:  # a script in workspace a must not reach b's files (OS sandbox on this runner)
+            secret = wsroot / "workspaces" / b / "parts" / "only_in_b" / "only_in_b.py"
+            peek = BOX + f"\nopen({str(secret)!r}).read()\n"
+            await ca.call_tool("write_part", {"name": "only_in_a", "code": peek})
+            res = await ca.call_tool("build_part", {"name": "only_in_a"})
+            expect("ERROR" in text(res), "a script cannot read another workspace's files")
+            await ca.call_tool("write_part", {"name": "only_in_a", "code": BOX})
         res = await ca.call_tool("list_parts", {})
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")

@@ -87,6 +87,8 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
     from . import sandbox
 
     queue.mkdir(parents=True, exist_ok=True)
+    # a job must never read the queue (other clients' job files live here): hide it from every build
+    sandbox.EXTRA_HIDDEN.update({str(queue), str(queue.parent)})
     stop = stop or threading.Event()
     slots = threading.Semaphore(max_jobs)
     print(f"b123d-print worker: queue {queue}, {max_jobs} job(s) at once, sandbox: {sandbox.describe()}", file=sys.stderr)

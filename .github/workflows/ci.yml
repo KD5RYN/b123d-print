@@ -233,6 +233,9 @@ jobs:
         if: env.FULL == 'true'
         with:
           enable-cache: true
+      - name: Allow unprivileged user namespaces (the worker runs each job in bubblewrap)
+        if: env.FULL == 'true'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: docker build -t b123d-print-mcp .
         if: env.FULL == 'true'
       - name: The compose example is valid
@@ -265,8 +268,12 @@ jobs:
           docker compose exec -T worker python -c "import socket; print(socket.if_nameindex())"
           docker compose exec -T b123d-print python -c "import socket; socket.create_connection(('1.1.1.1', 53), 5); print('front: network ok')" \
             || echo "front: no internet from this runner (not needed for the test)"
+          # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
+          # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
+          # makes the smoke assert the worker really is sandboxed and not silently falling back
           cd .. && B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" \
             B123D_PRINT_SMOKE_WORKSPACE_DIR="$B123D_PRINT_PARTS" B123D_PRINT_TOKENS_FILE="$B123D_PRINT_CONFIG/tokens.toml" \
+            B123D_PRINT_EXPECT_SANDBOX=bubblewrap \
             B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py || { (cd deploy && docker compose logs | tail -80); exit 1; }
           (cd deploy && docker compose logs b123d-print | grep -q " ci POST /mcp ") || { echo "token name not in the log"; exit 1; }
           (cd deploy && docker compose down)

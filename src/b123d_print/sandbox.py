@@ -64,10 +64,17 @@ def _sbpl_str(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def macos_profile(writable: list[str], readable: list[str]) -> str:
+def macos_profile(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = ()) -> str:
+    """`hidden`: folders a job never reads, even inside `readable` (other workspaces), except the
+    `readable`/`writable` folders inside them; `secrets`: files never read or even listed."""
     home = _real(Path.home())
     w = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in writable)
     r = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in readable + writable)
+    # later rules win: hide, then allow back the job's own folders inside a hidden one, then the secrets for good
+    hide = "".join(f"(deny file-read* (subpath {_sbpl_str(_real(p))}))\n" for p in hidden)
+    inside = _inside(readable + writable, hidden)
+    back = f"(allow file-read* {' '.join(f'(subpath {_sbpl_str(p)})' for p in inside)})\n" if inside else ""
+    sec = "".join(f"(deny file-read* file-read-metadata (literal {_sbpl_str(_real(p))}))\n" for p in secrets)
     return f"""(version 1)
 (allow default)
 (deny network*)
@@ -77,10 +84,12 @@ def macos_profile(writable: list[str], readable: list[str]) -> str:
 (deny file-read* (subpath {_sbpl_str(home)}))
 (allow file-read* (literal {_sbpl_str(home)}) {r})
 (allow file-read-metadata)
-"""
+{hide}{back}{sec}"""
 
 
-def linux_bwrap(writable: list[str], readable: list[str]) -> list[str]:
+def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = ()) -> list[str]:
+    """`hidden` folders become empty (tmpfs) before the job's own folders are bound back in;
+    `secrets` files read as empty (/dev/null over them), wherever they are."""
     home = _real(Path.home())
     cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net",
            "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
@@ -88,7 +97,58 @@ def linux_bwrap(writable: list[str], readable: list[str]) -> list[str]:
         cmd += ["--ro-bind-try", p, p]
     for p in writable:
         cmd += ["--bind", p, p]
+    for p in hidden:  # after the binds (a hidden folder may lie inside a readable one) ...
+        if os.path.isdir(p):
+            cmd += ["--tmpfs", p]
+    for p in _inside(readable, hidden):  # ... then the job's own folders inside it, back again
+        cmd += ["--ro-bind-try", p, p]
+    for p in _inside(writable, hidden):
+        cmd += ["--bind", p, p]
+    for p in secrets:
+        if os.path.isfile(p):
+            cmd += ["--ro-bind", "/dev/null", p]
     return cmd
+
+
+def _inside(paths: list[str], dirs: list[str]) -> list[str]:
+    """The `paths` that lie strictly inside one of `dirs` (real paths)."""
+    ds = [_real(d) for d in dirs]
+    return [p for p in map(_real, paths) if any(p.startswith(d + os.sep) for d in ds)]
+
+
+# files no job may read, wherever they are: the HTTP server's tokens (hashes and the link secret);
+# mcp_server adds the tokens file it was started with
+SECRET_FILES: set[str] = set()
+
+
+def _secret_files() -> list[str]:
+    out = set(SECRET_FILES)
+    for var in ("B123D_PRINT_TOKENS_FILE", "B123D_PRINT_TOKEN_FILE"):
+        if os.environ.get(var):
+            out.add(os.path.expanduser(os.environ[var]))
+    return sorted({_real(p) for p in out} | {os.path.abspath(p) for p in out})
+
+
+# folders no job may see beyond the ones derived from its workspace: the HTTP job queue, which
+# jobqueue.serve registers so a worker's jobs cannot read each other's queue files
+EXTRA_HIDDEN: set[str] = set()
+
+
+def _hidden_dirs(workspace: Path) -> list[str]:
+    """Other workspaces: the root workspace's workspaces/ folder (a job in the root workspace) and
+    the siblings of a named workspace (workspaces/<name>), plus the job queue (EXTRA_HIDDEN)."""
+    ws = Path(_real(workspace))
+    out = [ws / "workspaces"]
+    if ws.parent.name == "workspaces":
+        out.append(ws.parent)
+    return sorted({str(p) for p in out} | {_real(p) for p in EXTRA_HIDDEN})
+
+
+def mpl_cache(workspace: Path) -> Path:
+    """Matplotlib's cache and config folder, one per workspace (a job may write it)."""
+    import hashlib
+
+    return CACHE / "matplotlib" / hashlib.sha256(_real(workspace).encode("utf-8")).hexdigest()[:16]
 
 
 def kind() -> str:
@@ -173,17 +233,23 @@ def soft_margin(timeout: float) -> float:
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_TIMEOUT, epoch: int | None = None) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    mpl = CACHE / "matplotlib"
+    mpl = mpl_cache(workspace)
     mpl.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="b123d-print-") as tmp:
         tmp = _real(tmp)
         writable = [_real(out_dir), tmp, _real(mpl)]
-        readable = [_real(workspace)] + _python_roots()
+        cfg = _real(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "b123d-print")
+        readable = [_real(workspace)] + _python_roots() + [cfg]
+        # other workspaces and the secret files: hidden by the OS sandbox, and refused by the
+        # worker's own audit hook too (which is all there is on Windows and SANDBOX=none). readable
+        # is what the hook allows a job to read even where it overlaps a hidden folder (its own
+        # workspace lives under the hidden workspaces/ parent)
+        hidden, secrets = _hidden_dirs(workspace), _secret_files()
         # the worker's own soft limit, a little before the hard one kills it: `check` stops there and
         # returns what it finished instead of nothing (see project.run_checks)
         # workspace: where the build cache looks for files a build read outside the part's folder
         job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable,
-               "workspace": _real(workspace),
+               "readable": readable, "hidden": hidden, "secrets": secrets, "workspace": _real(workspace),
                "deadline": min(job.get("deadline", math.inf), time.time() + timeout - soft_margin(timeout))}
         job_file = os.path.join(tmp, "job.json")
         with open(job_file, "w", encoding="utf-8") as f:
@@ -211,10 +277,10 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
         if k == "sandbox-exec":
             prof = os.path.join(tmp, "profile.sb")
             with open(prof, "w", encoding="utf-8") as f:
-                f.write(macos_profile(writable, readable))
+                f.write(macos_profile(writable, readable, hidden, secrets))
             cmd = ["sandbox-exec", "-f", prof] + cmd
         elif k == "bwrap":
-            cmd = linux_bwrap(writable, readable) + cmd
+            cmd = linux_bwrap(writable, readable, hidden, secrets) + cmd
 
         def limits():  # in the child, before exec
             try:

@@ -60,6 +60,16 @@ services:
     command: ["worker", "--queue", "/work/.b123d-print/jobs"]
     environment:
       B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}
+      # empty (not "none"): each job runs in its own bubblewrap mount namespace that binds only its
+      # workspace's part folder and a scratch folder, so one client's script cannot see other
+      # workspaces, the job queue or the shared config on the volume. bubblewrap needs unprivileged
+      # user namespaces, which the two security-opt lines below allow inside the container; on a
+      # host that forbids them (some hardened kernels) set this back to "none" and give each client
+      # its own deployment instead.
+      B123D_PRINT_SANDBOX: ""
+    security_opt:
+      - seccomp:unconfined                             # allow the clone()/unshare() bubblewrap needs
+      - apparmor:unconfined                            # (user namespaces); the worker still has no network
     stop_grace_period: 15s
     healthcheck:
       test: ["CMD", "b123d-print-mcp", "worker", "--queue", "/work/.b123d-print/jobs", "--check"]

@@ -18,9 +18,10 @@ FROM python:3.12-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /usr/local/bin/
 
-# OpenCascade (in the OCP wheel) links against these on Linux
+# OpenCascade (in the OCP wheel) links against the libGL/X libraries; bubblewrap lets the HTTP
+# deployment's worker run each job in its own mount namespace (deploy/compose.yaml)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 \
+ && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 bubblewrap \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/b123d-print
