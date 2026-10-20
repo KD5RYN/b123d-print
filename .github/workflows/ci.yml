@@ -268,12 +268,18 @@ jobs:
           docker compose exec -T worker python -c "import socket; print(socket.if_nameindex())"
           docker compose exec -T b123d-print python -c "import socket; socket.create_connection(('1.1.1.1', 53), 5); print('front: network ok')" \
             || echo "front: no internet from this runner (not needed for the test)"
+          # diagnostic: can bubblewrap actually set up a namespace inside the worker container?
+          # (same flags the worker uses for a job; prints the exit code either way)
+          echo "bwrap probe in worker:"
+          docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --proc /proc \
+            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap exit: $?"
           # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
           # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
           # makes the smoke assert the worker really is sandboxed and not silently falling back
           cd .. && B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" \
             B123D_PRINT_SMOKE_WORKSPACE_DIR="$B123D_PRINT_PARTS" B123D_PRINT_TOKENS_FILE="$B123D_PRINT_CONFIG/tokens.toml" \
             B123D_PRINT_EXPECT_SANDBOX=bubblewrap \
-            B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py || { (cd deploy && docker compose logs | tail -80); exit 1; }
+            B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py \
+            || { (cd deploy && docker compose logs worker | tail -120; echo "--- front ---"; docker compose logs b123d-print | tail -40); exit 1; }
           (cd deploy && docker compose logs b123d-print | grep -q " ci POST /mcp ") || { echo "token name not in the log"; exit 1; }
           (cd deploy && docker compose down)

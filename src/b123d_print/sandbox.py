@@ -91,8 +91,12 @@ def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = ()
     """`hidden` folders become empty (tmpfs) before the job's own folders are bound back in;
     `secrets` files read as empty (/dev/null over them), wherever they are."""
     home = _real(Path.home())
-    cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net",
-           "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
+    # --unshare-user: create a user namespace explicitly. On a normal host bwrap does this on its
+    # own when unprivileged, but inside an unprivileged container (the Docker worker, uid != 0, no
+    # CAP_SYS_ADMIN) it is the user namespace that grants the privilege to mount/pivot_root, so it
+    # must be requested or every bind fails.
+    cmd = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+           "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
     for p in readable:
         cmd += ["--ro-bind-try", p, p]
     for p in writable:
@@ -189,9 +193,12 @@ def _probe(k: str) -> str | None:
     unprivileged user namespaces), else None. Cached per kind."""
     if k != "bwrap":
         return None
+    # mirror the flags the real run uses (namespaces + a fresh /proc and /dev), so the probe fails
+    # exactly where a real job would instead of passing on a weaker command
     try:
-        r = subprocess.run(["bwrap", "--ro-bind", "/", "/", "--unshare-user", "--unshare-net",
-                            "--die-with-parent", "true"], capture_output=True, timeout=15)
+        r = subprocess.run(["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev",
+                            "--proc", "/proc", "--unshare-net", "--unshare-pid", "--die-with-parent",
+                            "true"], capture_output=True, timeout=15)
     except (OSError, subprocess.SubprocessError) as e:
         return f"bubblewrap could not run ({e})"
     if r.returncode != 0:
