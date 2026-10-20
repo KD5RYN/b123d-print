@@ -17,6 +17,36 @@ forced command (sshd simulated), and `sh tests/ssh_e2e.sh` over a real local ssh
 uv run mkdocs serve        # the docs site at http://127.0.0.1:8000, rebuilt as you edit
 ```
 
+## How we work
+
+**Issues.** Every piece of work starts from an issue.
+
+- Before you start, **comment on the issue** to say you are taking it. A maintainer adds the
+  `in progress` label, and you, or your draft pull request, are the link on the issue.
+- An issue labeled `in progress` is taken; ask on it before doing the same work.
+- An issue labeled `blocked` waits on other work; its comment says what. Please hold off on a
+  pull request for it until the label is gone.
+- Want somewhere to start? Look for `good first issue` and `help wanted`.
+
+**Pull requests.**
+
+- One pull request per change (one issue, or a few small related ones). Say `Closes #N` in the
+  description so the issue closes when it merges.
+- Run `tools/preflight.sh` first (below) and push once when it passes; batch any fixes for CI
+  into as few pushes as you can.
+- A maintainer reviews every pull request. Changes to the sandbox and worker (`sandbox.py`,
+  `worker.py`, `jobqueue.py`, `deploy/`), tokens and links (`tokens.py`, `links.py`,
+  `handoff.py`, `viewer.py`) and the release workflows get a careful security review, so expect
+  questions there.
+- A single pull request is squash-merged. When several are ready at once, a maintainer may
+  merge them together through one combining pull request with a merge commit, so CI runs once
+  and each contributor's commits are kept.
+- Merging does not release. Releases are cut from `main` when a set of changes is ready
+  ([Releasing](https://kd5ryn.github.io/b123d-print/contributing/releasing/)).
+
+**Security problems: do not open a public issue.** Report them privately: see
+[SECURITY.md](https://github.com/KD5RYN/b123d-print/blob/main/SECURITY.md).
+
 ## Before you push
 
 ```bash
