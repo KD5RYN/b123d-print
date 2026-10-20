@@ -31,7 +31,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
+from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console, user_config_path
 from .project import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
@@ -62,8 +62,12 @@ return; the server gives no shell, ssh or scp access. Last step, before reportin
 (name) and bring the part home into the project folder in the same layout as a local install
 (parts/<name>/<name>.py, parts/<name>/out/, parts/<name>/ref/): over HTTP `curl -fLo <name>.zip
 '<link>'` and unzip it in the project folder; over SSH the `b123d-print pull` command it gives.
-Then check the files are there on the user's machine. Locally (stdio) the files are already in
-the project folder."""
+Then check the files are there on the user's machine. If your shell has no network or is
+sandboxed (Antigravity/agy, web and mobile clients), call download_part(name, embed=True): the zip
+comes inside the result; unzip it from where your client saved it (unzip -o <zip> -d <project folder>).
+A part is not done until its files are on the user's machine: after export, call download_part
+(embed=True if your shell has no network) and unzip into the project folder, unless the user says to
+leave them on the server. Locally (stdio) the files are already in the project folder."""
 
 REMOTE_DOC = """
     Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
@@ -257,6 +261,29 @@ def _home_note(name: str | None) -> str:
             "Do not use ssh/scp: the server gives no shell access.")
 
 
+def _next_step(name: str) -> str:
+    """Remote: the closing NEXT STEP of a result that wrote files the user needs (empty over stdio):
+    bring the part home with download_part, embedded in the result when the client's shell can't fetch."""
+    if not _remote():
+        return ""
+    try:
+        size = sum(p.stat().st_size for _, p in _part_files(name, None, None))
+    except (ToolError, OSError):
+        size = None
+    how = ("it gives the `b123d-print pull` command; run it in the project folder" if not _http() else
+           f"run the curl command it gives, then unzip -o {name}.zip in the project folder")
+    if size is None or size <= EMBED_TOTAL:
+        embed = (f"If your shell has no network or runs sandboxed (Antigravity/agy, a web or mobile client), call "
+                 f"download_part('{name}', embed=True) instead: the zip"
+                 + (f" ({_human_size(size)}, under the {EMBED_TOTAL // 1_000_000} MB embed limit)" if size else "")
+                 + " comes inside the result; unzip it into the project folder from where your client saved it.")
+    else:
+        embed = (f"The part is {_human_size(size)}, over the {EMBED_TOTAL // 1_000_000} MB embed limit: if your shell "
+                 f"has no network, narrow it to fit, e.g. download_part('{name}', formats='3mf', embed=True).")
+    return (f"NEXT STEP: a part is not done until its files are on the user's machine. Call "
+            f"download_part('{name}') ({how}). {embed} Skip this only if the user said to leave the files on the server.")
+
+
 def _files_doc(f):
     """Tools that write files: their description says how a remote client gets them (REMOTE_DOC)."""
     f.__doc__ = f.__doc__.rstrip() + REMOTE_DOC
@@ -434,7 +461,8 @@ def _printer_summary(s) -> dict:
     from .profiles import load_material, load_printer
 
     if not s.printer:
-        return {"mode": "generic", "note": "no printer profile: no build-volume check; use_printer to set one"}
+        return {"mode": "generic", "note": "no printer profile: no build-volume check, generic limits. Offer the user "
+                                           "setup (the setup_workspace prompt: printer, material, formats, style, calibration)"}
     out = {"mode": "printer", **load_printer(s.printer).as_dict()}
     if s.material:
         out["material"] = load_material(s.material).as_dict()
@@ -475,6 +503,41 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
     except (KeyError, ValueError) as e:
         raise ToolError(str(e).strip('"')) from None
     return json.dumps(_printer_summary(load_settings(_root())), indent=1)
+
+
+@mcp.tool()
+def save_setup(printer: str = "", material: str = "", formats: str = "", style: str = "", hole_comp: float | None = None,
+               hole_comp_h: float | None = None, overwrite: bool = False) -> str:
+    """Save the user's first-run answers (the setup_workspace prompt): printer (a name from
+    use_printer's search), material, formats ("3mf,png"), default style, and a MEASURED hole_comp /
+    hole_comp_h (with a printer: stored for it and the material). Written where use_printer writes.
+    A value already set there is kept and listed as a conflict: ask the user, then call again with
+    overwrite=True. Empty arguments change nothing."""
+    from . import setup as st
+
+    path = user_config_path()
+    if STATE["transport"] == "http" or STATE["ssh_dest"]:  # shared server: this workspace only
+        init_workspace(_root())
+        path = _root() / WORKSPACE_FILE
+    answers = {"printer": printer, "material": material, "formats": formats, "style": style,
+               "hole_comp": hole_comp, "hole_comp_h": hole_comp_h}
+    try:
+        changes = st.plan(answers, path, overwrite)
+    except (KeyError, ValueError) as e:
+        raise ToolError(str(e).strip('"')) from None
+    written = st.apply(changes, overwrite)
+    conflicts = [c for c in changes if c.conflict and c not in written]
+    s = load_settings(_root())
+    return json.dumps({
+        "written": [{"key": c.key, "value": c.new, "was": c.old, "file": _scrub(str(c.where))} for c in written],
+        "unchanged": [c.key for c in changes if c.same],
+        "conflicts": [{"key": c.key, "now": c.old, "answer": c.new} for c in conflicts],
+        **({"next": "these are already set: ask the user, then save_setup(..., overwrite=True) to replace them"} if conflicts else {}),
+        "printer": _printer_summary(s),
+        "settings": {"formats": list(s.formats), "style": s.style or "functional", "hole_comp": s.hole_comp,
+                     "hole_comp_h": s.hole_comp_h, "clearance": s.clearance},
+        "calibration": st.next_steps(s.hole_comp != 0),
+    }, indent=1)
 
 
 def _human_size(n: int) -> str:
@@ -885,6 +948,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         out.append("\n" + _pull_note(name, formats, None))
     if _remote():
         out.append("\n" + _home_note(name))
+        out.append("\n" + _next_step(name))
     return ["\n".join(out), *extra]
 
 
@@ -1125,7 +1189,10 @@ async def make_template(name: str, kind: str, plane: str | None = None, at: floa
     out = ["\n".join(lines)]
     if where and inline:
         out.append(Image(path=where))
-    return _with_note(out + extra, name)
+    out = _with_note(out + extra, name)
+    if _remote():
+        out[0] += "\n\n" + _next_step(name)
+    return out
 
 
 def _pull_cmd(name: str, formats: str | None, variant: str | None) -> str:
@@ -1167,8 +1234,10 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
     = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print); the script and ref/ always come.
     Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
-    embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
-    URLs nor read resources. Call it as the last step of remote work, before reporting."""
+    embed=True also puts the zip (up to 8 MB) into the result (over HTTP and SSH), for clients
+    whose shell has no network (Antigravity/agy) or that can neither fetch URLs nor read
+    resources: unzip it from where the client saved it. Call it as the last step of remote work,
+    before reporting: a part is not done until its files are on the user's machine."""
     files = _part_files(name, variant, formats)
     total = sum(p.stat().st_size for _, p in files)
     parts_dir = load_settings(_root()).parts_dir
@@ -1179,8 +1248,9 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
         return [f"{head}\nThis server runs locally: the files are already in the project folder, "
                 f"{_root() / parts_dir / name}. Nothing to download.\n{listing}"]
     if STATE["ssh_dest"]:
-        return [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
-                f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+        out = [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
+               f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+        return _embed_zip(out, files, total, prefix, f"b123d-print://download/{_ws_name()}/{name}", name) if embed else out
     query = links.zip_query(variant, formats)
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
     url = _base_url() + url
@@ -1201,11 +1271,21 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     uri = f"b123d-print://download/{_ws_name()}/{name}"
     out: list = [text, ResourceLink(uri=uri, name=f"{name}.zip", mime_type="application/zip",
                                     description=f"the whole part as a zip (unfiltered); download: {url}")]
-    if embed:
-        if total > EMBED_TOTAL:
-            out[0] += f"\n(embed: not embedded, the part is over {EMBED_TOTAL // 1_000_000} MB; use the link)"
-        else:
-            out.append(_embedded_bytes(handoff.zip_bytes(files, prefix), uri, "application/zip"))
+    return _embed_zip(out, files, total, prefix, uri, name) if embed else out
+
+
+def _embed_zip(out: list, files, total: int, prefix: str, uri: str, name: str) -> list:
+    """download_part(embed=True): the zip inside the result, and how to unzip it where the client saved it."""
+    if total > EMBED_TOTAL:
+        out[0] += (f"\n(embed: not embedded, the part is over {EMBED_TOTAL // 1_000_000} MB; use the link, or narrow it "
+                   f"with formats= or variant=)")
+        return out
+    out[0] += (f"\n\nEMBEDDED: the zip ({name}.zip, {prefix}/...) is in this result, no network needed. Your client "
+               f"saves it to a file (Antigravity: .../brain/<conversation>/.system_generated/steps/<N>/media_0.zip). "
+               f"Unzip it into the project folder, as one command (no && or |):\n"
+               f"  unzip -o <saved zip> -d <project folder>   (Windows: tar -xf <saved zip> -C <project folder>)\n"
+               f"Then check {prefix}/out/ is there before reporting.")
+    out.append(_embedded_bytes(handoff.zip_bytes(files, prefix), uri, "application/zip"))
     return out
 
 
@@ -1576,7 +1656,9 @@ def _remote_step(name: str = "<name>") -> str:
     return (f"download_part('{name}') and bring the part home into my project folder, in the same layout "
             f"as a local install (parts/{name}/{name}.py, parts/{name}/out/, parts/{name}/ref/): over HTTP "
             f"`curl -fLo {name}.zip '<link>'` and unzip it in the project folder, over SSH the `b123d-print pull` "
-            "command it gives. Check the files exist on my machine before reporting. Use only the MCP tools and "
+            f"command it gives; if your shell has no network, download_part('{name}', embed=True) and unzip the "
+            "embedded zip from where your client saved it. Check the files exist on my machine before reporting. "
+            "Use only the MCP tools and "
             "their links: never ssh, scp or a shell on the server (there is none). The server copy is temporary.")
 
 
@@ -1748,6 +1830,36 @@ What to test: {what or '(suggest it: the faces that mate with something, the hol
 The full rules:
 
 {_rules()}"""
+
+
+@mcp.prompt()
+def setup_workspace() -> str:
+    """First-run setup: ask the user for the printer, material, export formats and default style,
+    save them with save_setup, then offer the calibration coupons in order."""
+    return """Set up b123d-print for me before we design anything. Ask one short question at a time
+and keep my answers; skip a question I have already answered.
+1. list_parts: read the printer, settings and formats in effect. If a printer is already set,
+   tell me which and ask whether to keep it.
+2. Printer: ask which printer I have, then use_printer(search='<my words>') and let me pick one
+   name from the matches (or 'generic' for none). Do not guess a printer.
+3. Material: pla, petg, asa, abs, tpu or one of my own (it sets notes and, for some, the clearance).
+4. Formats: what my slicer and other CAD want: 3mf for Bambu Studio, OrcaSlicer and PrusaSlicer,
+   step to edit the part in other CAD (Onshape, Fusion, FreeCAD), stl for anything else, png
+   previews, print for a print sheet. Default: step,stl,3mf,png.
+5. Default style for parts that set none: functional (default), modern/minimal, least_cost,
+   rugged/outdoor, soft/handheld or structural/load-bearing.
+6. Hole compensation: ask whether I have measured it with the hole coupon. Only a measured value
+   counts: never guess or copy one.
+7. save_setup with my answers. If it reports conflicts (values already set), show them and ask
+   before calling it again with overwrite=True.
+8. Offer the calibration coupons, in this order, one at a time: hole_coupon (hole compensation:
+   the calibrate_hole_comp prompt walks through it), fit_coupon (the fits), overhang_bridge_coupon
+   (the overhang angle and bridge length). For each: new_part('<name>', example='<name>'), export
+   it, say how to measure it, and store the result (save_setup for hole_comp, or the
+   `b123d-print printer calibrate <key> <value>` command save_setup lists).
+9. Remote server (HTTP or SSH) only: the settings are saved in this workspace on the server;
+   coupons are brought home like any part (download_part).
+10. Report what is set, where it is saved, and what calibration is still to do."""
 
 
 @mcp.prompt()

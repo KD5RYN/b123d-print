@@ -1,4 +1,5 @@
-# Weekly update PRs for the pinned dependencies, the GitHub Actions and the Docker base image.
+# Weekly update PRs for the pinned dependencies, the GitHub Actions (pinned by commit SHA) and the
+# Docker base images (pinned by digest).
 # CI runs on each PR; nothing merges without review. Minor/patch updates are grouped so there is
 # one PR per ecosystem per week instead of one per package.
 version: 2
@@ -24,6 +25,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
     ignore:
       # the project pins Python 3.12 (requires-python ==3.12.*); only take 3.12.x base-image updates
       - dependency-name: python

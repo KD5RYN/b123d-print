@@ -72,6 +72,18 @@ tell you the steps instead.
 
 3. **Restart the assistant.**
 
+## Tell it your printer
+
+Before the first part, ask:
+
+> *"Set up b123d-print for my printer."*
+
+(or pick the `setup_workspace` prompt from your client's prompt menu or slash commands). The
+assistant asks for your printer, material, export formats and default style, saves them, and
+offers the calibration coupons in order. Without a printer, b123d-print runs in generic mode:
+no build-volume check and generic limits. From a terminal, `b123d-print setup` asks the same
+questions ([CLI](cli.md)).
+
 ## Then ask
 
 > *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."*
@@ -91,6 +103,8 @@ minutes; later starts are fast. If your assistant gives up waiting, see
 
 ## Next
 
+- Follow a whole session from start to finish: [your first bracket](../tutorials/first-bracket.md)
+  or [remix a downloaded STL](../tutorials/remix-stl.md).
 - [How a session goes](../using/workflow.md): what to expect, and how to describe a part.
 - Calibrate [hole compensation](../using/hole-compensation.md) before you print anything with
   holes that matter.

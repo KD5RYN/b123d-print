@@ -193,6 +193,12 @@ def test_download_part_results(http, monkeypatch):
 
     assert set(unzip(base64.b64decode(emb.resource.blob))) == {"parts/box/box.py", "parts/box/out/box.3mf",
                                                                "parts/box/out/box_140.3mf"}
+    t = call(m, "download_part", "alice", name="box", embed=True)[0]
+    assert "EMBEDDED" in t and "unzip -o <saved zip> -d <project folder>" in t
+    monkeypatch.setattr(m, "EMBED_TOTAL", 10)
+    res = call(m, "download_part", "alice", name="box", embed=True)
+    assert len(res) == 2 and "not embedded" in res[0] and "formats=" in res[0]
+    monkeypatch.setattr(m, "EMBED_TOTAL", 8_000_000)
     monkeypatch.setitem(m.STATE, "retention_days", 0.0)
     assert "not your copy" in call(m, "download_part", "alice", name="box")[0]
     monkeypatch.setitem(m.STATE, "transport", "stdio")
@@ -203,6 +209,30 @@ def test_download_part_results(http, monkeypatch):
     t = call(m, "download_part", None, name="box", formats="3mf")[0]
     assert "b123d-print pull box --formats 3mf --from me@cad" in t and "parts/box/ref/" in t and "Do not use ssh/scp" in t
     assert str(root) not in t
+    res = call(m, "download_part", None, name="box", embed=True)  # over SSH too: a sandboxed shell can't run pull
+    assert "b123d-print pull box --from me@cad" in res[0] and "EMBEDDED" in res[0]
+    assert set(unzip(base64.b64decode(res[1].resource.blob))) == {"parts/box/box.py", "parts/box/out/box.3mf",
+                                                                  "parts/box/out/box_140.3mf"}
+
+
+def test_next_step(http, monkeypatch):
+    """Remote results that wrote the user's files end with the NEXT STEP: download_part, embed=True
+    when the shell has no network; nothing over stdio."""
+    from b123d_print import mcp_server as m
+
+    _, root = http
+    t = call(m, "_next_step", "alice", name="box")
+    assert t.startswith("NEXT STEP: a part is not done until its files are on the user's machine")
+    assert "download_part('box')" in t and "download_part('box', embed=True)" in t and "under the 8 MB" in t
+    assert "curl" in t and "leave the files on the server" in t
+    monkeypatch.setattr(m, "EMBED_TOTAL", 10)
+    t = call(m, "_next_step", "alice", name="box")
+    assert "over the" in t and "download_part('box', formats='3mf', embed=True)" in t
+    monkeypatch.setitem(m.STATE, "ssh_dest", "me@cad")
+    monkeypatch.setitem(m.STATE, "transport", "stdio")
+    assert "b123d-print pull" in call(m, "_next_step", "alice", name="box")
+    monkeypatch.setitem(m.STATE, "ssh_dest", None)
+    assert call(m, "_next_step", "alice", name="box") == ""
 
 
 def test_error_text_hides_server_paths(http):

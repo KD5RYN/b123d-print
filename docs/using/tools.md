@@ -28,7 +28,7 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `list_edges(name, variant?, part?, highlight?, face?, kind?, convexity?, near?, radius?, limit?, size?, inline?)` | the edges of a part with stable ids, for a fillet or chamfer: type (line, circle, arc, ellipse, spline), length, start and end or center and radius, `convexity` (convex: outside edge; concave: inside corner; tangent: a smooth joint such as a fillet's side; seam) and the two faces it joins (flat ones by their `list_faces` id). Filters: `face` (id, side or point: its edges), `kind`, `convexity`, `near` (`x,y,z`: edges within `radius` mm, nearest first); `limit` caps the list. `highlight` (ids such as `3,4,7` or `3-6`) adds a picture with them in red and a `selector`: a build123d expression that selects exactly those edges, re-evaluated on the part, to paste into the script instead of the ids (see below) |
 | `measure(name, kind, a?, b?, at?, direction?, face?, face2?, frame?, variant?, image?, size?, inline?)` | precise measurements in mm with the points they were taken at. `kind` `distance`: the gap between pieces or assembly labels `a` and `b` (stand-ins too), or their interference volume, box and depth when they overlap; `wall`: the thickness through point `at` (into the part, or along `direction`) and the gaps and walls beyond; `faces`: the distance between two parallel flat faces `face` and `face2` (ids from `list_faces`) or their angle; `hole`: the holes in flat face `face` or at `at`, modeled diameter, the size it prints at after `hole_comp`, through or blind depth. `frame` `print` or `assembly` (default: the assembly for two labels, else the piece as built); `image` adds a picture with what was measured in red |
 | `make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?, base?, variant?, part?, formats?, inline?)` | a [fit-test template](templates.md): a thin print cut from the part (`kind` `slice`: `plane` + `at`; `face`: `face`; `crop`: `center` + `size`), laid flat, labeled, checked; writes `<name>_template_<id>.*` and returns the picture of where it comes from, the findings and, over HTTP, download links |
-| `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result; over HTTP it also lists the [view links](../getting-started/http.md#view-in-3d) of the views `export` made. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
+| `download_part(name, variant?, formats?, embed?)` | bring a whole part home from a remote server, in the same layout a local install writes (`parts/<name>/<name>.py`, `out/`, `ref/`): over HTTP one signed link to a zip of it (`curl -fLo <name>.zip '<link>'`, then unzip in the project folder), over SSH the `b123d-print pull` command; `variant` and `formats` narrow the `out/` files, `embed=true` puts the zip (up to 8 MB) into the result, over HTTP and SSH, with the `unzip` command for the file the client saves it to (for a shell without network); over HTTP it also lists the [view links](../getting-started/http.md#view-in-3d) of the views `export` made. Locally it says the files are already in the project folder. The last step of remote work ([getting your files](../getting-started/http.md#get-the-files)) |
 | `compare(reference, candidate, thresholds?, image?, size?, inline?)` | measure a part against a reference STL/3MF/STEP in the workspace: size, volume and surface differences, a 0-100 score, pass/fail; `image` adds a deviation view ([comparing parts](compare.md)) |
 | `upload_reference(part, filename, data_base64?, overwrite?)` | get an original model (STL, 3MF or STEP, up to 50 MB) into `parts/<part>/ref/` to [remix](remix.md#get-the-original-onto-the-server) it, or a scan or photo (PNG, JPEG, TIFF, BMP) to [trace](tracing.md): `data_base64` stores it now (practical only for small files); without it the result tells the user how: over HTTP a signed upload link for `curl -fT`, over SSH the `b123d-print push` command, locally the folder to copy it into |
 | `describe_model(part, file, scale?, image?, size?, inline?)` | inspect an original before remixing it: format, units, size, faces before and after merging, the curved (faceted) share, round holes, repairs, the designer and license metadata it carries, and a suggestion to modify or redraw it; `image` adds a 6-view render |
@@ -37,6 +37,7 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `trace_outline(part, file, dpi?, grid?, reference?, points?, distance?, tolerance?, smooth?, pick?, threshold?, invert?, inline?)` | [trace a flat object](tracing.md) in a scan or photo from `parts/<part>/ref/` into an outline in mm with its holes: scale from `dpi` (or the file's metadata), a `grid` cell size, a `reference` object (`card`, or its sides in mm) or two `points` a known `distance` apart; simplified to `tolerance` mm (or `smooth` spline points); `pick` chooses the object. Writes the points (JSON), a Python snippet and an overlay PNG to confirm with the user |
 | `recipe(name?)` | the [recipe library](recipes.md): tested build123d functions for common printable features; no `name` lists them, a name gives the code, a tested example, printing notes and sources |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP and SSH it is saved per workspace |
+| `save_setup(printer?, material?, formats?, style?, hole_comp?, hole_comp_h?, overwrite?)` | save the [first-run setup](../getting-started/quick-start.md#tell-it-your-printer) answers (the `setup_workspace` prompt asks for them): printer, material, export formats, default style and a measured hole compensation (with a printer: stored for it and the material). Saved where `use_printer` saves; a value already set is kept and reported as a conflict until `overwrite=true`. Lists the calibration coupons still to print |
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.
@@ -47,12 +48,12 @@ only those are built. Every tool that builds the part reads the pieces from the
 them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`, `params` and
+Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`, `params` and
 `upload_reference` runs in the
 [sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
 the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
 
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`,
+Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`,
 `upload_reference` and `recipe` runs in the
 [sandbox](sandbox.md): the part script, or for `compare`, `describe_model` and `trace_outline`
 the parsing of the model and image files (they may come from model-written scripts or from the
@@ -188,6 +189,7 @@ carries the full [workflow rules](../scripts/rules.md).
 | `remix_part(name, source?, change?)` | remix someone else's model: inspect it, choose modify or redraw, confirm the changes, then verify with inherited and new findings told apart ([remixing](remix.md)) |
 | `design_review(name, style?)` | after the print checks pass: review the design for its style (functional, modern, least_cost, rugged, soft, structural) with `design_metrics` and renders; 3-7 suggestions with rule IDs; changes nothing without your OK ([design review](design-review.md)) |
 | `fit_test(name, what?)` | propose, confirm and make [fit-test templates](templates.md) of a part before the full print |
+| `setup_workspace` | first-run setup: asks for your printer, material, export formats and default style, saves them with `save_setup`, then offers the calibration coupons in order (hole, fit, overhang and bridge) |
 | `calibrate_hole_comp` | walk through printing and measuring the [hole coupon](hole-compensation.md) |
 
 ## Resources
@@ -210,5 +212,7 @@ copy (over HTTP, a workspace nobody uses for 30 days is [removed](../getting-sta
 The descriptions of the tools that write files, their results, the server's instructions,
 `AGENTS.md` and the prompts all say the same: use only the MCP tools and the links they return
 (the server gives no shell, ssh or scp access), and as the last step call `download_part`, unzip
-it in the project folder, and check the files are there before reporting. Results over HTTP and
+it in the project folder, and check the files are there before reporting. A remote `export` or
+`make_template` result ends with a **NEXT STEP** naming the exact call, and `embed=True` when
+the zip fits the 8 MB limit, for a shell without network. Results over HTTP and
 SSH show workspace-relative paths (`parts/box/out/box.3mf`), never the server's own folders.

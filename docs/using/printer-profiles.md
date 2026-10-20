@@ -22,6 +22,8 @@ b123d-print printer use bambu_lab_a1_mini --material petg
 - `b123d-print printer show` shows the active printer; `b123d-print printer use generic` goes
   back.
 - Over MCP: the `use_printer` tool searches and sets them; `list_parts` shows the active ones.
+- First run: `b123d-print setup` (or the `setup_workspace` prompt) asks for the printer,
+  material, formats and style in one go, then lists the calibration coupons to print.
 
 ## What a profile holds
 

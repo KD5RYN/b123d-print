@@ -60,7 +60,8 @@ own docs (linked) and nobody has run b123d-print with it yet: tell us how it wen
 | [Claude Code](#claude-code) | yes | yes (`--header`) | yes | yes | yes |
 | [claude.ai](#claudeai-web-and-mobile-custom-connectors) (web, mobile) | no | only with the Request headers beta | yes | yes | untested |
 | [ChatGPT](#chatgpt) | no | no (OAuth or no auth only) | not documented | not documented | untested |
-| [Gemini CLI](#gemini-cli) | yes | see its docs | not documented | not documented | |
+| [Gemini CLI](#gemini-cli) | yes | yes (`httpUrl`, `headers`) | yes | not documented | |
+| [Antigravity](#antigravity-agy-cli-and-ide) (`agy` CLI, IDE) | yes | yes (`serverUrl`, `headers`) | yes | not documented | yes (agy, HTTP) |
 | [Cursor](#cursor) | yes | see its docs | not documented | not documented | |
 | [VS Code](#vs-code-copilot-agent-mode) | yes | see its docs | not documented | not documented | |
 | [Codex CLI](#codex-cli) | yes | see its docs | not documented | not documented | |
@@ -115,6 +116,86 @@ The server is also listed in the [MCP Registry](https://registry.modelcontextpro
   }
 }
 ```
+
+Remote (HTTP): Gemini CLI takes `httpUrl` for Streamable HTTP (`url` means SSE there) and
+`headers` ([Gemini CLI MCP servers](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)):
+
+```json
+{"mcpServers": {"b123d-print": {"httpUrl": "https://cad.example.com/mcp?workspace=<name>", "headers": {"Authorization": "Bearer <token>"}}}}
+```
+
+`/mcp` lists the servers and their tools. Tool-result images reach the model as images;
+`"trust": true` on the server skips the confirmations. Its shell is not sandboxed unless you turn
+the sandbox on, so the usual `download_part` link and `curl` work. Google's newer
+[Antigravity CLI](#antigravity-agy-cli-and-ide) uses a different config file and keys.
+
+## Antigravity (`agy` CLI and IDE)
+
+Google Antigravity drives Gemini from the Antigravity app, the IDE and the `agy` CLI
+([install](https://antigravity.google/docs/getting-started?tab=cli)). All three read the same
+MCP config ([Antigravity MCP](https://antigravity.google/docs/mcp)). Tested: `agy` against a
+remote HTTP server.
+
+**Global**, `~/.gemini/config/mcp_config.json`. A remote server takes `serverUrl` (Antigravity
+refuses `url` and `httpUrl`) and `headers`:
+
+```json
+{
+  "mcpServers": {
+    "b123d-print": {
+      "serverUrl": "https://cad.example.com/mcp?workspace=<name>",
+      "headers": {"Authorization": "Bearer <token>"}
+    }
+  }
+}
+```
+
+Other agent CLIs don't import this file (unlike `~/.claude.json`), but it fixes one
+`?workspace=` for every folder you open.
+
+**Per project**, one workspace per folder: the same block in `.agents/mcp_config.json` in the
+project folder ([Antigravity MCP](https://antigravity.google/docs/mcp)), or as a plugin,
+`.agents/plugins/b123d-print/plugin.json` with `{"name": "b123d-print"}` next to
+`.agents/plugins/b123d-print/mcp_config.json` ([plugins](https://antigravity.google/docs/plugins);
+the CLI needs the `name`). Give each project [its own token](http.md#connect-a-new-ai), and keep
+`.agents/` out of git when it holds one.
+
+**Local** instead of a server: `"command": "uvx", "args": ["--from", "b123d-print",
+"b123d-print-mcp", "--workspace", "/Users/you/parts"]` (or `uvx b123d-print mcp`). The files
+are then written straight into the project folder, and nothing needs downloading.
+
+**Reload.** After creating or editing the config, type `/mcp` in `agy` and reload the servers
+(or restart `agy`); in the IDE, Manage MCP Servers, then Refresh. A turn already running doesn't pick up new
+tools.
+
+**Approvals.** An MCP tool you haven't configured asks before it runs
+([Antigravity MCP](https://antigravity.google/docs/mcp)), and the agent modes don't change that:
+`accept-edits` approves file edits only ([modes](https://antigravity.google/docs/cli/modes)).
+Allow a tool when it asks, or add rules to `permissions.allow` in
+`~/.gemini/antigravity-cli/settings.json` (`/settings` in `agy`; the agent can't edit that file)
+([permissions](https://antigravity.google/docs/permissions)):
+
+```json
+{"permissions": {"allow": ["mcp(b123d-print/*)", "command(unzip)"]}}
+```
+
+`mcp(b123d-print/build_part)` allows one tool instead of all of them. Rules match a command's
+first words, so **ask the agent for one command at a time**: `unzip ... && ls ...` or a pipe
+doesn't match `command(unzip)` and asks again.
+
+**Bringing the files home.** With the terminal sandbox on, `agy`'s shell has no network
+([sandbox](https://antigravity.google/docs/sandbox); `enableTerminalSandbox`, or `--sandbox`),
+so the `curl` that `download_part` suggests fails. Use the zip inside the result instead:
+
+1. `download_part("<name>", embed=True)`: the zip (up to 8 MB) comes back inside the MCP result,
+   and `agy` saves it as a file under
+   `~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/steps/<N>/media_0.zip`.
+2. `unzip -o <that file> -d <project folder>`: it creates `parts/<name>/...` offline.
+
+Images from `render_preview` and `section` reach the model and are saved next to it the same way
+(`media_0.png`). A remote `export` ends with a NEXT STEP that says this; still, tell the agent
+to bring the part home if it reports without doing so (the save location is what we saw in a
+real session, not from Google's docs).
 
 ## Cursor
 

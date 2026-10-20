@@ -255,3 +255,14 @@ def test_style_file_fields_documented():
 
     section = page("using/design-review.md").split("## Custom styles\n", 1)[1].split("\n## ", 1)[0]
     assert set(table_rows(section)) == FILE_FIELDS
+
+
+def test_mcp_clients_cover_antigravity():
+    """Antigravity (agy) has its section and a row in the clients table, with the remote key it
+    actually reads (serverUrl), the reload, the approvals and the files-home recipe."""
+    text = page("getting-started/mcp-clients.md")
+    section = text.split("## Antigravity (`agy` CLI and IDE)\n", 1)[1].split("\n## ", 1)[0]
+    assert "[Antigravity](#antigravity-agy-cli-and-ide)" in text.split("## Which clients", 1)[1].split("\n## ", 1)[0]
+    for needle in ("~/.gemini/config/mcp_config.json", "serverUrl", ".agents/", "/mcp", "permissions.allow",
+                   "mcp(b123d-print/*)", "command(unzip)", "embed=True", "unzip -o", "uvx", "&&"):
+        assert needle in section, needle
