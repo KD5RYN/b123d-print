@@ -19,6 +19,15 @@
   end-to-end test runs the Antigravity flow: export, `download_part(embed=True)`, unzip into a
   fresh project folder, compare.
 
+- **Pinned build tooling** (#70): every GitHub Action in the workflows is pinned to a full commit
+  SHA (version in a comment), including `pypa/gh-action-pypi-publish`, which tracked the
+  `release/v1` branch (now v1.14.2), and the Dockerfile's `python:3.12-slim-bookworm` and
+  `ghcr.io/astral-sh/uv:0.13.0` images by their multi-arch index digest. A moved upstream tag can
+  no longer run in the release jobs that hold OIDC, package or write tokens, and the GHCR image
+  is built from known bases. Dependabot updates them weekly (one grouped PR for actions, one for
+  images), and CI fails on an unpinned `uses:` or base image. How to update the pins by hand:
+  [Releasing](https://kd5ryn.github.io/b123d-print/contributing/releasing/#pinned-actions-and-images).
+
 ## 0.3.6 — 2026-10-20
 
 - **From part to print** ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/), #65): a new
