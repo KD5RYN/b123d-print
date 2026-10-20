@@ -10,6 +10,11 @@ This skill is a thin pointer: the workflow is shared with every other agent and 
 1. **Read the rules first**: the MCP resource `b123d-print://guide` (same text as `AGENTS.md` in a
    b123d-print workspace). Follow it exactly, in particular:
    - list every dimension read from photos and **wait for confirmation** before modeling;
+   - getting measurements: ask for units, a datum, the critical dimensions and the accuracy of
+     each; suggest the method for the part (calipers, a scan or photo on a grid, a profile gauge
+     or wire for curves, a table of offsets at fixed stations for large or curved parts); ask
+     for a scale reference in the photos; record confirmed values in `Dims` with their source
+     and accuracy;
    - named UPPER_CASE dimensions in a `Dims` dataclass, mm, print orientation with the bed at Z=0;
    - 0.2 mm mating clearance by default; `HOLE_COMP` comes from the user's config, never hard-coded;
    - verify with `render_preview`, `section` and `check` (plus `Wall` checks around deep cuts)
