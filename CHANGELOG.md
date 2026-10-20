@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.5 — unreleased
+## 0.3.5 — 2026-10-19
 
 - **HTTP: the workspace is resolved once.** The auth layer works out the request's workspace and the
   tools use exactly that one. A request that names the workspace more than once, or differently in
