@@ -49,8 +49,10 @@ paste into the script; never put edge ids in the script, they change with the mo
    Each is built only when that piece is needed, so `parts=` (MCP) or `--only` (CLI) builds just
    the pieces named. Plain shapes work too, but then every call builds them all.
 5. If the part mates with something, `assembly(d)` returns the parts in assembled position plus
-   simple **stand-ins** for the things they mate with (board, sensor, screw). The overlap check
-   uses it: nothing printed may intersect a stand-in.
+   simple **stand-ins** for the things they mate with (board, sensor, screw). Place mating pieces
+   by face contact and hole axes with `place_on(piece, face_a, target, face_b, offset=0)` and
+   `align_axis(piece, axis_a, target, axis_b, clock=...)` instead of hand-computed `Pos`/`Rot`
+   math. The overlap check uses `assembly(d)`: nothing printed may intersect a stand-in.
 6. `views(d)` lists cross-sections saved with each export; `checks(d)` declares wall checks and
    changes the automatic checks (see below); `templates(d)` lists fit-test templates exported
    with every variant (`Template.slice("XY", 3)`, `Template.face_of("bottom")`, `Template.crop(...)`).

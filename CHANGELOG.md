@@ -2,6 +2,15 @@
 
 ## 0.3.7 — unreleased
 
+- **Place assembly pieces by contact** ([docs](https://kd5ryn.github.io/b123d-print/using/fit/#placing-pieces-by-contact), #56):
+  `place_on(piece, face_a, target, face_b, offset=0.0, spin=0.0, shift=(0.0, 0.0))` turns and
+  moves `piece` so its flat `face_a` rests on `target`'s flat `face_b` (coplanar, opposed
+  outward normals; faces picked by side `"bottom"` / `"top"` / `"+X"`, `list_faces` id, point or
+  `Face`), and `align_axis(piece, axis_a, target, axis_b=None, *, clock=None, offset=None,
+  flip=False, keep_contact=None)` lines up round holes, bosses or pins coaxially across pieces
+  (sliding in the contact plane after `place_on`, with `clock=` to clock around a second hole/pin
+  pair). Preserves `Part.label` and `Part.color`.
+
 - **Antigravity** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#antigravity-agy-cli-and-ide)):
   Google Antigravity (the `agy` CLI and the IDE, driving Gemini) is a documented, tested client:
   the global (`~/.gemini/config/mcp_config.json`) and per-project (`.agents/`) config with

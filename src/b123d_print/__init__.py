@@ -8,7 +8,7 @@ and import_model (remix an existing STL, 3MF or STEP).
 from .checks import (BedEdge, Finding, Fit, Gap, Holes, Overhang, Overlap, Probe, ThinFeature, TipOver, Wall, holes,
                      overhang_faces, overlap, wall_thickness)
 from .config import Settings, clearance, hole_comp, load_settings, printer
-from .fit import Mates
+from .fit import Mates, align_axis, place_on
 from .motion import Motion, Slide
 from .project import View, run
 from .remix import import_model
@@ -17,6 +17,6 @@ from .templates import Template, crop_template, face_template, list_faces, slice
 
 __all__ = [
     "BedEdge", "Finding", "Fit", "Gap", "Holes", "Mates", "Motion", "Overhang", "Overlap", "Probe", "Settings", "Slide", "Template", "ThinFeature", "TipOver", "View",
-    "Wall", "clearance", "crop_template", "export", "export_files", "face_template", "hole_comp", "holes", "import_model", "list_faces", "load_settings", "overhang_faces", "overlap", "printer", "render", "report",
+    "Wall", "align_axis", "clearance", "crop_template", "export", "export_files", "face_template", "hole_comp", "holes", "import_model", "list_faces", "load_settings", "overhang_faces", "overlap", "place_on", "printer", "render", "report",
     "run", "section", "section_view", "slice_template", "wall_thickness",
 ]
