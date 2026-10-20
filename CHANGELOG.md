@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.7 — unreleased
+## 0.3.7 — 2026-10-20
 
 - **Place assembly pieces by contact** ([docs](https://kd5ryn.github.io/b123d-print/using/fit/#placing-pieces-by-contact), #56):
   `place_on(piece, face_a, target, face_b, offset=0.0, spin=0.0, shift=(0.0, 0.0))` turns and
