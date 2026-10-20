@@ -133,6 +133,8 @@ def out_files(workspace: Path, part: str, formats=FORMATS) -> list[Path]:
     for p in sorted(out.iterdir()):
         if p.suffix.lower() not in want:
             continue
+        if p.suffix.lower() == ".json" and not p.name.lower().endswith("_hardware.json"):
+            continue
         try:
             found.append(servable(workspace, parts_dir, f"{parts_dir}/{part}/out/{p.name}"))
         except LinkError:

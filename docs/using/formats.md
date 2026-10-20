@@ -23,6 +23,9 @@ Pick them in your config (`formats = ["3mf", "png"]`, see [Settings](settings.md
 means all seven (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`). Default: `step`, `stl`, `3mf` and `png`.
 What to do with the files in the slicer: [From part to print](slicing.md).
 
+The `hardware` download/pull format filter selects only `*_hardware.json` BOMs; other JSON
+outputs, such as traced outlines, remain available in an unfiltered whole-part download.
+
 Files go to `parts/<name>/out/`. A variant's files carry its key as a suffix, and section
 views carry the plane and position (`plate_2gang_to_1gang_xy2.45.png` is the `XY` section at
 Z = 2.45).

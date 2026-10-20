@@ -125,6 +125,8 @@ def part_files(ws: Path, parts_dir: str, name: str, variant: str | None = None,
     for p in _plain_files(folder / "out"):
         if want_suffix is not None and p.suffix.lower() not in want_suffix:
             continue
+        if want_suffix is not None and p.suffix.lower() == ".json" and not p.name.lower().endswith("_hardware.json"):
+            continue
         if keys is not None and _variant_of(p.stem, name, keys) != key:
             continue
         out.append((f"out/{p.name}", p))

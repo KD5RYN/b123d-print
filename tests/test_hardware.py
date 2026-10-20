@@ -94,8 +94,16 @@ def test_export_variant_subset_and_handoff(tmp_path):
     # The default variant gets its own quantities and files.
     project.export_variant(mod, script, "", formats=("hardware",), only="pin")
     assert json.loads((out / "duo_hardware.json").read_text())["items"][0]["quantity"] == 4
+    for filename in ("duo_trace.json", "duo_wide_trace.json", "unrelated.json"):
+        (out / filename).write_text("{}", encoding="utf-8")
     files = dict(handoff.part_files(tmp_path, "parts", "duo", variant="wide", formats=["print", "hardware"]))
     assert set(files) == {"duo.py", "out/duo_wide_print.md", "out/duo_wide_hardware.json"}
+    files = dict(handoff.part_files(tmp_path, "parts", "duo", formats=["hardware"]))
+    assert set(files) == {"duo.py", "out/duo_hardware.json", "out/duo_wide_hardware.json"}
+    files = dict(handoff.part_files(tmp_path, "parts", "duo", variant="standard", formats=["hardware"]))
+    assert set(files) == {"duo.py", "out/duo_hardware.json"}
+    # Omitting the filter retains the existing whole-folder handoff behavior.
+    assert "out/unrelated.json" in dict(handoff.part_files(tmp_path, "parts", "duo"))
 
 
 def test_data_stays_data_and_models_are_lazy():
