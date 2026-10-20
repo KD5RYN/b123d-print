@@ -77,8 +77,9 @@ def images(res):
 
 
 def why(*results) -> str:
-    """A short reason a build-type step failed (the tool's error/log), for the CI log."""
-    return " | ".join(text(r).strip().replace("\n", " ")[:300] for r in results if text(r).strip())
+    """Why a build-type step failed (the tool's error and the worker's log), for the CI log. Wide
+    enough to include the worker's stderr (the 'Output:' section), which carries a sandbox error."""
+    return "\n".join(text(r).strip()[:1500] for r in results[:1] if text(r).strip())
 
 
 async def flow(c, pw, expect, mode: str = "stdio") -> None:
