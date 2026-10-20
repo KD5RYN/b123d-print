@@ -69,8 +69,10 @@ services:
       # alone (not an isolation boundary) or give each client its own deployment.
       B123D_PRINT_SANDBOX: bubblewrap
     security_opt:
-      # a custom seccomp profile (Docker's default blocks the mount/namespace syscalls bubblewrap
-      # needs); it still denies the privileged syscalls neither a build nor bubblewrap uses
+      # a custom seccomp profile: allow-by-default with a deny list, unlike Docker's default
+      # (deny-by-default allowlist), because bubblewrap needs the namespace and mount syscalls
+      # Docker's default blocks; it still denies the privileged syscalls neither a build nor
+      # bubblewrap uses (see deploy/seccomp-bwrap.json)
       - seccomp=./seccomp-bwrap.json
       # unprivileged user namespaces also need AppArmor not to block them (Ubuntu 23.10+ restricts
       # them by default); the worker has no network regardless (network_mode: none)
