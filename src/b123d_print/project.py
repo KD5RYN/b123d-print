@@ -45,6 +45,7 @@ from . import checks as ck
 from .config import Settings, hole_comp_source, load_settings, parse_formats, safe_console
 from .motion import _Swept
 from .motion import image_path as motion_image
+from .partfiles import find_parts, resolve_part, timing_lines  # noqa: F401  (light: the MCP server imports them from there)
 from .render import export_files, render, report, section_view
 
 
@@ -378,8 +379,10 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
             items = [(i, side) for i in range(len(specs)) for side in ("part", "original")
                      if side == "part" or res["inherit"][i]]
             originals = OriginalFindings(mod, orig, settings) if orig is not None else None
-            costs = [0.01 if side == "original" and started is not None
-                     and originals.cached_before(replace(specs[i], part=ORIGINAL), started)
+            found_cache = CheckCache(pc.cache, key, lookup, settings, specs) if pc.cache is not None and orig is None else None
+            costs = [0.01 if started is not None and (
+                         originals.cached_before(replace(specs[i], part=ORIGINAL), started) if side == "original"
+                         else found_cache is not None and found_cache.cached_before(specs[i], started))
                      else item_cost(specs[i], lookup, asm, orig if side == "original" else None) for i, side in items]
             mine = partition(costs, share[1], first=0.0003 * sum(len(p.faces()) for p in parts.values()))
             todo = [it for it, j in zip(items, mine) if j == share[0]]
@@ -396,7 +399,11 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                         if isinstance(spec, _Swept) and spec.image is None and getattr(mod, "__file__", None):
                             script = Path(mod.__file__)  # a motion draws its worst pose next to the exports
                             spec = replace(spec, image=str(motion_image(script.parent / "out", out_name(script.stem, key, ""), spec)))
-                        found = spec.run(lookup, asm, settings)
+                        found = found_cache.get(spec) if found_cache is not None else None
+                        if found is None:
+                            found = spec.run(lookup, asm, settings)
+                            if found_cache is not None:
+                                found_cache.put(spec, found)
                         if isinstance(spec, ck.ThinFeature) and res["inherit"][i]:
                             probe = originals.probe(spec)  # is the original thin at each listed spot? (merge_shares)
                             for f in found:
@@ -677,6 +684,117 @@ class OriginalFindings:
         return found
 
 
+# the per-piece checks whose findings CheckCache keeps: each reads one printable piece (by name,
+# in print coordinates), its own arguments and the settings, nothing else. Exact types: a
+# subclass may read more. Fit reads the printer profile's file, the assembly checks other pieces.
+PIECE_CHECKS = (ck.ThinFeature, ck.Overhang, ck.Holes, ck.BedEdge, ck.TipOver, ck.Gap, ck.Wall, ck.Probe)
+
+
+class CheckCache:
+    """The findings of the per-piece checks (PIECE_CHECKS), saved in out/.cache/ next to the build
+    cache (BuildCache: only the sandboxed worker uses it, never through a link, and fresh reads
+    none of it) and read back while nothing they depend on changed. The key: the piece's geometry
+    (shape_fingerprint, so a piece rebuilt the same is a hit and a changed one a miss), the check's
+    arguments (its repr), the settings, the line width, the variant and the code (b123d-print's
+    version, the checks' and this module's source). A missing, broken or mismatched entry is a
+    miss: the check runs and saves its findings again. Assembly-level checks (Overlap, Mates, a Gap
+    between two parts, a Wall or Probe in the assembly frame, Motion and Slide) are never cached:
+    they run every time. Writing a check's new findings removes the older entries of its slot (the
+    variant, the check's type and piece, and which of those it is in checks(d))."""
+
+    def __init__(self, build: BuildCache, key: str, lookup: dict, settings: Settings, specs: list):
+        self.build, self.variant, self.lookup, self.settings = build, key, lookup, settings
+        self._fps: dict[int, str] = {}
+        self._base: str | None = None
+        self._slots: dict[int, list] = {}
+        seen: dict = {}
+        for sp in specs:
+            kind = (type(sp).__name__, repr(getattr(sp, "part", None)))
+            self._slots[id(sp)] = [key, *kind, seen.setdefault(kind, 0)]
+            seen[kind] += 1
+
+    def _piece(self, spec):
+        """The piece `spec` reads, or None when its findings are not cached."""
+        if type(spec) not in PIECE_CHECKS or not isinstance(getattr(spec, "part", None), str):
+            return None
+        if getattr(spec, "frame", "print") != "print" or (isinstance(spec, ck.Gap) and spec.other is not None):
+            return None
+        try:
+            return ck._get(self.lookup, spec.part)
+        except KeyError:
+            return None
+
+    def _paths(self, spec) -> tuple[Path, str] | None:
+        """(the entry's path, its key) or None (not cached)."""
+        import hashlib
+        import json
+
+        part = self._piece(spec)
+        args = repr(spec)
+        if part is None or " at 0x" in args:  # an argument without a stable repr: not cached
+            return None
+        if id(part) not in self._fps:
+            self._fps[id(part)] = shape_fingerprint(part)
+        if self._base is None:
+            from dataclasses import asdict
+
+            s = {k: v for k, v in asdict(self.settings).items() if k != "root"}
+            self._base = json.dumps([CACHE_VERSION, "check", repr(sorted(s.items())), ck.line_width(self.settings),
+                                     code_version(), _file_hash(Path(__file__))])
+        slot = self._slots.get(id(spec), [self.variant, args])
+        prefix = hashlib.sha256(json.dumps(slot).encode()).hexdigest()[:12]
+        k = hashlib.sha256(f"{self._base}|{self.variant}|{args}|{self._fps[id(part)]}".encode()).hexdigest()[:32]
+        return self.build.root / f"check-{prefix}-{k}.json", k
+
+    def cached_before(self, spec, when: float) -> bool:
+        """Were the findings of `spec` saved before `when` (time.time())? (check_share: every share
+        sees the same, so they all compute the same partition)"""
+        got = None if self.build.cfg.fresh else self._paths(spec)
+        if got is None:
+            return False
+        try:
+            return got[0].stat().st_mtime < when
+        except OSError:
+            return False
+
+    def get(self, spec) -> list[ck.Finding] | None:
+        """The saved findings of `spec`, or None (a miss)."""
+        import json
+
+        got = self._paths(spec)
+        if got is None or not self.build._usable(got[0]):
+            return None
+        try:
+            raw = json.loads(got[0].read_text(encoding="utf-8"))
+            if raw["key"] != got[1]:
+                return None
+            return [ck.Finding(**f) for f in raw["findings"]]
+        except (OSError, ValueError, KeyError, TypeError):  # missing or broken: run the check again
+            return None
+
+    def put(self, spec, findings: list[ck.Finding]) -> None:
+        import os
+
+        got = self._paths(spec)
+        if got is None or not self.build.ok or os.path.islink(self.build.root):
+            return
+        path, k = got
+        try:
+            self.build.root.mkdir(parents=True, exist_ok=True)
+            when = path.stat().st_mtime if path.is_file() else None  # an entry replaced keeps its time (cached_before)
+        except OSError:
+            return
+        _write_json(path, {"key": k, "findings": [finding_dict(f) for f in findings]})
+        try:
+            if when is not None:
+                os.utime(path, (when, when))
+            for p in self.build.root.glob(f"{path.name[:len('check-') + 12]}-*.json"):
+                if p.name != path.name and not p.is_symlink():
+                    p.unlink()
+        except OSError:
+            pass
+
+
 def shape_fingerprint(shape) -> str:
     """A hash of a solid's geometry that survives a BREP round trip (unlike the BREP text)."""
     import hashlib
@@ -687,7 +805,7 @@ def shape_fingerprint(shape) -> str:
     a = np.round(np.array(pts, float).reshape(-1, 3), 4) + 0.0  # + 0.0: no -0.0
     a = a[np.lexsort(a.T[::-1])] if len(a) else a
     h = hashlib.sha256(a.tobytes())
-    h.update(f"|{len(shape.faces())}|{len(shape.edges())}|{shape.volume:.3f}".encode())
+    h.update(f"|{len(shape.faces())}|{len(shape.edges())}|{shape.volume:.3f}|{shape.area:.3f}".encode())
     return h.hexdigest()[:32]
 
 
@@ -1080,6 +1198,186 @@ def _write_json(path: Path, data: dict) -> None:
         pass
 
 
+class Outputs:
+    """What export wrote, kept next to the build cache so an export of unchanged pieces writes
+    nothing again (#75): out/.cache/out-<file>.json per output file, with the key of what it was
+    made from and the file's size and time as written. A file is current when its stamp has the
+    same key and the file is still the one written (same size and time: one edited, replaced or
+    removed is written again). Keys: `key()` over the shapes' geometry (shape_fingerprint), their
+    names, colors and labels, the file's own arguments, and the code that writes (b123d-print's
+    version and these modules' source, build123d, OCP, matplotlib). fresh writes everything."""
+
+    def __init__(self, build: BuildCache):
+        self.build = build
+        self._fps: dict[int, str] = {}
+        self._base: str | None = None
+
+    def fingerprint(self, shape) -> str:
+        if id(shape) not in self._fps:
+            self._fps[id(shape)] = shape_fingerprint(shape)
+        return self._fps[id(shape)]
+
+    def key(self, *what) -> str:
+        """A key over `what`: shapes by their geometry, color and label; anything else by repr."""
+        import hashlib
+        import json
+
+        from build123d import Shape
+
+        if self._base is None:
+            import build123d
+            import matplotlib
+            import OCP
+
+            from importlib import import_module
+
+            mods = [import_module(f"{__package__}.{m}") for m in ("project", "render", "templates", "viewer")]  # never b123d_print.render, the function
+            here = [_file_hash(Path(m.__file__)) for m in mods]
+            self._base = json.dumps([CACHE_VERSION, "output", here, code_version(), build123d.__version__,
+                                     getattr(OCP, "__version__", "?"), matplotlib.__version__])
+
+        def one(x):
+            if isinstance(x, Shape):
+                color = getattr(x, "color", None)
+                return ["shape", self.fingerprint(x), repr(getattr(x, "label", "")), repr(tuple(color) if color is not None else None)]
+            if isinstance(x, (list, tuple)):
+                return [one(v) for v in x]
+            return repr(x)
+
+        return hashlib.sha256(json.dumps([self._base, one(list(what))]).encode()).hexdigest()[:32]
+
+    def _stamp(self, f: Path) -> Path:
+        import hashlib
+        import os
+
+        return self.build.root / f"out-{hashlib.sha256(os.path.abspath(f).encode()).hexdigest()[:20]}.json"
+
+    def current(self, f: Path, key: str) -> bool:
+        """Is `f` there, as written for `key`?"""
+        import json
+        import os
+
+        stamp = self._stamp(f)
+        if self.build.cfg.fresh or not self.build.ok or os.path.islink(stamp) or os.path.islink(f):
+            return False
+        try:
+            st, note = f.stat(), json.loads(stamp.read_text(encoding="utf-8"))
+            return note["key"] == key and note["size"] == st.st_size and note["mtime"] == st.st_mtime_ns
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+
+    def wrote(self, f: Path, key: str) -> None:
+        import os
+
+        if not self.build.ok or os.path.islink(self.build.root):
+            return
+        try:
+            st = Path(f).stat()
+            self.build.root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+        _write_json(self._stamp(Path(f)), {"key": key, "size": st.st_size, "mtime": st.st_mtime_ns})
+
+    def write(self, f: Path, key: str, make) -> Path:
+        """`f`, written by make() unless it is current; stamped."""
+        if self.current(f, key):
+            return f
+        made = Path(make())
+        self.wrote(made, key)
+        return made
+
+
+EXPORT_ORDER = ("step", "stl", "3mf", "png", "glb")  # export_files' order
+
+
+def export_part(p, out: Path, name: str, formats, outputs: Outputs | None) -> list[Path]:
+    """export_files, skipping the files `outputs` says are current (each format on its own)."""
+    if outputs is None:
+        return export_files(p, out, name, formats)
+    files = []
+    for fmt in (f for f in EXPORT_ORDER if f in formats):
+        files.append(outputs.write(out / f"{name}.{fmt}", outputs.key("part", name, fmt, p),
+                                   lambda fmt=fmt: export_files(p, out, name, [fmt])[0]))
+    return files
+
+
+TEMPLATE_TYPES = ("Part", "Compound", "Solid", "Face")  # what a template's shapes are saved as
+
+
+class TemplateCache:
+    """Fit-test templates (templates.make) saved in out/.cache/template-<slot>-<key>/ and read back
+    instead of made again: a template is a function of the piece it is cut from (its geometry), the
+    Template spec, the label text and the code. A broken or mismatched entry is a miss."""
+
+    def __init__(self, build: BuildCache, outputs: Outputs):
+        self.build, self.outputs = build, outputs
+
+    def _dir(self, variant: str, pname: str, spec, part, label_name: str) -> Path:
+        import hashlib
+        import json
+
+        slot = hashlib.sha256(json.dumps([variant, pname, spec.ident()]).encode()).hexdigest()[:12]
+        return self.build.root / f"template-{slot}-{self.outputs.key('template', spec, label_name, part)}"
+
+    def get(self, d: Path):
+        import json
+        import os
+
+        import build123d
+        from build123d import import_brep
+
+        from . import templates as tp
+
+        if self.build.cfg.fresh or not self.build.ok or os.path.islink(d):
+            return None
+        try:
+            note = json.loads((d / "note.json").read_text(encoding="utf-8"))
+            shapes = {}
+            for k in ("part", "where"):
+                n = note[k]
+                path = d / f"{k}.brep"
+                if n["type"] not in TEMPLATE_TYPES or os.path.islink(path) or _file_hash(path) != n["sha256"]:
+                    return None
+                got = import_brep(path)
+                shapes[k] = got if type(got).__name__ == n["type"] else getattr(build123d, n["type"])(got.wrapped)
+            return note["id"], tp.Made(shapes["part"], shapes["where"], note["info"], [_tuples(b) for b in note["ignore"]])
+        except Exception:  # noqa: BLE001 - a broken entry is a miss, never an error
+            return None
+
+    def save(self, d: Path, tid: str, made) -> None:
+        import json
+        import os
+        import shutil
+
+        from build123d import export_brep
+
+        if not self.build.ok or os.path.islink(self.build.root):
+            return
+        try:
+            note = json.loads(json.dumps({"id": tid, "info": made.info, "ignore": made.ignore}))
+        except (TypeError, ValueError):  # info that JSON cannot hold: not cached
+            return
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            for k in ("part", "where"):
+                shape = getattr(made, k)
+                kind = type(shape).__name__
+                path = d / f"{k}.brep"
+                if kind not in TEMPLATE_TYPES or not export_brep(shape, path):
+                    return
+                note[k] = {"type": kind, "sha256": _file_hash(path)}
+            _write_json(d / "note.json", note)
+            for p in self.build.root.glob(d.name[:len("template-") + 12] + "-*"):
+                if p.name != d.name and p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p, ignore_errors=True)
+        except Exception:  # noqa: BLE001 - a cache that cannot be written is no cache, not an error
+            return
+
+
+def _tuples(x):
+    return tuple(_tuples(v) for v in x) if isinstance(x, list) else x
+
+
 def make_pieces(mod: ModuleType, key: str, d, settings: Settings, cache: CacheConfig | None = None) -> Pieces:
     """The pieces of one variant, through the build cache when `cache` is given (the worker), the
     script builds pieces (not a module-level `part`) and B123D_PRINT_NO_CACHE is not set."""
@@ -1133,20 +1431,21 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     out.mkdir(parents=True, exist_ok=True)
     d = dims(mod, key)
     pc = make_pieces(mod, key, d, settings, cache)
+    outputs = Outputs(pc.cache) if pc.cache is not None else None
     parts, orig, _ = built(mod, d, pc, only)
     names = {n or "part" for n in parts}
-    asm = None if only else pc.assembly()
+    asm = None if only or "png" not in formats else pc.assembly()  # only the renders use it
     summary = {"variant": key or "standard", "parts": {}, "files": []}
     for pname, p in parts.items():
         name = out_name(script.stem, key, pname)
-        files = export_files(p, out, name, formats)
+        files = export_part(p, out, name, formats, outputs)
         summary["parts"][pname or "part"] = report(p)
         summary["files"] += [str(f) for f in files]
     tf = getattr(mod, "templates", None)
     for spec in tf(d) if tf else []:
         if only and (spec.part or "part") not in names:
             continue
-        r = write_template(script, key, parts, spec, out, formats)
+        r = write_template(script, key, parts, spec, out, formats, outputs=outputs, size="small")
         summary.setdefault("templates", {})[r["name"]] = r["report"]
         summary["files"] += r["files"]
     if "print" in formats:  # the print sheet: one per variant, every piece exported in this run
@@ -1159,7 +1458,9 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     if "png" not in formats:
         return summary
     if asm:
-        f = render(asm, out / f"{out_name(script.stem, key, 'assembly')}.png", f"{out_name(script.stem, key, '')} assembly")
+        f, title = out / f"{out_name(script.stem, key, 'assembly')}.png", f"{out_name(script.stem, key, '')} assembly"
+        f = (outputs.write(f, outputs.key("assembly", title, asm), lambda: render(asm, f, title)) if outputs is not None
+             else render(asm, f, title))
         summary["files"].append(str(f))
     if orig is not None:
         r = before_after(orig, parts, out, out_name(script.stem, key, ""))
@@ -1174,30 +1475,52 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         else:
             sel = asm or [(p, None, n or "part") for n, p in parts.items()]
         title = out_name(script.stem, key, "")
-        f = section_view(sel, v.plane, v.at, out / f"{title}_{v.plane.lower()}{round(v.at, 3):g}.png",
-                         f"{title}{', ' + v.title if v.title else ''}")
+        f, caption = out / f"{title}_{v.plane.lower()}{round(v.at, 3):g}.png", f"{title}{', ' + v.title if v.title else ''}"
+
+        def draw(sel=sel, v=v, f=f, caption=caption):
+            return section_view(sel, v.plane, v.at, f, caption)
+
+        f = outputs.write(f, outputs.key("section", v.plane, v.at, caption, sel), draw) if outputs is not None else draw()
         summary["files"].append(str(f))
     return summary
 
 
-def write_template(script: Path, key: str, parts: dict, spec, out: Path, formats, settings=None) -> dict:
+def write_template(script: Path, key: str, parts: dict, spec, out: Path, formats, settings=None,
+                   outputs: Outputs | None = None, size: str = "normal") -> dict:
     """Make one fit-test template (templates.Template) from the built parts and write it as
     <name>[_<variant>]_template_<id>.<fmt>; with png also <...>_where.png, the part with the
-    template's source in red. settings: also run the print checks on it ("findings")."""
+    template's source in red. settings: also run the print checks on it ("findings").
+    outputs: read the template from the TemplateCache and skip the files that are current
+    (export, in the worker); size: of the two PNGs."""
     from . import templates as tp
 
     pname, part = tp.pick_part(parts, spec.part)
     label_name = script.stem if pname == "part" else f"{script.stem} {pname}"
-    try:
-        tid, made = tp.make(spec, part, label_name)
-    except tp.TemplateError as e:
-        raise tp.TemplateError(f"template {spec.kind} ({_spec_args(spec)}) of {pname}: {e}") from None
+    tc = TemplateCache(outputs.build, outputs) if outputs is not None else None
+    entry = tc._dir(key, pname, spec, part, label_name) if tc is not None else None
+    got = tc.get(entry) if tc is not None else None
+    if got is not None:
+        tid, made = got
+    else:
+        try:
+            tid, made = tp.make(spec, part, label_name)
+        except tp.TemplateError as e:
+            raise tp.TemplateError(f"template {spec.kind} ({_spec_args(spec)}) of {pname}: {e}") from None
+        if tc is not None:
+            tc.save(entry, tid, made)
     name = out_name(script.stem, key, f"template_{tid}" if pname == "part" else f"{pname}_template_{tid}")
-    files = [str(f) for f in export_files(made.part, out, name, [f for f in formats if f != "png"])]
+    files = [str(f) for f in export_part(made.part, out, name, [f for f in formats if f != "png"], outputs)]
     if "png" in formats:
-        files.append(str(render(made.part, out / f"{name}.png", f"{name} (laid flat for printing)")))
-        files.append(str(tp.highlight(part, [made.where], out / f"{name}_where.png",
-                                      f"{name}: where it comes from (red) on {out_name(script.stem, key, '') or pname}")))
+        shots = [(out / f"{name}.png", f"{name} (laid flat for printing)",
+                  lambda f, t: render(made.part, f, t, size=size), made.part),
+                 (out / f"{name}_where.png", f"{name}: where it comes from (red) on {out_name(script.stem, key, '') or pname}",
+                  lambda f, t: tp.highlight(part, [made.where], f, t, size=size), (part, made.where))]
+        for f, title, draw, shapes in shots:
+            if outputs is not None:
+                f = outputs.write(f, outputs.key("template png", title, size, shapes), lambda f=f, t=title, g=draw: g(f, t))
+            else:
+                f = draw(f, title)
+            files.append(str(f))
     res = {"name": name, "id": tid, "part": pname, "variant": key or "standard", "info": made.info,
            "report": report(made.part), "files": files}
     if settings is not None:
@@ -1268,30 +1591,3 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
                     print("  " + f.line())
                 worst = max(worst, {"ok": 0, "warn": 0, "fail": 1}[f.level])
     sys.exit(worst)
-
-
-def timing_lines(timing: dict) -> list[str]:
-    """The timing report (Pieces.timing) as text lines: one per piece, then the hints."""
-    out = []
-    for name, st in timing["pieces"].items():
-        secs = (f"{st['seconds']:.1f} s" if st.get("seconds") is not None else "built by build(d)")
-        out.append(f"{name}: {st['faces']} faces, {secs}" + (" (cached)" if st.get("cached") else ""))
-    if timing.get("build_seconds") is not None:
-        out.append(f"build(d): {timing['build_seconds']:.1f} s")
-    return out + [f"hint: {h}" for h in timing["hints"]]
-
-
-def find_parts(root: Path, parts_dir: str) -> list[Path]:
-    base = root / parts_dir
-    return sorted(p / f"{p.name}.py" for p in base.iterdir() if (p / f"{p.name}.py").is_file()) if base.is_dir() else []
-
-
-def resolve_part(spec: str, root: Path, parts_dir: str) -> Path:
-    """A part name (folder under parts_dir) or a path to a script."""
-    p = Path(spec)
-    if p.suffix == ".py" and p.is_file():
-        return p.resolve()
-    cand = root / parts_dir / spec / f"{spec}.py"
-    if cand.is_file():
-        return cand.resolve()
-    raise FileNotFoundError(f"no part '{spec}' (looked for {cand})")

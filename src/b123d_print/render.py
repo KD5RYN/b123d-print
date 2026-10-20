@@ -15,6 +15,8 @@ import numpy as np  # noqa: E402
 from build123d import Mesher, Part, Plane, Unit, Vector, export_step, export_stl, section as _section  # noqa: E402
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: E402
 
+from .config import IMAGE_SIZES as SIZES  # noqa: E402  (image size: "small" is about 800 px wide, cheaper to send to a model)
+
 # (title, elevation, azimuth, axis whose ticks are hidden) for orthographic views
 VIEWS = [
     ("Iso", 30, -60, None),
@@ -91,7 +93,6 @@ def _as_list(parts) -> list[tuple[Part, str, str]]:
     return [(parts, PALETTE[0], "")]
 
 
-SIZES = ("normal", "small")  # image size: "small" is about 800 px wide (cheaper to send to a model)
 
 
 def _size(size: str) -> str:

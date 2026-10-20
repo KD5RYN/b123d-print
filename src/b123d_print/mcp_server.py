@@ -32,7 +32,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console
-from .project import find_parts, timing_lines
+from .partfiles import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
 
@@ -360,10 +360,10 @@ def _image_links(image: str) -> tuple[str, list]:
 
 
 def _image_options(size: str) -> None:
-    from .render import SIZES
+    from .config import IMAGE_SIZES
 
-    if size not in SIZES:
-        raise ToolError(f"size must be one of {list(SIZES)}")
+    if size not in IMAGE_SIZES:
+        raise ToolError(f"size must be one of {list(IMAGE_SIZES)}")
 
 
 def _with_image(text: str, image: str, inline: bool) -> list:
@@ -741,8 +741,8 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     around deep cuts) and Probes. The fit between an assembly's pieces (hole alignment, gaps) is
     a separate tool, check_fit, unless the script lists Mates() in checks(d). Fix every FAIL;
     report every WARN. On a remote server (HTTP/SSH) the part is not on the user's machine until
-    download_part brings it home. Uses the pieces cached by an earlier build; fresh=True builds
-    them again."""
+    download_part brings it home. Uses the pieces cached by an earlier build, and each unchanged
+    piece's findings of the per-piece checks; fresh=True builds and checks everything again."""
     res = await _check(name, variant, fresh)
     if not res.get("ok"):
         return _error_text(res)
@@ -823,7 +823,8 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
                  embed: bool = False, fresh: bool = False, view: str = "print") -> list:
     """Export printable parts to parts/<name>/out/. Default: every part, all variants.
     parts: comma-separated part names from build() to build and export only those; variant: one
-    variant. Uses the pieces cached by an earlier build; fresh=True builds them again.
+    variant. Uses the pieces cached by an earlier build and leaves files already up to date as
+    they are (templates too); fresh=True builds and writes everything again.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
     (slicers; 3MF keeps units), png (6-view preview + section views), glb (binary glTF, for web
     and 3D apps), print (the print sheet, <name>[_<variant>]_print.md: size, filament and time
