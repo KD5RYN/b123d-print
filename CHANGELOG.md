@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Workspace isolation on a shared server** ([docs](https://kd5ryn.github.io/b123d-print/using/sandbox/#what-keeps-workspaces-apart)):
+  per-job mounts and immutable guard settings so one client's part script cannot reach another
+  client's files, the job queue or the shared config. The macOS and Linux sandboxes bind or allow
+  only the job's own workspace, the Python install and its config, and hide the rest; each
+  workspace gets its own Matplotlib cache. The Docker HTTP deployment's network-less `worker`
+  container now runs each job in its own bubblewrap mount namespace (needs unprivileged user
+  namespaces; `deploy/compose.yaml` sets the two `security_opt` lines for it). The audit hook's
+  settings are frozen when it is installed and it refuses reads of other workspaces and the tokens
+  file; it remains defense in depth, not an isolation boundary on its own.
+
 ## 0.3.6 — 2026-10-20
 
 - **From part to print** ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/), #65): a new
