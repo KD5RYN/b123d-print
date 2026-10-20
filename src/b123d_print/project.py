@@ -1122,7 +1122,8 @@ def setup_findings_for(findings: list[ck.Finding], hole_comp_set: bool) -> list[
 def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None,
                    only=None, cache: CacheConfig | None = None) -> dict:
     """Export every printable part in `formats` (default: the `formats` setting), plus the
-    assembly render and section views when png is among them. Returns a summary, with the timing
+    assembly render and section views when png is among them, and the print sheet
+    (<name>[_<variant>]_print.md, printsheet.py) when print is. Returns a summary, with the timing
     report (Pieces.timing) under "timing".
     only: just these pieces (comma-separated or a list): no assembly render, and only the views
     and templates of those pieces. cache: build through the build cache (the worker)."""
@@ -1148,6 +1149,12 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         r = write_template(script, key, parts, spec, out, formats)
         summary.setdefault("templates", {})[r["name"]] = r["report"]
         summary["files"] += r["files"]
+    if "print" in formats:  # the print sheet: one per variant, every piece exported in this run
+        from . import printsheet
+
+        title = out_name(script.stem, key, "")
+        f = printsheet.write(mod, d, parts, settings, out, out_name(script.stem, key, "print"), title)
+        summary["files"].append(str(f))
     summary["timing"] = pc.timing()
     if "png" not in formats:
         return summary
@@ -1235,7 +1242,7 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=f"Build {script.stem}")
     ap.add_argument("--variant", choices=[v or "standard" for v in variants(mod)], help="default: all")
     ap.add_argument("--no-check", action="store_true")
-    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png or all (default: the formats setting)")
+    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png,glb,print or all (default: the formats setting)")
     ap.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
                                                       "those (lazy pieces: the others are never built)")
     args = ap.parse_args(argv)

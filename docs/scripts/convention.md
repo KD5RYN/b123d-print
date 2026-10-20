@@ -133,6 +133,13 @@ override them) or at module level:
 | `UP` | `UP = "+Y"` | the side that points up in use (print orientation), for the water-trap check; default `+Z` |
 | `EDGES` | `EDGES = "chamfer"` | the edge language: `chamfer` or `fillet`; functional with `chamfer` is the industrial look |
 
+## For the print sheet
+
+`PRINT_NOTES` (in `Dims` or at module level): a string or a list of strings that the
+[print sheet](../using/slicing.md#the-print-sheet) lists under "Assembly and notes": the order
+to put the pieces together, the glue, inserts to set, a brim. For example
+`PRINT_NOTES: tuple = ("Set the M3 inserts at 230 C before closing the lid.",)`.
+
 ## Values from the user's config
 
 | Helper | Use |
