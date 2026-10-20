@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.6 — unreleased
+
+- **Choose fillet and chamfer edges by id** ([docs](https://kd5ryn.github.io/b123d-print/using/tools/#choosing-edges-for-fillets-and-chamfers), #53).
+  New tool `list_edges` (CLI `b123d-print edges`), like `list_faces`: every edge with a stable
+  id, its type (line, circle, arc, ellipse, spline), length, end points or center and radius,
+  whether it is convex, concave (an inside corner), tangent or a seam, and the two faces it
+  joins (flat ones by their `list_faces` id); filters by face, type, convexity and nearness to a
+  point. `highlight=<ids>` draws the chosen edges in red and returns a selector for them: the
+  shortest `filter_by`/`group_by`/`sort_by` chain (on `part.edges()`, an outermost face's edges,
+  or the new `convex_edges(part)` / `concave_edges(part)`) that selects exactly those edges,
+  checked by evaluating it on the part, to put in the script instead of ids that change with
+  the model. The fillet and chamfer diagnosis now points to `list_edges`.
+
 ## 0.3.5 — 2026-10-19
 
 - **HTTP: the workspace is resolved once.** The auth layer works out the request's workspace and the

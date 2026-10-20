@@ -26,6 +26,8 @@ import re
 from pathlib import Path
 
 PROGRESS = "[b123d-print progress] "  # lines the worker prints while it builds (see project.Pieces)
+LIST_EDGES = ("list_edges (CLI: b123d-print edges) on the part built without this step lists the edges with ids, "
+              "convexity and faces; highlight=<ids> of the ones meant shows them and gives a verified selector")
 TINY_EDGE = 0.01  # mm: edges shorter than this come from booleans on nearly coincident faces
 SLIVER_AREA = 0.01  # mm^2: faces smaller than this, likewise
 BED_TOL = 1e-3  # mm: a part whose bottom is further from Z=0 than this is not on the bed
@@ -329,7 +331,8 @@ def _fillet(f: _Facts) -> dict | None:
                 "fixes": [f"print len(...) of the selection before the {what}; select from the part as it is at that "
                           "point (an earlier cut or fillet changes its edges)",
                           "select with fewer filters, e.g. part.edges().filter_by(Axis.Z) or .group_by(Axis.Z)[-1] "
-                          "for the top edges"]}
+                          "for the top edges",
+                          LIST_EDGES]}
     r = f.ctx.get(size_key)
     m = re.search(r"radius of ([\d.]+)", f.error)
     if r is None and m:
@@ -360,6 +363,7 @@ def _fillet(f: _Facts) -> dict | None:
               if n else f"check the edge selection: {what} fewer edges, or in separate calls"]
     if what == "fillet" and mx is None:
         fixes.append("diagnose_failure finds the largest radius that works on these edges (max_fillet)")
+    fixes.append(LIST_EDGES)
     return {"kind": what,
             "cause": f"the {what} {size_key} is too big for a face next to the edges, or the edges selected are not the "
                      "ones meant (OpenCascade cannot fit the rounding)",
