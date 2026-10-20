@@ -56,7 +56,9 @@ def test_bwrap_binds_the_folders_a_job_needs():
 def test_bwrap_never_tmpfs_over_root(monkeypatch):
     # a container running as a uid with no passwd entry gets HOME=/; a tmpfs over / would wipe the
     # dynamic loader and the interpreter could not start. The home-hide must be skipped then.
-    monkeypatch.setattr(sandbox, "_real", lambda p: "/" if str(p) in ("/", str(Path.home())) else os.path.realpath(str(p)))
+    # _real returns "/" for the root (str(Path("/")) is "/" on POSIX, "\\" on Windows) and passes
+    # other paths through unchanged, so the test is cross-platform (bwrap paths are POSIX).
+    monkeypatch.setattr(sandbox, "_real", lambda p: "/" if str(p) in ("/", "\\") else str(p))
     monkeypatch.setattr(sandbox.Path, "home", classmethod(lambda cls: Path("/")))
     cmd = sandbox.linux_bwrap(["/ws/out"], ["/ws", "/usr/local"], proc=False)
     pairs = list(zip(cmd, cmd[1:]))

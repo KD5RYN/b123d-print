@@ -77,7 +77,7 @@ def macos_profile(writable: list[str], readable: list[str], hidden: list[str] = 
     sec = "".join(f"(deny file-read* file-read-metadata (literal {_sbpl_str(_real(p))}))\n" for p in secrets)
     # hide the home folder, but never when it is "/" (that would deny every read); then allow back
     # what the job needs to read
-    hide_home = f"(deny file-read* (subpath {_sbpl_str(home)}))\n" if home and home != os.sep else ""
+    hide_home = f"(deny file-read* (subpath {_sbpl_str(home)}))\n" if home and home not in ("/", os.sep) else ""
     return f"""(version 1)
 (allow default)
 (deny network*)
@@ -108,10 +108,11 @@ def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = ()
     # must be requested or every bind fails.
     cmd = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", *proc_args,
            "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session"]
-    # hide the home folder (scripts don't read ~), but never when HOME is "/" — a container running
-    # as a uid with no passwd entry gets HOME=/, and a tmpfs over / would wipe the whole root
-    # (including the dynamic loader), so the interpreter could not even start
-    if home and home != os.sep:
+    # hide the home folder (scripts don't read ~), but never when HOME is the root — a container
+    # running as a uid with no passwd entry gets HOME=/, and a tmpfs over / would wipe the whole
+    # root (including the dynamic loader), so the interpreter could not even start. bwrap paths are
+    # POSIX, so "/" is the root whatever os.sep is on the host building the argv.
+    if home and home not in ("/", os.sep):
         cmd += ["--tmpfs", home]
     for p in readable:
         cmd += ["--ro-bind-try", p, p]
