@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5 — unreleased
+
+- **HTTP: the workspace is resolved once.** The auth layer works out the request's workspace and the
+  tools use exactly that one. A request that names the workspace more than once, or differently in
+  `?workspace=` and the `X-B123D-Workspace` header, is refused with 400. Upgrade shared HTTP servers
+  with named tokens.
+
 ## 0.3.4 — 2026-10-19
 
 **Fix and adjust parts with fewer rewrites and less guessing**

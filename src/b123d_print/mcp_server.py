@@ -74,14 +74,36 @@ _WORKSPACE: contextvars.ContextVar[str | None] = contextvars.ContextVar("b123d_p
 _REQUEST: contextvars.ContextVar = contextvars.ContextVar("b123d_print_request", default=None)
 
 
+def _requested_workspace(scope) -> str | None:
+    """The workspace an HTTP request names: ?workspace=<name> or the X-B123D-Workspace header, None
+    for none (the shared root workspace). Refuses (ValueError) a request that names it more than
+    once, or differently in the query and the header, so every layer reads the same one."""
+    from urllib.parse import parse_qs
+
+    values = parse_qs(scope.get("query_string", b"").decode(errors="replace"), keep_blank_values=True).get("workspace", [])
+    headers = [v.decode(errors="replace") for k, v in scope.get("headers", []) if k.lower() == b"x-b123d-workspace"]
+    if len(values) > 1 or len(headers) > 1:
+        raise ValueError("the workspace is given more than once")
+    q, h = (values[0] if values else ""), (headers[0] if headers else "")
+    if q and h and q != h:
+        raise ValueError("?workspace= and the X-B123D-Workspace header name different workspaces")
+    return q or h or None
+
+
 async def _request_workspace(ctx, call_next):
     """HTTP: the workspace this request asked for (?workspace=<name> or X-B123D-Workspace). The
     request counts as a use of that workspace: retention never removes it meanwhile (see handoff.py)."""
     req = getattr(ctx, "request", None)
     name = None
     if req is not None and hasattr(req, "query_params"):
-        name = (req.query_params.get("workspace") or req.headers.get("x-b123d-workspace")
-                or req.scope.get("state", {}).get("b123d_workspace"))  # a token's default workspace (TokenAuth)
+        state = req.scope.get("state", {})
+        if "b123d_workspace" in state:  # TokenAuth resolved and authorized it: use exactly that, nothing else
+            name = state["b123d_workspace"]
+        else:  # no TokenAuth in front (--insecure-no-auth): read the request the same way it does
+            try:
+                name = _requested_workspace(req.scope)
+            except ValueError as e:
+                raise ToolError(str(e)) from None
     token, rtoken = _WORKSPACE.set(name), _REQUEST.set(req)
     _in_use(name, True)
     try:
@@ -2005,13 +2027,15 @@ class TokenAuth:
         if tok is None:
             await _deny(send, 401, "invalid_token", "missing, wrong or revoked bearer token")
             return _log(scope, "(bad token)", 401)
-        from urllib.parse import parse_qs
-
-        ws = (parse_qs(scope.get("query_string", b"").decode()).get("workspace") or [None])[0] \
-            or headers.get(b"x-b123d-workspace", b"").decode() or None
+        try:
+            ws = _requested_workspace(scope)
+        except ValueError as e:
+            await _deny(send, 400, "invalid_request", str(e))
+            return _log(scope, tok.name, 400)
         if ws is None and tok.default_workspace():
             ws = tok.default_workspace()
-            scope.setdefault("state", {})["b123d_workspace"] = ws
+        # the one workspace this request runs in: the tools read only this (_request_workspace)
+        scope.setdefault("state", {})["b123d_workspace"] = ws
         if not tok.allows(ws):
             await _deny(send, 403, "forbidden", f"token {tok.name!r} may use workspaces {tok.workspaces}; this request "
                         f"asked for {('workspace ' + repr(ws)) if ws else 'the shared root workspace (no ?workspace=)'}")
