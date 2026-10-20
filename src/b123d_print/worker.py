@@ -377,6 +377,19 @@ def do(job: dict, warned: list | None = None) -> dict:
             res["image"] = str(tp.highlight(part, [face], img, f"{tag}: face {fid} (red)", size=size))
             res["highlight"] = fid
         return res
+    if op == "edges":
+        from b123d_print import edges as ed, templates as tp
+
+        pname, part = tp.pick_part(_for_pick(pc, job.get("part")), job.get("part"))
+        res = {"variant": k or "standard", "part": pname,
+               **ed.list_edges(part, job.get("face"), job.get("kind"), job.get("convexity"), job.get("near"),
+                               job.get("radius", 1.0), job.get("limit", ed.LIMIT))}
+        if job.get("highlight") is not None:
+            chosen, ids = ed.find_edges(part, job["highlight"])
+            img = out / f"{tag}{'_' + pname if pname != 'part' else ''}_edges{'-'.join(map(str, ids[:6]))}{small}.png"
+            res["image"] = str(ed.highlight(part, chosen, img, f"{tag}: edges {ed.id_text(ids)} (red)", size=size))
+            res["selector"] = ed.selector(part, ids)
+        return res
     if op == "template":
         from b123d_print import templates as tp
 

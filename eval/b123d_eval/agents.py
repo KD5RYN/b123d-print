@@ -4,7 +4,8 @@ An agent gets a `Task` (the prompt a user would write + reference images) and a 
 b123d-print MCP tools, already connected) and works until it is done or a limit stops it. It
 records what it spends in `RunState`, which the runner reads even after a timeout.
 
-Adapters: `fake` (deterministic, no model: a box of the reference's size; proves the pipeline)
+Adapters: `fake` (deterministic, no model: a box of the reference's size, or a benchmark task's
+reference script; proves the pipeline)
 and `claude` (Anthropic API; model from B123D_EVAL_MODEL, key from ANTHROPIC_API_KEY or the
 SDK's other credential sources). Add another by subclassing Agent and registering it in AGENTS.
 """
@@ -138,20 +139,22 @@ class FakeAgent(Agent):
 
     async def run(self, task, tools, limits, state):
         x, y, z = (round(float(v), 3) for v in task.hints.get("bbox_mm", (20, 20, 10)))
+        code = task.hints.get("code") or FAKE_SCRIPT.format(x=x, y=y, z=z)  # a benchmark task: its reference script
         names = {t["name"] for t in await tools.list_tools()}
         missing = {"new_part", "write_part", "build_part", "check", "export"} - names
         if missing:
             raise RuntimeError(f"MCP server lacks tools {sorted(missing)}")
         for name, args in (("new_part", {"name": task.part_name, "description": "eval fake agent"}),
-                           ("write_part", {"name": task.part_name, "code": FAKE_SCRIPT.format(x=x, y=y, z=z)}),
+                           ("write_part", {"name": task.part_name, "code": code}),
                            ("build_part", {"name": task.part_name}),
                            ("check", {"name": task.part_name}),
-                           ("export", {"name": task.part_name, "formats": "stl"})):
+                           ("export", {"name": task.part_name, "formats": task.hints.get("formats", "stl")})):
             state.turns += 1
             out = await tools.call(name, args)
             if out.is_error:
                 raise RuntimeError(f"{name}: {out.text}")
-        state.final_text = f"Modeled {task.part_name} as a {x} x {y} x {z} mm block (fake agent)."
+        state.final_text = (f"Wrote the reference script for {task.part_name} (fake agent)." if task.hints.get("code")
+                            else f"Modeled {task.part_name} as a {x} x {y} x {z} mm block (fake agent).")
         state.stop = "done"
 
 

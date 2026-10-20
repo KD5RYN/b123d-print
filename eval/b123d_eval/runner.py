@@ -110,20 +110,8 @@ async def run_item(item: Item, agent_name: str, endpoint: Endpoint, out: Path, l
         ws.mkdir()
     task = task_for(item, part, [d / "reference.png"], ref.size)
     (d / "prompt.txt").write_text(task.prompt, encoding="utf-8")
-    state = RunState()
-    try:
-        agent = make_agent(agent_name)
-        with anyio.move_on_after(limits.timeout_s) as scope:
-            async with endpoint.client(ws) as client:
-                await agent.run(task, ToolBox(client, limits, state), limits, state)
-        if scope.cancelled_caught:
-            state.stop = "timeout"
-    except Exception as e:
-        state.stop, state.error = "error", f"{type(e).__name__}: {e}"
-    rec["agent_run"] = {k: v for k, v in asdict(state).items() if k != "transcript"}
-    rec["agent_run"]["cost_usd"] = round(state.cost_usd, 4)
+    await run_agent(task, agent_name, endpoint, ws, limits, d, rec)
     rec["seconds"] = round(time.time() - t0, 1)
-    (d / "transcript.json").write_text(json.dumps(state.transcript, indent=1, default=str), encoding="utf-8")
     script = ws / "parts" / part / f"{part}.py"
     if script.is_file():
         shutil.copy(script, d / "candidate.py")
@@ -144,6 +132,25 @@ async def run_item(item: Item, agent_name: str, endpoint: Endpoint, out: Path, l
     except Exception as e:
         rec.update(score=0.0, passed=False, result=f"compare failed: {type(e).__name__}: {e}")
     return rec
+
+
+async def run_agent(task: Task, agent_name: str, endpoint: Endpoint, ws: Path, limits: Limits, d: Path, rec: dict) -> RunState:
+    """Let the agent work on `task` in workspace `ws` until it stops or a limit does; what it spent
+    goes in rec["agent_run"], its tool calls in d/transcript.json."""
+    state = RunState()
+    try:
+        agent = make_agent(agent_name)
+        with anyio.move_on_after(limits.timeout_s) as scope:
+            async with endpoint.client(ws) as client:
+                await agent.run(task, ToolBox(client, limits, state), limits, state)
+        if scope.cancelled_caught:
+            state.stop = "timeout"
+    except Exception as e:
+        state.stop, state.error = "error", f"{type(e).__name__}: {e}"
+    rec["agent_run"] = {k: v for k, v in asdict(state).items() if k != "transcript"}
+    rec["agent_run"]["cost_usd"] = round(state.cost_usd, 4)
+    (d / "transcript.json").write_text(json.dumps(state.transcript, indent=1, default=str), encoding="utf-8")
+    return state
 
 
 async def run_eval(items: list[Item], agent_name: str, endpoint: Endpoint, out: Path, limits: Limits,

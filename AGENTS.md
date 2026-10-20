@@ -8,7 +8,7 @@ actually printed; several rules exist because a print failed without them.
 ## Tools
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
-`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `make_template`,
+`build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `list_edges`, `make_template`,
 `trace_outline`, `recipe`). Otherwise
 use the CLI:
 
@@ -30,6 +30,9 @@ use the CLI:
 the script; `diagnose_failure` looks deeper. **Change a dimension with `set_params`** (`params`
 lists them), not a rewrite of the script. **Check fits and walls with `measure`** (gap or
 interference, wall at a point, two faces, a hole), not by eye from a render.
+**Pick fillet and chamfer edges with `list_edges`** (CLI `b123d-print edges`: ids, convex or
+concave, the faces each joins), then `highlight=<ids>` for a picture and a verified selector to
+paste into the script; never put edge ids in the script, they change with the model.
 
 ## The part script
 
@@ -340,6 +343,10 @@ Do all of this every time you change geometry, before telling the user the part 
    `b123d-print fit`): overlaps, gaps under the clearance and screw holes that do not line up
    between pieces. It is not part of `check` unless the script lists `Mates()` in `checks(d)`;
    do that for parts that are always checked as an assembly.
+   **Moving parts** (hinges, flip lids, latches, sliders): declare the motion in `checks(d)`,
+   `Motion(label, axis_point, axis_dir, start_deg, end_deg, against=..., min_clearance=...)` or
+   `Slide(label, direction, distance, ...)` on `assembly(d)` labels; closed and open both clear
+   does not mean clear in between. Report the smallest clearance and its angle.
 5. **Wall check around deep cuts:** wherever a cut goes deeper than the wall it starts in
    (a counterbore into a boss, a pocket next to a rib, a dimple in a thin side), add a `Wall`
    check that slices just past the wall and measures the material left around the cut.
@@ -411,7 +418,7 @@ The rules and their sources are in
 ## Checks reference
 
 ```python
-from b123d_print import Gap, Mates, Overhang, Probe, ThinFeature, Wall
+from b123d_print import Gap, Mates, Motion, Overhang, Probe, Slide, ThinFeature, Wall
 
 def checks(d):
     # Part names: a single Part returned by build() is "part" (the script's own name also works);
@@ -433,5 +440,9 @@ def checks(d):
         Gap("lid", "base", min=d.CLEARANCE, max=d.CLEARANCE + 0.1, within=((0, 0, 30), (60, 60, 4))),
         # opt-in: fit between the assembly's pieces (overlaps, gaps, hole alignment) inside `check`
         Mates(hole_tol=0.2, ignore=[("box", "screw (stand-in)")]),
+        # a moving piece swept through its motion: first collision, smallest clearance, picture
+        Motion("lid", axis_point=(0, 30, 20), axis_dir=(-1, 0, 0), start_deg=0, end_deg=110,
+               against=("box",), min_clearance=d.CLEARANCE),
+        Slide("drawer", direction=(0, 1, 0), distance=60, against=("case",)),
     ]
 ```

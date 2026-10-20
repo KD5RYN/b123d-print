@@ -1,0 +1,150 @@
+# Benchmark tasks for the agent eval (eval/run.py --suite bench). Each one targets a mistake that
+# a model change can bring back: print orientation, coordinates from a datum, mirrored pieces,
+# units, placing pieces in an assembly. Unlike the corpus (corpus.toml: downloaded parts, scored
+# by surface deviation), every task here has a reference script in eval/benchmarks/<id>/ and is
+# scored with pass/fail checks (eval/b123d_eval/scoring.py) on the agent's script, built in the
+# sandbox.
+#
+# Keys:
+#   id, title, mistake   what the task tests
+#   prompt               what the agent is told (the runner adds how to use the tools)
+#   reference            the reference script, relative to this file: the self-tests require it to
+#                        pass every check, and `compare` checks score against its pieces
+#   checks               [{check = "<name>", <params>}]: see scoring.py for the names and params
+#   bad                  known bad scripts next to the reference: {file = [checks that must fail]}.
+#                        The self-tests (`run.py selftest`, tests/test_eval_bench.py) require
+#                        each to fail exactly those checks, so a scorer that stops catching the
+#                        mistake fails CI
+#
+# Coordinates in the prompts are what a user would give; checks say where they are measured from
+# (holes: datum = "min" is the bounding box's -X -Y corner of the piece as printed).
+
+[[task]]
+id = "orient_shelf_bracket"
+title = "L shelf bracket described in use"
+mistake = "print orientation"
+reference = "benchmarks/orient_shelf_bracket/orient_shelf_bracket.py"
+prompt = """A simple L-shaped shelf bracket, no diagonal brace. In use, the wall leg hangs vertically
+against the wall and the shelf leg sticks out horizontally from the top of the wall leg; the shelf
+rests on it.
+
+- Both legs 30 mm wide and 5 mm thick.
+- Wall leg 80 mm long (top to bottom); shelf leg 60 mm long, measured from the wall face.
+- 6 mm radius fillet in the inside corner between the legs.
+- Two 4.5 mm screw holes through the wall leg into the wall, centred across its width, 20 mm and
+  50 mm from the wall leg's bottom end.
+- One 4.5 mm hole through the shelf leg up into the shelf, centred across its width, 40 mm from
+  the wall face.
+
+It will be printed in PLA and should be strong; I don't want to clean supports off it."""
+checks = [
+  { check = "pieces", names = ["part"] },
+  { check = "on_bed" },
+  { check = "orientation", max_gap = 0.5 },
+  { check = "supports", max_mm2 = 200.0 },
+  { check = "tip_over" },
+  { check = "compare", thresholds = { hausdorff_mm = 1.5, volume_rel = 0.05, area_rel = 0.08 } },
+]
+bad = { "bad_in_use.py" = ["orientation", "supports", "tip_over"], "bad_floating.py" = ["on_bed"] }
+
+[[task]]
+id = "datum_hole_plate"
+title = "Mounting plate with holes from a corner datum"
+mistake = "coordinates from a datum"
+reference = "benchmarks/datum_hole_plate/datum_hole_plate.py"
+prompt = """A flat mounting plate, 90 mm along X, 60 mm along Y, 4 mm thick, square corners.
+
+The drawing dimensions every hole from datum A, the plate's lower-left corner seen from above
+(its -X, -Y corner). All holes go straight through (vertical):
+
+| hole | X from A | Y from A | diameter |
+|------|---------:|---------:|---------:|
+| 1    | 8        | 8        | 3.4      |
+| 2    | 82       | 8        | 3.4      |
+| 3    | 8        | 52       | 3.4      |
+| 4    | 30       | 40       | 6.5      |
+| 5    | 65       | 30       | 10.0     |
+
+Put the part's origin at the centre of the plate (centred in X and Y), bottom face on Z=0, with
+X along the 90 mm side."""
+checks = [
+  { check = "pieces", names = ["part"] },
+  { check = "on_bed" },
+  { check = "size", mm = [90.0, 60.0, 4.0], tol = 0.1, any_order = false },
+  { check = "origin", xy = [0.0, 0.0], tol = 0.2 },
+  { check = "holes", datum = "min", tol = 0.15, holes = [[8.0, 8.0, 3.4], [82.0, 8.0, 3.4], [8.0, 52.0, 3.4], [30.0, 40.0, 6.5], [65.0, 30.0, 10.0]] },
+]
+bad = { "bad_from_origin.py" = ["holes"], "bad_swapped_xy.py" = ["holes"], "bad_datum_top_left.py" = ["holes"], "bad_corner_origin.py" = ["origin"] }
+
+[[task]]
+id = "mirrored_end_brackets"
+title = "Left and right end brackets (a mirror pair)"
+mistake = "mirrored pieces"
+reference = "benchmarks/mirrored_end_brackets/mirrored_end_brackets.py"
+prompt = """A pair of end brackets for a shelf: a left one and a right one. They print as used, base
+plate down. Describe the LEFT one with X to the right, Y away from you, Z up:
+
+- Base plate 60 mm along X, 30 mm along Y (the lip below included), 4 mm thick.
+- A lip 4 mm thick along the whole back edge (+Y), standing 15 mm above the top of the base
+  (19 mm tall overall).
+- The base's front corner at the outer (+X) end is cut off at 45 degrees, 15 mm along each edge.
+- One 4.5 mm vertical screw hole, 12 mm from the inner (-X) end and 13 mm from the front edge.
+
+The RIGHT bracket is the mirror image of the left one (mirrored left-to-right, across the YZ
+plane): the lip still at the back, the cut corner at its front-left, the hole near its right end.
+Make build(d) return both pieces as {"left": ..., "right": ...}."""
+checks = [
+  { check = "pieces", names = ["left", "right"] },
+  { check = "on_bed" },
+  { check = "compare", piece = "left" },
+  { check = "mirror_of", piece = "right", of = "left" },
+]
+# left matches the reference's left and right mirrors left, so right matches the reference's right
+bad = { "bad_copy.py" = ["mirror_of"], "bad_rotated.py" = ["mirror_of"], "bad_swapped.py" = ["compare"] }
+
+[[task]]
+id = "inch_cover_plate"
+title = "Cover plate dimensioned in inches"
+mistake = "units"
+reference = "benchmarks/inch_cover_plate/inch_cover_plate.py"
+prompt = """A cover plate from an American drawing; every dimension is in inches.
+
+- Plate 3.00 in long, 2.00 in wide, 1/4 in thick, square corners.
+- Four #6 screw holes, 0.150 in diameter, each 1/4 in in from both edges at the corners.
+- One 3/4 in diameter hole in the centre.
+
+Model it in millimetres, lying flat."""
+checks = [
+  { check = "pieces", names = ["part"] },
+  { check = "on_bed" },
+  { check = "size", mm = [76.2, 50.8, 6.35], tol = 0.1 },
+  { check = "holes", datum = "min", tol = 0.15, holes = [[6.35, 6.35, 3.81], [69.85, 6.35, 3.81], [6.35, 44.45, 3.81], [69.85, 44.45, 3.81], [38.1, 25.4, 19.05]] },
+  { check = "compare", thresholds = { mean_mm = 0.1 } },
+]
+bad = { "bad_inch_as_mm.py" = ["size", "holes", "compare"], "bad_25mm_inch.py" = ["size", "holes", "compare"], "bad_rounded_mm.py" = ["size", "holes", "compare"] }
+
+[[task]]
+id = "box_lid_screws"
+title = "Box and lid with four screws, assembled"
+mistake = "assembly placement"
+reference = "benchmarks/box_lid_screws/box_lid_screws.py"
+prompt = """A small open-top box with a flat screw-on lid.
+
+- Box: 60 x 40 mm outside, 25 mm tall, 2 mm walls and a 2 mm floor, square corners.
+- In each inside corner a round screw boss, 7 mm diameter, from the floor up to the rim, its axis
+  5.5 mm in from both outside faces. Each boss has a 2.7 mm pilot hole, 12 mm deep from the
+  rim, for an M3 self-tapping screw.
+- Lid: a flat plate 60 x 40 x 3 mm, with four 3.4 mm clearance holes over the bosses.
+- Four M3 x 14 pan-head screws hold the lid on.
+
+build(d) returns {"box": ..., "lid": ...}, each in print orientation. Add assembly(d) with the box
+labelled "box", the lid labelled "lid" sitting on the box's rim, and the four screws as stand-ins
+in their holes. check_fit has to pass."""
+checks = [
+  { check = "pieces", names = ["box", "lid"] },
+  { check = "on_bed" },
+  { check = "size", piece = "box", mm = [60.0, 40.0, 25.0], tol = 0.2 },
+  { check = "size", piece = "lid", mm = [60.0, 40.0, 3.0], tol = 0.2 },
+  { check = "fit", pieces = ["box", "lid"], min_aligned = 4, min_standins = 4 },
+]
+bad = { "bad_holes_off.py" = ["fit", "fit_holes"], "bad_lid_sunk.py" = ["fit"], "bad_lid_floating.py" = ["fit_holes"], "bad_thick_screws.py" = ["fit"] }
