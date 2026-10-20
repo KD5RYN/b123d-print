@@ -4,11 +4,12 @@ import dataclasses
 import types
 
 import pytest
-from build123d import Align, Box, Cylinder, Pos
+from build123d import Align, Box, Color, Cylinder, Pos, Rot
 
-from b123d_print import checks as ck
+from b123d_print import align_axis, checks as ck, place_on
 from b123d_print.config import Settings
 from b123d_print.fit import Mates, bores, hole_kinds, is_standin, joint_pairs, run_fit, screw_pair
+from b123d_print.measure import distance
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 CORNERS = [(-25, -15), (-25, 15), (25, -15), (25, 15)]
@@ -158,3 +159,90 @@ def test_bundled_examples_fit():
         mod = load(ex / name / f"{name}.py")
         r = run_fit(mod, "", Settings())
         assert not bad(r["findings"]), (name, [f.line() for f in bad(r["findings"])])
+
+
+def test_place_on_stacks_flips_and_mounts_on_any_flat_face():
+    b = box()
+    raw_lid = lid(z=0.0)
+    raw_lid.label = "lid"
+    raw_lid.color = Color("orange")
+
+    # bottom (-Z) of lid onto top (+Z) of box: touching, all 4 holes line up, metadata kept
+    placed = place_on(raw_lid, "bottom", b, "top")
+    assert placed.label == "lid" and placed.color is not None
+    assert placed.bounding_box().min.Z == pytest.approx(20.0, abs=1e-4)
+    assert not bad(run([(b, None, "box"), (placed, None, "lid")]))
+
+    # lid modeled upside-down for printing (mating inner face is +Z): flipped 180 deg onto box top
+    upside_down = Pos(12, -7, 3) * Rot(180, 0, 0) * lid(z=0.0)
+    flipped = place_on(upside_down, "top", b, "top")
+    assert flipped.bounding_box().min.Z == pytest.approx(20.0, abs=1e-4)
+    assert not bad(run([(b, None, "box"), (flipped, None, "lid")]))
+
+    # offset along the target normal, spin in the plane, and in-plane shift
+    gapped = place_on(raw_lid, "bottom", b, "top", offset=0.25, spin=180)
+    assert not bad(run([(b, None, "box"), (gapped, None, "lid")]))
+    assert distance(gapped, b)["distance"] == pytest.approx(0.25, abs=1e-3)
+
+    shifted = place_on(raw_lid, "bottom", b, "top", shift=(2.0, -1.5))
+    assert shifted.bounding_box().center().X == pytest.approx(2.0, abs=1e-3)
+    assert shifted.bounding_box().center().Y == pytest.approx(-1.5, abs=1e-3)
+
+    # side wall (+X) and tilted face contact
+    bracket = Box(4, 16, 12, align=BED)
+    on_side = place_on(bracket, "-X", b, "+X")
+    assert on_side.bounding_box().min.X == pytest.approx(30.0, abs=1e-4)
+    assert distance(on_side, b)["touching"] and not distance(on_side, b)["overlap"]
+
+    wedge = Rot(0, 25, 0) * Box(30, 30, 10, align=BED)
+    top_face = max(wedge.faces(), key=lambda f: f.center().Z)
+    plate = Box(15, 15, 2, align=BED)
+    on_wedge = place_on(plate, "bottom", wedge, top_face)
+    d = distance(on_wedge, wedge)
+    assert d["touching"] and not d["overlap"]
+
+    with pytest.raises(ValueError, match=r"shift needs two numbers \(u, v\) in mm"):
+        place_on(raw_lid, "bottom", b, "top", shift=(5,))
+
+
+def test_align_axis_lines_up_holes_and_clocks_second_hole():
+    # Box with a side lip merged into the rim so its top face center is shifted in X from the hole pattern
+    b = (box() + Pos(30, 0, 18) * Box(6, 40, 2, align=BED)).clean()
+    placed = place_on(lid(z=0.0), "bottom", b, "top")
+    # Before align_axis, the lid centered on the wider top face has its holes off-axis
+    assert any(f.level != ck.OK and f.check == "align" for f in run([(b, None, "box"), (placed, None, "lid")]))
+
+    # Slide in the contact plane to line up the (-25, -15) hole while keeping Z=20 contact
+    aligned = align_axis(placed, (-25, -15), b)
+    assert aligned.bounding_box().min.Z == pytest.approx(20.0, abs=1e-4)
+    assert not bad(run([(b, None, "box"), (aligned, None, "lid")]))
+
+    # Skewed lid (spun 15 deg and shifted): align_axis with clock= snaps both position and angle
+    skewed = place_on(lid(z=0.0), "bottom", b, "top", spin=15, shift=(3.0, -2.0))
+    clocked = align_axis(skewed, (-25, -15, 21.5), b, (-25, -15, 15.0), clock=((25, 15, 21.5), (25, 15, 15.0)))
+    assert clocked.bounding_box().min.Z == pytest.approx(20.0, abs=1e-4)
+    assert not bad(run([(b, None, "box"), (clocked, None, "lid")]))
+
+    # Loose horizontal pin turned and placed into a vertical hole (by 3D point, Face, dict, Axis, id)
+    pin = Rot(0, 90, 0) * Cylinder(1.9, 10)
+    pin.label = "dowel"
+    pin_placed = align_axis(pin, None, b, (25, 15, 15), offset=1.0)
+    assert pin_placed.label == "dowel"
+    bb = pin_placed.bounding_box()
+    assert bb.center().X == pytest.approx(25.0, abs=1e-3) and bb.center().Y == pytest.approx(15.0, abs=1e-3)
+    assert bb.size.Z == pytest.approx(10.0, abs=1e-3)
+    assert bb.center().Z == pytest.approx(16.0, abs=1e-3)
+
+    cyl_face = next(f for f in pin.faces() if f.geom_type.name == "CYLINDER")
+    bore_dict = next(h for h in bores(b) if h["center"][:2] == [25.0, 15.0])
+    by_face = align_axis(pin, cyl_face, b, bore_dict, flip=True)
+    assert by_face.bounding_box().center().X == pytest.approx(25.0, abs=1e-3)
+    by_tuple = align_axis(pin, ((0, 0, 0), (1, 0, 0)), b, 1)
+    assert by_tuple.bounding_box().size.Z == pytest.approx(10.0, abs=1e-3)
+
+    with pytest.raises(ValueError, match="not parallel"):
+        align_axis(pin, None, b, (25, 15, 15), keep_contact=True)
+    with pytest.raises(ValueError, match="coaxial"):
+        align_axis(aligned, (-25, -15), b, (-25, -15), clock=((-25, -15), (-25, -15)))
+    with pytest.raises(ValueError, match="no cylindrical"):
+        align_axis(Box(10, 10, 10), None, b, (25, 15, 15))

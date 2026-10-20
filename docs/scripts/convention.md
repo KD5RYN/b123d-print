@@ -46,7 +46,7 @@ if __name__ == "__main__":
 | `Dims` | by convention | frozen dataclass; every dimension an UPPER_CASE field in mm with a comment saying where it came from; derived values as `@property` |
 | `VARIANTS` | no (default: only the standard part) | `{"": {}, "140": dict(PLATE_W=140.0)}` — overrides only; `""` is the standard part; output files get the key as a suffix |
 | `build(d)` | yes | the printable part, or `{"name": part}` for several, in print orientation, bottom face on Z=0; for several, the values may be zero-argument functions ([lazy pieces](#big-and-multi-piece-projects)) |
-| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position, plus simple stand-ins for what the parts mate with (a board, a sensor, a screw), labeled `"... (stand-in)"`; the overlap check and the [fit check](../using/fit.md) use it |
+| `assembly(d)` | no | `[(part, color, label), ...]` in assembled position (use [`place_on` / `align_axis`](../using/fit.md#placing-pieces-by-contact) to place pieces by face contact and hole axes), plus simple stand-ins for what the parts mate with (a board, a sensor, a screw), labeled `"... (stand-in)"`; the overlap check and the [fit check](../using/fit.md) use it |
 | `joints(d)` | no | `[("peg", "socket", clearance), ...]`: male/female pairs of `assembly(d)` labels that are intentional fits; the [fit check](../using/fit.md) measures them against their own clearance |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
@@ -161,6 +161,13 @@ to put the pieces together, the glue, inserts to set, a brim. For example
 | `hole_comp(__file__)` | `HOLE_COMP: float = hole_comp(__file__)`; add it to hole diameters when cutting ([Hole compensation](../using/hole-compensation.md)) |
 | `clearance(__file__)` | `CLEARANCE: float = clearance(__file__)`; the default mating gap (0.2 mm) |
 | `printer(__file__)` | the active [printer profile](../using/printer-profiles.md), or `None` in generic mode |
+
+## Placing assembly pieces
+
+| Helper | Use |
+| --- | --- |
+| `place_on(piece, face_a, target, face_b, offset=0, spin=0, shift=(0, 0))` | move `piece` so flat `face_a` rests on `target`'s flat `face_b` (coplanar, opposed normals); faces by global side (`"bottom"`, `"top"`, `"+X"`), `list_faces` id, point or `Face`. See [Fit between pieces](../using/fit.md#placing-pieces-by-contact) |
+| `align_axis(piece, axis_a, target, axis_b?, clock=...)` | line up round holes, bosses or pins across pieces (slides in the contact plane after `place_on`; `clock=` clocks around a second hole pair) |
 
 ## Splitting into pieces
 

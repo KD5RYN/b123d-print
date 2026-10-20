@@ -21,6 +21,40 @@ checked for how the pieces meet: `check_fit(name)` (MCP) or `b123d-print fit <na
 It looks at the pieces **as placed in `assembly(d)`**, so build the assembly the way the part
 goes together: the lid on the box, the screws' parts lined up.
 
+## Placing pieces by contact
+
+Hand-computed `Pos`/`Rot` math in `assembly(d)` is easy to get off by one wall thickness, which
+spoils the interference and hole-alignment checks. Use `place_on` and `align_axis` from
+`b123d_print` (or `b123d_print.fit`) instead:
+
+```python
+from b123d_print import align_axis, place_on
+
+def assembly(d):
+    b = base(d)
+    # set the lid's bottom face on the base's top rim, then slide in that plane to line up the holes
+    l = place_on(lid(d), "bottom", b, "top")
+    l = align_axis(l, d.POSTS[0], b, clock=d.POSTS[1])
+    return [(b, "#3a6ea5", "base"), (l, "#e0a030", "lid")]
+```
+
+- `place_on(piece, face_a, target, face_b, offset=0.0, spin=0.0, shift=(0.0, 0.0))` turns and
+  moves `piece` so its flat `face_a` rests on `target`'s flat `face_b` (coplanar, with opposed
+  outward normals). Faces are picked as in `list_faces`: a side (`"bottom"`, `"top"`, `"-Z"`,
+  `"+X"`, ... — the outermost flat face facing that global ±X/±Y/±Z direction), or, for a tilted
+  or rotated face (or an interior step), a face id from `list_faces`, a point `(x, y, z)` on the
+  face, or a `Face`. `offset` adds a gap along `face_b`'s outward normal (`0` = touching,
+  `d.CLEARANCE` = a clearance gap); `spin` turns `piece` in the contact plane (degrees); `shift`
+  `(u, v)` slides it in that plane.
+- `align_axis(piece, axis_a, target, axis_b=None, *, clock=None, offset=None, flip=False, keep_contact=None)`
+  lines up a round hole, boss or pin on `piece` coaxially with one on `target`. Each axis is a
+  point `(x, y, z)` or `(x, y)` near the hole or pin, a cylindrical `Face`, a dict from
+  `holes()`/`bores()`, an `Axis`, `(point, direction)`, a 1-based id, or `None` when the piece has
+  only one. When the axes are already parallel (as after `place_on`), `piece` slides only in the
+  contact plane so the face contact or `offset` from `place_on` stays untouched. Pass `clock=`
+  (a second hole/pin pair `(axis_a2, axis_b2)`, or a point looked up on both) to also turn `piece`
+  around the first axis until the second pair lines up.
+
 ## Interference
 
 Each pair of assembly items whose bounding boxes come within the clearance:

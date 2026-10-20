@@ -121,7 +121,7 @@ def _num(v: float) -> str:
     return "0" if s == "-0" else s
 
 
-def _side_name(s: str) -> str:
+def _side_name(s: str) -> str:  # also used by fit._place_face
     k = s.strip()
     if k.upper() in DIRS:
         return DIRS[k.upper()]
@@ -155,7 +155,7 @@ def _round_holes(face: Face) -> tuple[list[dict], int]:
     return holes, other
 
 
-def _planar(part: Part) -> list[Face]:
+def _planar(part: Part) -> list[Face]:  # also used by fit._place_face
     """The flat faces in id order: largest first, then by normal and center (rounded, so the same
     geometry rebuilt gets the same order)."""
     def key(f):
@@ -227,7 +227,7 @@ def find_face(part: Part, face) -> tuple[Face, int]:
 # laying flat
 
 
-def _rotation(a: np.ndarray, b: np.ndarray):
+def _rotation(a: np.ndarray, b: np.ndarray):  # also used by fit.place_on and fit.align_axis
     """The rotation (gp_Trsf) that turns direction a into b; a half turn about X (or Y) when they
     are opposite, so the result is the same on every run."""
     from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt, gp_Quaternion, gp_Trsf, gp_Vec
@@ -253,7 +253,7 @@ def lay_flat(shape: Part, down) -> tuple[Part, Location]:
     return _as_part(turned.moved(shift)), shift * rot
 
 
-def _as_part(shape) -> Part:
+def _as_part(shape) -> Part:  # also used by fit.py
     if isinstance(shape, Part):
         return shape
     solids = shape.solids()

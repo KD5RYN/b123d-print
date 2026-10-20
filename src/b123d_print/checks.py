@@ -119,7 +119,7 @@ def _cylinder(face):
     return d, loc, c.Radius()
 
 
-def _concave(face, d, loc) -> bool:
+def _concave(face, d, loc) -> bool:  # also used by fit._cyl_axes
     """A cylindrical face curving around empty space (a hole, a concave fillet)."""
     p = face.position_at(0.5, 0.5)
     n = face.normal_at(0.5, 0.5)
