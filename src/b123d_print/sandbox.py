@@ -87,15 +87,24 @@ def macos_profile(writable: list[str], readable: list[str], hidden: list[str] = 
 {hide}{back}{sec}"""
 
 
-def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = ()) -> list[str]:
+def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = (),
+                proc: bool | None = None) -> list[str]:
     """`hidden` folders become empty (tmpfs) before the job's own folders are bound back in;
-    `secrets` files read as empty (/dev/null over them), wherever they are."""
+    `secrets` files read as empty (/dev/null over them), wherever they are.
+
+    `proc`: mount a fresh procfs at /proc (True), or leave /proc an empty tmpfs (False). None asks
+    `_bwrap_caps()`. A fresh procfs is refused where the container masks parts of /proc (Docker's
+    `mount_too_revealing`); an empty /proc keeps the job from seeing other jobs' `/proc/<pid>` in
+    the same container, and `--unshare-pid` still gives it its own PID namespace."""
+    if proc is None:
+        proc = _bwrap_caps()["proc"]
     home = _real(Path.home())
+    proc_args = ["--proc", "/proc"] if proc else ["--tmpfs", "/proc"]
     # --unshare-user: create a user namespace explicitly. On a normal host bwrap does this on its
     # own when unprivileged, but inside an unprivileged container (the Docker worker, uid != 0, no
     # CAP_SYS_ADMIN) it is the user namespace that grants the privilege to mount/pivot_root, so it
     # must be requested or every bind fails.
-    cmd = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+    cmd = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", *proc_args,
            "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
     for p in readable:
         cmd += ["--ro-bind-try", p, p]
@@ -188,24 +197,34 @@ def kind() -> str:
     return k
 
 
-def _probe(k: str) -> str | None:
-    """Return an error string if sandbox `k` cannot actually start here (e.g. bubblewrap without
-    unprivileged user namespaces), else None. Cached per kind."""
-    if k != "bwrap":
-        return None
-    # mirror the flags the real run uses (namespaces + a fresh /proc and /dev), so the probe fails
-    # exactly where a real job would instead of passing on a weaker command
+def _bwrap_try(extra: list[str]) -> tuple[int, str]:
     try:
-        r = subprocess.run(["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev",
-                            "--proc", "/proc", "--unshare-net", "--unshare-pid", "--die-with-parent",
-                            "true"], capture_output=True, timeout=15)
+        r = subprocess.run(["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", *extra,
+                            "--unshare-net", "--unshare-pid", "--die-with-parent", "true"],
+                           capture_output=True, timeout=15)
+        return r.returncode, (r.stderr or b"").decode(errors="replace").strip()
     except (OSError, subprocess.SubprocessError) as e:
-        return f"bubblewrap could not run ({e})"
-    if r.returncode != 0:
-        msg = (r.stderr or b"").decode(errors="replace").strip().splitlines()
-        return "bubblewrap could not start a namespace" + (f": {msg[-1]}" if msg else
-                " (unprivileged user namespaces may be disabled on the host)")
-    return None
+        return 1, str(e)
+
+
+@functools.cache
+def _bwrap_caps() -> dict:
+    """What bubblewrap can do here, probed once: {"usable": bool, "proc": bool, "error": str|None}.
+    `proc` is False where a fresh procfs cannot be mounted (a container that masks parts of /proc);
+    the job then gets an empty /proc instead. `usable` is False only if even that minimal namespace
+    cannot start (no unprivileged user namespaces) — that is what fails the deployment closed."""
+    if not shutil.which("bwrap"):
+        return {"usable": False, "proc": False, "error": "bubblewrap (bwrap) is not installed"}
+    rc, _ = _bwrap_try(["--proc", "/proc"])
+    if rc == 0:
+        return {"usable": True, "proc": True, "error": None}
+    rc2, err = _bwrap_try(["--tmpfs", "/proc"])  # can we at least run without a real /proc?
+    if rc2 == 0:
+        return {"usable": True, "proc": False, "error": None}
+    last = err.splitlines()
+    return {"usable": False, "proc": False,
+            "error": "bubblewrap could not start a namespace" + (f": {last[-1]}" if last else
+                     " (unprivileged user namespaces may be disabled on the host)")}
 
 
 @functools.cache
@@ -218,7 +237,7 @@ def sandbox_error() -> str | None:
         return None
     if _auto_kind() != req:
         return f"sandbox {req!r} is required (B123D_PRINT_SANDBOX) but not available in this environment"
-    return _probe(req)
+    return _bwrap_caps()["error"] if req == "bwrap" else None
 
 
 def describe() -> str:
@@ -226,9 +245,10 @@ def describe() -> str:
     if err:
         return f"REQUIRED SANDBOX UNAVAILABLE: {err}; jobs are refused until this is fixed"
     k = kind()
+    bwrap_note = "" if _bwrap_caps().get("proc", True) else ", /proc empty (container masks it)"
     return {
         "sandbox-exec": "macOS sandbox-exec (no network, no subprocesses, writes limited to out/ and scratch, home hidden)",
-        "bwrap": "Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden)",
+        "bwrap": f"Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden{bwrap_note})",
         "none": ("Windows has no OS sandbox here: process isolation (a Job Object with a CPU-time limit, killed "
                  "with all its child processes on a timeout) + audit hook only; for untrusted scripts run the "
                  "server in WSL2 with bubblewrap, or in the Docker image") if WINDOWS else

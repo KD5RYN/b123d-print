@@ -268,11 +268,15 @@ jobs:
           docker compose exec -T worker python -c "import socket; print(socket.if_nameindex())"
           docker compose exec -T b123d-print python -c "import socket; socket.create_connection(('1.1.1.1', 53), 5); print('front: network ok')" \
             || echo "front: no internet from this runner (not needed for the test)"
-          # diagnostic: can bubblewrap actually set up a namespace inside the worker container?
-          # (same flags the worker uses for a job; prints the exit code either way)
-          echo "bwrap probe in worker:"
+          # diagnostic: can bubblewrap set up a namespace inside the worker container? a fresh /proc
+          # is refused when the container masks parts of /proc, so the worker falls back to an empty
+          # /proc; show both so the log says which path is in use (prints the exit code either way)
+          echo "bwrap probe (fresh /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --proc /proc \
-            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap exit: $?"
+            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap --proc exit: $?"
+          echo "bwrap probe (empty /proc) in worker:"
+          docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --tmpfs /proc \
+            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap --tmpfs /proc exit: $?"
           # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
           # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
           # makes the smoke assert the worker really is sandboxed and not silently falling back

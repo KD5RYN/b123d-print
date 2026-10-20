@@ -40,6 +40,18 @@ def alive(pid: int) -> bool:
         return True
 
 
+def test_bwrap_command_proc_variants():
+    # a fresh procfs when the host allows it; an empty /proc (not a bound one) where it does not,
+    # so a job never sees other jobs' /proc/<pid> in the same container
+    with_proc = sandbox.linux_bwrap(["/w/out"], ["/w"], proc=True)
+    assert "--proc" in with_proc and "/proc" in with_proc
+    no_proc = sandbox.linux_bwrap(["/w/out"], ["/w"], proc=False)
+    assert "--proc" not in no_proc
+    i = no_proc.index("/proc")
+    assert no_proc[i - 1] == "--tmpfs", no_proc  # /proc is an empty tmpfs, never a bind of the host's
+    assert "--unshare-pid" in no_proc  # own PID namespace regardless
+
+
 def test_timeout_kills_the_worker_and_its_children(tmp_path, monkeypatch):
     monkeypatch.setenv("B123D_PRINT_SANDBOX", "none")  # the OS sandboxes refuse to start a child at all
     monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")  # not queued behind other tests' builds
