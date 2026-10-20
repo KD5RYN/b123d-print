@@ -41,8 +41,9 @@ depends on the mode:
 
 The audit hook (no sockets, subprocesses or native libraries; no writes outside the job's folders;
 no reads of other workspaces, the tokens file or the server environment) runs in every mode. Its
-settings are frozen when it is installed, so a script cannot turn it off. It is **defense in
-depth, not an isolation boundary on its own** — the OS sandbox or the container is.
+configuration is captured when it is installed and it avoids the names a script could rebind, which
+raises the bar, but the standard library it builds on is not frozen, so the hook is **best-effort
+defense in depth, not an isolation boundary on its own** — the OS sandbox or the container is.
 
 The [build cache](../scripts/convention.md#big-and-multi-piece-projects) adds no new access. Only
 the sandboxed worker reads and writes it, only in the part's own `out/.cache/` (a folder it could

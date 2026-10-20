@@ -92,6 +92,10 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
     stop = stop or threading.Event()
     slots = threading.Semaphore(max_jobs)
     print(f"b123d-print worker: queue {queue}, {max_jobs} job(s) at once, sandbox: {sandbox.describe()}", file=sys.stderr)
+    err = sandbox.sandbox_error()
+    if err:  # loud, repeated: the worker keeps running but refuses every job (fail closed) until fixed
+        print(f"b123d-print worker: REFUSING ALL JOBS — {err}. Set B123D_PRINT_SANDBOX=none to run with "
+              "the audit hook only (not an isolation boundary), or enable it.", file=sys.stderr)
 
     def run(running: Path, epoch: int) -> None:
         try:
@@ -140,7 +144,13 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
 
 
 def main(queue: Path, max_jobs: int, check: bool = False) -> int:
+    from . import sandbox
+
     if check:  # Docker HEALTHCHECK for the worker container
+        err = sandbox.sandbox_error()
+        if err:  # a required sandbox that cannot start: report unhealthy so the operator sees it
+            print(f"worker sandbox unavailable: {err}", file=sys.stderr)
+            return 1
         age = worker_age(queue)
         ok = age is not None and age < HEARTBEAT_STALE
         print("worker ok" if ok else f"worker heartbeat missing or stale ({age})", file=sys.stderr)

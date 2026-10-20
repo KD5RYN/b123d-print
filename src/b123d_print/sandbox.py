@@ -151,9 +151,7 @@ def mpl_cache(workspace: Path) -> Path:
     return CACHE / "matplotlib" / hashlib.sha256(_real(workspace).encode("utf-8")).hexdigest()[:16]
 
 
-def kind() -> str:
-    if os.environ.get("B123D_PRINT_SANDBOX") == "none":
-        return "none"
+def _auto_kind() -> str:
     if sys.platform == "darwin" and shutil.which("sandbox-exec"):
         return "sandbox-exec"
     if sys.platform.startswith("linux") and shutil.which("bwrap"):
@@ -161,7 +159,65 @@ def kind() -> str:
     return "none"
 
 
+# B123D_PRINT_SANDBOX values: "none" (explicit opt-out: run with the audit hook only, e.g. the
+# single-container Docker image); unset or "auto" (use the best OS sandbox available, else none —
+# for local and dev use); a sandbox name ("bubblewrap"/"bwrap", "sandbox-exec") to REQUIRE it, so
+# a deployment that must isolate jobs fails closed instead of running them with the hook alone.
+_REQUIRE_ALIASES = {"bubblewrap": "bwrap", "bwrap": "bwrap", "sandbox-exec": "sandbox-exec"}
+
+
+def required_sandbox() -> str | None:
+    """The sandbox the operator requires (B123D_PRINT_SANDBOX names one), or None for opt-out/auto."""
+    v = (os.environ.get("B123D_PRINT_SANDBOX") or "").strip().lower()
+    if v in ("", "auto", "none"):
+        return None
+    return _REQUIRE_ALIASES.get(v, v)
+
+
+def kind() -> str:
+    if os.environ.get("B123D_PRINT_SANDBOX") == "none":
+        return "none"
+    req = required_sandbox()
+    k = _auto_kind()
+    if req and req != k:  # required but not what is available here: run_job fails closed
+        return "none"
+    return k
+
+
+def _probe(k: str) -> str | None:
+    """Return an error string if sandbox `k` cannot actually start here (e.g. bubblewrap without
+    unprivileged user namespaces), else None. Cached per kind."""
+    if k != "bwrap":
+        return None
+    try:
+        r = subprocess.run(["bwrap", "--ro-bind", "/", "/", "--unshare-user", "--unshare-net",
+                            "--die-with-parent", "true"], capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"bubblewrap could not run ({e})"
+    if r.returncode != 0:
+        msg = (r.stderr or b"").decode(errors="replace").strip().splitlines()
+        return "bubblewrap could not start a namespace" + (f": {msg[-1]}" if msg else
+                " (unprivileged user namespaces may be disabled on the host)")
+    return None
+
+
+@functools.cache
+def sandbox_error() -> str | None:
+    """Why the required sandbox is unusable here, or None if there is none to require or it works.
+    Used to fail closed: a deployment that asked for a sandbox must not silently run with the hook
+    only. B123D_PRINT_SANDBOX=none is the explicit opt-out and never reports an error."""
+    req = required_sandbox()
+    if not req:
+        return None
+    if _auto_kind() != req:
+        return f"sandbox {req!r} is required (B123D_PRINT_SANDBOX) but not available in this environment"
+    return _probe(req)
+
+
 def describe() -> str:
+    err = sandbox_error()
+    if err:
+        return f"REQUIRED SANDBOX UNAVAILABLE: {err}; jobs are refused until this is fixed"
     k = kind()
     return {
         "sandbox-exec": "macOS sandbox-exec (no network, no subprocesses, writes limited to out/ and scratch, home hidden)",
@@ -232,6 +288,9 @@ def soft_margin(timeout: float) -> float:
 
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_TIMEOUT, epoch: int | None = None) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
+    err = sandbox_error()
+    if err:  # a sandbox was required but cannot run here: refuse rather than run with the hook only
+        return {"ok": False, "error": f"refusing to run untrusted code: {err}", "sandbox": "unavailable"}
     out_dir.mkdir(parents=True, exist_ok=True)
     mpl = mpl_cache(workspace)
     mpl.mkdir(parents=True, exist_ok=True)

@@ -60,16 +60,21 @@ services:
     command: ["worker", "--queue", "/work/.b123d-print/jobs"]
     environment:
       B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}
-      # empty (not "none"): each job runs in its own bubblewrap mount namespace that binds only its
-      # workspace's part folder and a scratch folder, so one client's script cannot see other
-      # workspaces, the job queue or the shared config on the volume. bubblewrap needs unprivileged
-      # user namespaces, which the two security-opt lines below allow inside the container; on a
-      # host that forbids them (some hardened kernels) set this back to "none" and give each client
-      # its own deployment instead.
-      B123D_PRINT_SANDBOX: ""
+      # "bubblewrap" REQUIRES the sandbox: each job runs in its own bubblewrap mount namespace that
+      # binds only its workspace's part folder and a scratch folder, so one client's script cannot
+      # see other workspaces, the job queue or the shared config on the volume. If bubblewrap cannot
+      # start (no unprivileged user namespaces on the host), the worker refuses every job and reports
+      # unhealthy instead of silently running with the audit hook only. On a host that cannot provide
+      # user namespaces (e.g. a nested LXC container), set this to "none" to accept the audit hook
+      # alone (not an isolation boundary) or give each client its own deployment.
+      B123D_PRINT_SANDBOX: bubblewrap
     security_opt:
-      - seccomp:unconfined                             # allow the clone()/unshare() bubblewrap needs
-      - apparmor:unconfined                            # (user namespaces); the worker still has no network
+      # a custom seccomp profile (Docker's default blocks the mount/namespace syscalls bubblewrap
+      # needs); it still denies the privileged syscalls neither a build nor bubblewrap uses
+      - seccomp=./seccomp-bwrap.json
+      # unprivileged user namespaces also need AppArmor not to block them (Ubuntu 23.10+ restricts
+      # them by default); the worker has no network regardless (network_mode: none)
+      - apparmor:unconfined
     stop_grace_period: 15s
     healthcheck:
       test: ["CMD", "b123d-print-mcp", "worker", "--queue", "/work/.b123d-print/jobs", "--check"]

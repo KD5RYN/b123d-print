@@ -80,6 +80,21 @@ def test_introspection_to_the_guard_closure_is_refused(tmp_path, monkeypatch):
     assert _blocked(res), res
 
 
+def test_rebinding_os_path_and_builtins_does_not_change_decisions(tmp_path, monkeypatch):
+    # the hook captured realpath/normcase/fsdecode and any/isinstance/len at install time, so
+    # rebinding them from the script must not change what it allows (here: a write outside)
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    outside = tmp_path / "parts" / "p" / "p.py"  # readable, not writable
+    body = GOOD + f"""
+import os, builtins
+os.path.realpath = lambda p: "/somewhere/harmless"
+builtins.any = lambda it: False
+open({str(outside)!r}, "w")  # still refused: the hook does not use the rebound names
+"""
+    res = _run(tmp_path, body)
+    assert _blocked(res) and outside.read_text().startswith("\nfrom dataclasses"), res
+
+
 def test_utime_outside_the_writable_folders_is_refused(tmp_path, monkeypatch):
     monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
     target = tmp_path / "parts" / "p" / "p.py"  # readable, not writable
@@ -115,6 +130,18 @@ def test_reading_the_tokens_file_is_refused(tmp_path, monkeypatch):
     body = GOOD + f"\nopen({str(tokens)!r}).read()\n"
     res = _run(tmp_path, body)
     assert _blocked(res), res
+
+
+def test_required_sandbox_unavailable_fails_closed(tmp_path, monkeypatch):
+    # if a sandbox is required but cannot run here, the job is refused, not run with the hook only
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    monkeypatch.setattr(sandbox, "sandbox_error", lambda: "bubblewrap is required but not available here")
+    out = tmp_path / "parts" / "p" / "out"
+    script = tmp_path / "parts" / "p" / "p.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(GOOD, encoding="utf-8")
+    res = sandbox.run_job({"op": "build", "script": str(script)}, tmp_path, out, timeout=30)
+    assert not res.get("ok") and "refusing to run untrusted code" in res.get("error", ""), res
 
 
 def test_reading_another_jobs_queue_file_is_refused(tmp_path, monkeypatch):
