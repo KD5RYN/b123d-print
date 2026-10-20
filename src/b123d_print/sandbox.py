@@ -358,6 +358,8 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
         # settings: the worker resolves the user config from the real home, so pass it explicitly
         env.setdefault("XDG_CONFIG_HOME", _real(Path.home() / ".config"))
         readable.append(_real(Path(env["XDG_CONFIG_HOME"]) / "b123d-print"))  # only b123d-print's own config
+        # keep the venv interpreter (its pyvenv.cfg puts the venv's site-packages on sys.path); the
+        # venv must be built on a base Python the sandbox can reach (see the Dockerfile's UV_PYTHON_*)
         cmd = [sys.executable, "-s", "-m", "b123d_print.worker", job_file]
         k = kind()
         if k == "sandbox-exec":

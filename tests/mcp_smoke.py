@@ -540,6 +540,9 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
     expect(len(urls) >= 4 and len(rlinks) == len(urls) and "expire" in text(res),
            f"export returns a download link and a resource link per file ({len(urls)} links)"
            + ("" if len(urls) >= 4 else f"\n     why: {why(res)}"))
+    if not urls:  # the export produced nothing (a build failure): the checks below need a file
+        expect(False, "export produced files to download (skipping link checks: none were returned)")
+        return
     async with create_mcp_http_client() as h:  # no Authorization header
         same = True
         for u, rl in zip(urls, rlinks):

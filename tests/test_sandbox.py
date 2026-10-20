@@ -40,6 +40,18 @@ def alive(pid: int) -> bool:
         return True
 
 
+def test_bwrap_binds_the_folders_a_job_needs():
+    # a render/export job writes to out/ and the Matplotlib cache and reads the workspace and the
+    # Python install; all must be in the per-job mount or the job fails inside the sandbox
+    cmd = sandbox.linux_bwrap(["/ws/parts/p/out", "/tmp/scratch", "/cache/mpl"],
+                              ["/ws", "/py"], proc=False)
+    pairs = list(zip(cmd, cmd[1:]))
+    for w in ("/ws/parts/p/out", "/tmp/scratch", "/cache/mpl"):
+        assert ("--bind", w) in pairs, (w, cmd)
+    for r in ("/ws", "/py"):
+        assert ("--ro-bind-try", r) in pairs, (r, cmd)
+
+
 def test_bwrap_command_proc_variants():
     # a fresh procfs when the host allows it; an empty /proc (not a bound one) where it does not,
     # so a job never sees other jobs' /proc/<pid> in the same container

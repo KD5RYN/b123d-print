@@ -278,6 +278,8 @@ jobs:
           echo "bwrap probe (empty /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --tmpfs /proc \
             --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
+          echo "worker python resolves to:"
+          docker compose exec -T worker sh -lc 'readlink -f "$(command -v python)"; python -c "import sys; print(sys.executable)"' || true
           # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
           # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
           # makes the smoke assert the worker really is sandboxed and not silently falling back
