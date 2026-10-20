@@ -18,6 +18,7 @@ _FROM = {
                "holes", "overhang_faces", "overlap", "wall_thickness"),
     "config": ("Settings", "clearance", "hole_comp", "load_settings", "printer"),
     "fit": ("Mates", "align_axis", "place_on"),
+    "hardware": ("Hardware",),
     "motion": ("Motion", "Slide"),
     "project": ("View", "run"),
     "remix": ("import_model",),

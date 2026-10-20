@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.3.8 — unreleased
+## 0.3.8 — 2026-10-20
+
+**Upgrade shared servers.** Workspace isolation below closes two security advisories that are
+published with this release.
 
 - **Workspace isolation on a shared server** ([docs](https://kd5ryn.github.io/b123d-print/using/sandbox/#what-keeps-workspaces-apart)):
   per-job mounts so one client's part script cannot reach another client's files, the job queue or
@@ -14,6 +17,24 @@
   captures its configuration and avoids rebindable names when it is installed and refuses reads of
   other workspaces and the tokens file; it remains best-effort defense in depth, not an isolation
   boundary on its own.
+
+- **Wall mounts** (#99, [recipes](https://kd5ryn.github.io/b123d-print/using/recipes/)): `keyhole_mount` and
+  `mounting_slot` recipes for hanging parts on existing screws. Screw sizes come from the ISO 273
+  clearance and ISO 4762 socket-head tables, or explicit diameters; adjustment travel and an
+  optional head recess that leaves a retaining lip. A printable fit coupon and section drawings
+  in the docs.
+- **PCB supports** (#98, [recipes](https://kd5ryn.github.io/b123d-print/using/recipes/)): `pcb_standoff`, a
+  `pcb_board` stand-in and sourced mounting patterns for the Raspberry Pi Zero (v1.2 drawing) and
+  Pico (RP2040 Rev3 datasheet); custom hole coordinates too. Pilot sizes stay explicit and hole
+  compensation is applied once.
+- **Hardware bill of materials** (#100): a part script can declare the bought parts with
+  `hardware(d)` (quantities per variant, specification, confirmed or not, source and units). The
+  print sheet lists them, and `formats="hardware"` (or `all`) exports a versioned
+  `<name>_hardware.json`. `Hardware.from_bd_warehouse` reuses bd_warehouse's fastener data, and a
+  declared item can bring an imported STL/STEP/3MF model as an assembly stand-in. HTTP and SSH
+  downloads include the JSON when asked.
+- Tests: the end-to-end and real-SSH fixtures give a build 120 s (was 60 s) as a hang guard; the
+  calibration coupon's metrics needed more on slow runners. Production limits are unchanged.
 
 ## 0.3.7 — 2026-10-20
 

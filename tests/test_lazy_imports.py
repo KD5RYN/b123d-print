@@ -20,6 +20,7 @@ def _loaded(code: str) -> list[str]:
     "import b123d_print",
     "import b123d_print.cli",
     "from b123d_print.partfiles import find_parts, resolve_part, timing_lines",
+    "from b123d_print import Hardware",
 ])
 def test_no_heavy_import(code):
     assert _loaded(code) == []

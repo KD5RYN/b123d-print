@@ -101,6 +101,26 @@ def test_pull_tree_serves_the_whole_part(ws):
         assert code == 1 and out == b"" and "refused" in err, bad
 
 
+def test_hardware_format_handoff(ws):
+    out = ws / "parts/box/out"
+    (ws / "parts/box/box.py").write_text("VARIANTS = {'': {}, 'wide': {}}\n", encoding="utf-8")
+    (out / "box_print.md").write_bytes(b"declared hardware table")
+    (out / "box_hardware.json").write_bytes(b'{"schema_version": 1}')
+    (out / "box_wide_hardware.json").write_bytes(b'{"schema_version": 1, "variant": "wide"}')
+    for filename in ("box_trace.json", "box_wide_trace.json", "unrelated.json"):
+        (out / filename).write_bytes(b"{}")
+    for request, expected in (("pull box --formats hardware", {"box_hardware.json", "box_wide_hardware.json"}),
+                              ("pull box --tree --formats print,hardware",
+                               {"box.py", "out/box_print.md", "out/box_hardware.json", "out/box_wide_hardware.json"}),
+                              ("pull box --tree --formats hardware --variant wide",
+                               {"box.py", "out/box_wide_hardware.json"}),
+                              ("pull box --tree --formats hardware --variant standard",
+                               {"box.py", "out/box_hardware.json"})):
+        code, data, err = run_serve(ws, request)
+        assert code == 0 and set(untar(data)) == expected, err
+    assert "box_trace.json" not in {p.name for p in ssh.out_files(ws, "box")}
+
+
 def test_workspace_is_pinned_by_the_key(ws, tmp_path):
     """The client's command can never pick another workspace: only the key line's --workspace counts."""
     other = tmp_path / "other"

@@ -102,3 +102,7 @@ uv run parts/bracket/bracket.py
 Everything the CLI and the server use is importable from `b123d_print`: `export`, `render`,
 `section`, the check classes (see [Checks API](../scripts/checks-api.md)), `load_settings`,
 `hole_comp`, `clearance` and `printer`.
+
+The `--formats` choice `print,hardware` writes a print sheet and a versioned declared hardware
+BOM (`_hardware.json`); `all` includes both. Hardware quantities cover the entire selected
+variant even with `--only` ([declaring hardware](../scripts/convention.md#declared-hardware)).

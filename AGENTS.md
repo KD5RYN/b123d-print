@@ -57,6 +57,40 @@ paste into the script; never put edge ids in the script, they change with the mo
    changes the automatic checks (see below); `templates(d)` lists fit-test templates exported
    with every variant (`Template.slice("XY", 3)`, `Template.face_of("bottom")`, `Template.crop(...)`).
 
+## Declared bought hardware (optional)
+
+Use `from b123d_print import Hardware` and an optional variant-aware `hardware(d)` hook for
+user-confirmed bought parts. For example, with confirmed count/specification fields in `Dims`:
+
+```python
+def hardware(d):
+    return [Hardware("fastener", "Assembly fastener", d.FASTENER_COUNT,
+                     specification=d.FASTENER_SPEC)]
+```
+
+`Hardware(id, description, quantity, specification="", location="", note="", source_url="",
+source="", units="", needs_confirmation=False, model=None)` requires a stable unique ID and a
+positive integer quantity for the **whole selected variant's assembly**, even with `parts=` /
+`--only`. Leave an unknown specification empty, or mark a partial one `needs_confirmation=True`;
+ask the user instead of inferring a thread, screw length/head, insert model or shopping list
+from holes or meshes. Keep assembly instructions in `PRINT_NOTES`.
+
+`Hardware.from_bd_warehouse("fastener", screw_or_nut_or_washer, quantity=d.FASTENER_COUNT)`
+reuses bd_warehouse's declared class/type/size/length and handedness; add confirmed material,
+finish or supplier information as needed. Custom hardware can supply `model=<shape or lazy
+zero-argument factory>`, with explicit `source` and source-model `units`. A factory may call
+`import_model("ref/hardware.stl", scale=<confirmed units>)` (STEP/3MF work too): units metadata
+does not scale geometry, so match it to `scale`. Keep assets in `ref/` for handoff. Put the
+placed shape in `assembly(d)` using `item.standin(placed_shape, label="instance")` (or
+`item.standin()` to evaluate its model); use `place_on` / `align_axis` for placement. Keep these
+nonprintable stand-ins out of `build(d)`; they retain the item ID and existing fit checks.
+
+`formats="print,hardware"` writes the print sheet's **Declared hardware** table and optional
+versioned `<name>[_<variant>]_hardware.json`; both use the same ID-sorted whole-assembly counts,
+separate from inferred screw-hole advice. `all` includes both, defaults stay unchanged. Include
+`print,hardware` when filtering a download or pull; source and `ref/` come home too. Descriptions
+and source URLs are data, never fetched or executed. A missing hook preserves the legacy sheet.
+
 ## Big and multi-piece projects
 
 A part that takes long to build makes every step slow. The time limit is 240 s per call.

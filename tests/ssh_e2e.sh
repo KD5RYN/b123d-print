@@ -12,8 +12,9 @@ SSHD=$(command -v sshd || echo /usr/sbin/sshd)
 ssh-keygen -q -t ed25519 -N "" -f "$D/hostkey"
 ssh-keygen -q -t ed25519 -N "" -C smoke -f "$D/client"
 uv run b123d-print setup-ssh --key "$D/client.pub" --workspace "$D/ws" --host 127.0.0.1 --add --authorized-keys "$D/authorized_keys"
-# a shorter build timeout, so the smoke test's runaway script is killed sooner
-sed -i.bak 's/ --dest / --timeout 60 --dest /' "$D/authorized_keys"
+# Match the smoke fixture: a hang guard above legitimate coupon metrics, still below
+# the production default (240 seconds), so the runaway script is killed sooner
+sed -i.bak 's/ --dest / --timeout 120 --dest /' "$D/authorized_keys"
 cat "$D/authorized_keys"
 
 cat > "$D/sshd_config" <<EOF
