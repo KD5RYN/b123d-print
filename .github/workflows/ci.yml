@@ -289,6 +289,9 @@ jobs:
             --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
           echo "worker python resolves to:"
           docker compose exec -T worker sh -lc 'readlink -f "$(command -v python)"; python -c "import sys; print(sys.executable)"' || true
+          # decisive diagnostic: build the exact bwrap argv the worker uses for a job and exec the
+          # interpreter through it, so the log shows which bind fails or whether /opt is shadowed
+          docker compose exec -T worker python -c 'import os,sys,subprocess; from b123d_print import sandbox; exe=sys.executable; argv=sandbox.linux_bwrap([os.environ.get("TMPDIR","/tmp")], sandbox._python_roots()+["/work"], proc=False); print("exe:",exe,"isfile:",os.path.isfile(exe)); print("argv:"," ".join(argv)); r=subprocess.run(argv+[exe,"-c","print(1)"],capture_output=True,text=True); print("rc:",r.returncode,"err:",r.stderr.strip()[-900:])' || true
           # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
           # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
           # makes the smoke assert the worker really is sandboxed and not silently falling back
