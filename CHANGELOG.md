@@ -24,6 +24,20 @@
   `flip_hinge`: the print-in-place hinge recipe folded 180° with every gap held at 0.2 mm
   (folded 220° it fails where the leaves meet); typical print-in-place clearances are in the docs.
 
+**Eval benchmarks for orientation and coordinate mistakes**
+([docs](https://kd5ryn.github.io/b123d-print/contributing/evals/#benchmarks-orientation-coordinates-mirrors-units-assemblies),
+repo-only tooling in `eval/`, not in the package): five written tasks in `eval/benchmarks.toml`,
+each scored pass/fail on the agent's script, to catch regressions when the model changes: a shelf
+bracket described in use (built on Z=0, ranked at or near the top by `suggest_orientation`, no
+large supports, no tip-over), holes dimensioned from a corner datum with the origin at the centre,
+a left/right mirror pair (a mirror image, not a copy), a plate drawn in inches, and a box with a
+screwed lid whose `assembly(d)` must pass `check_fit`. Shared scorers in
+`eval/b123d_eval/scoring.py` build the script once in the sandbox and read the geometry
+(`pieces`, `on_bed`, `size`, `origin`, `holes`, `orientation`, `supports`, `tip_over`, `compare`,
+`mirror_of`, `fit`). Each task has a reference script and known bad scripts; `eval/run.py
+selftest` (and CI) scores them all with no model. `eval/run.py run --suite bench` runs an agent on
+them and writes a report of every check.
+
 ## 0.3.5 — 2026-10-19
 
 - **HTTP: the workspace is resolved once.** The auth layer works out the request's workspace and the
