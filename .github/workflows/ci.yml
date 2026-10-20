@@ -271,12 +271,13 @@ jobs:
           # diagnostic: can bubblewrap set up a namespace inside the worker container? a fresh /proc
           # is refused when the container masks parts of /proc, so the worker falls back to an empty
           # /proc; show both so the log says which path is in use (prints the exit code either way)
+          # non-fatal (the step runs under `bash -e`; a fresh /proc is expected to fail here)
           echo "bwrap probe (fresh /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --proc /proc \
-            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap --proc exit: $?"
+            --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --proc exit: 0" || echo "bwrap --proc exit: $?"
           echo "bwrap probe (empty /proc) in worker:"
           docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --tmpfs /proc \
-            --unshare-net --unshare-pid --die-with-parent true; echo "bwrap --tmpfs /proc exit: $?"
+            --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
           # each job runs in its own bubblewrap namespace inside the worker, so one workspace is
           # isolated from the others (the smoke's cross-workspace read must fail); EXPECT_SANDBOX
           # makes the smoke assert the worker really is sandboxed and not silently falling back
