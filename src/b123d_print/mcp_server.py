@@ -62,8 +62,12 @@ return; the server gives no shell, ssh or scp access. Last step, before reportin
 (name) and bring the part home into the project folder in the same layout as a local install
 (parts/<name>/<name>.py, parts/<name>/out/, parts/<name>/ref/): over HTTP `curl -fLo <name>.zip
 '<link>'` and unzip it in the project folder; over SSH the `b123d-print pull` command it gives.
-Then check the files are there on the user's machine. Locally (stdio) the files are already in
-the project folder."""
+Then check the files are there on the user's machine. If your shell has no network or is
+sandboxed (Antigravity/agy, web and mobile clients), call download_part(name, embed=True): the zip
+comes inside the result; unzip it from where your client saved it (unzip -o <zip> -d <project folder>).
+A part is not done until its files are on the user's machine: after export, call download_part
+(embed=True if your shell has no network) and unzip into the project folder, unless the user says to
+leave them on the server. Locally (stdio) the files are already in the project folder."""
 
 REMOTE_DOC = """
     Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
@@ -255,6 +259,29 @@ def _home_note(name: str | None) -> str:
            f"{call} gives the `b123d-print pull` command that copies it into parts/{name or '<part>'}/ in your project folder")
     return (f"The server copy is a temporary working copy ({_kept()}). Bring it home: {how}. "
             "Do not use ssh/scp: the server gives no shell access.")
+
+
+def _next_step(name: str) -> str:
+    """Remote: the closing NEXT STEP of a result that wrote files the user needs (empty over stdio):
+    bring the part home with download_part, embedded in the result when the client's shell can't fetch."""
+    if not _remote():
+        return ""
+    try:
+        size = sum(p.stat().st_size for _, p in _part_files(name, None, None))
+    except (ToolError, OSError):
+        size = None
+    how = ("it gives the `b123d-print pull` command; run it in the project folder" if not _http() else
+           f"run the curl command it gives, then unzip -o {name}.zip in the project folder")
+    if size is None or size <= EMBED_TOTAL:
+        embed = (f"If your shell has no network or runs sandboxed (Antigravity/agy, a web or mobile client), call "
+                 f"download_part('{name}', embed=True) instead: the zip"
+                 + (f" ({_human_size(size)}, under the {EMBED_TOTAL // 1_000_000} MB embed limit)" if size else "")
+                 + " comes inside the result; unzip it into the project folder from where your client saved it.")
+    else:
+        embed = (f"The part is {_human_size(size)}, over the {EMBED_TOTAL // 1_000_000} MB embed limit: if your shell "
+                 f"has no network, narrow it to fit, e.g. download_part('{name}', formats='3mf', embed=True).")
+    return (f"NEXT STEP: a part is not done until its files are on the user's machine. Call "
+            f"download_part('{name}') ({how}). {embed} Skip this only if the user said to leave the files on the server.")
 
 
 def _files_doc(f):
@@ -885,6 +912,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         out.append("\n" + _pull_note(name, formats, None))
     if _remote():
         out.append("\n" + _home_note(name))
+        out.append("\n" + _next_step(name))
     return ["\n".join(out), *extra]
 
 
@@ -1125,7 +1153,10 @@ async def make_template(name: str, kind: str, plane: str | None = None, at: floa
     out = ["\n".join(lines)]
     if where and inline:
         out.append(Image(path=where))
-    return _with_note(out + extra, name)
+    out = _with_note(out + extra, name)
+    if _remote():
+        out[0] += "\n\n" + _next_step(name)
+    return out
 
 
 def _pull_cmd(name: str, formats: str | None, variant: str | None) -> str:
@@ -1167,8 +1198,10 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
     = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print); the script and ref/ always come.
     Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
-    embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
-    URLs nor read resources. Call it as the last step of remote work, before reporting."""
+    embed=True also puts the zip (up to 8 MB) into the result (over HTTP and SSH), for clients
+    whose shell has no network (Antigravity/agy) or that can neither fetch URLs nor read
+    resources: unzip it from where the client saved it. Call it as the last step of remote work,
+    before reporting: a part is not done until its files are on the user's machine."""
     files = _part_files(name, variant, formats)
     total = sum(p.stat().st_size for _, p in files)
     parts_dir = load_settings(_root()).parts_dir
@@ -1179,8 +1212,9 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
         return [f"{head}\nThis server runs locally: the files are already in the project folder, "
                 f"{_root() / parts_dir / name}. Nothing to download.\n{listing}"]
     if STATE["ssh_dest"]:
-        return [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
-                f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+        out = [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
+               f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+        return _embed_zip(out, files, total, prefix, f"b123d-print://download/{_ws_name()}/{name}", name) if embed else out
     query = links.zip_query(variant, formats)
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
     url = _base_url() + url
@@ -1201,11 +1235,21 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     uri = f"b123d-print://download/{_ws_name()}/{name}"
     out: list = [text, ResourceLink(uri=uri, name=f"{name}.zip", mime_type="application/zip",
                                     description=f"the whole part as a zip (unfiltered); download: {url}")]
-    if embed:
-        if total > EMBED_TOTAL:
-            out[0] += f"\n(embed: not embedded, the part is over {EMBED_TOTAL // 1_000_000} MB; use the link)"
-        else:
-            out.append(_embedded_bytes(handoff.zip_bytes(files, prefix), uri, "application/zip"))
+    return _embed_zip(out, files, total, prefix, uri, name) if embed else out
+
+
+def _embed_zip(out: list, files, total: int, prefix: str, uri: str, name: str) -> list:
+    """download_part(embed=True): the zip inside the result, and how to unzip it where the client saved it."""
+    if total > EMBED_TOTAL:
+        out[0] += (f"\n(embed: not embedded, the part is over {EMBED_TOTAL // 1_000_000} MB; use the link, or narrow it "
+                   f"with formats= or variant=)")
+        return out
+    out[0] += (f"\n\nEMBEDDED: the zip ({name}.zip, {prefix}/...) is in this result, no network needed. Your client "
+               f"saves it to a file (Antigravity: .../brain/<conversation>/.system_generated/steps/<N>/media_0.zip). "
+               f"Unzip it into the project folder, as one command (no && or |):\n"
+               f"  unzip -o <saved zip> -d <project folder>   (Windows: tar -xf <saved zip> -C <project folder>)\n"
+               f"Then check {prefix}/out/ is there before reporting.")
+    out.append(_embedded_bytes(handoff.zip_bytes(files, prefix), uri, "application/zip"))
     return out
 
 
@@ -1576,7 +1620,9 @@ def _remote_step(name: str = "<name>") -> str:
     return (f"download_part('{name}') and bring the part home into my project folder, in the same layout "
             f"as a local install (parts/{name}/{name}.py, parts/{name}/out/, parts/{name}/ref/): over HTTP "
             f"`curl -fLo {name}.zip '<link>'` and unzip it in the project folder, over SSH the `b123d-print pull` "
-            "command it gives. Check the files exist on my machine before reporting. Use only the MCP tools and "
+            f"command it gives; if your shell has no network, download_part('{name}', embed=True) and unzip the "
+            "embedded zip from where your client saved it. Check the files exist on my machine before reporting. "
+            "Use only the MCP tools and "
             "their links: never ssh, scp or a shell on the server (there is none). The server copy is temporary.")
 
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.7 — unreleased
+
+- **Antigravity** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#antigravity-agy-cli-and-ide)):
+  Google Antigravity (the `agy` CLI and the IDE, driving Gemini) is a documented, tested client:
+  the global (`~/.gemini/config/mcp_config.json`) and per-project (`.agents/`) config with
+  `serverUrl` and a Bearer header, reloading with `/mcp`, approvals (`permissions.allow` with
+  `mcp(b123d-print/*)` and `command(unzip)`; one command at a time, no `&&` or pipes), and
+  bringing the files home from a shell without network. Gemini CLI's section gains the remote
+  (`httpUrl`) config. The FAQ and Troubleshooting cover a part left on the server.
+- **Files home by default**: on a remote server (HTTP or SSH), the results of `export` and
+  `make_template` end with a **NEXT STEP**: a part is not done until its files are on the user's
+  machine, with the exact `download_part` call, and `download_part(name, embed=True)` when the
+  agent's shell has no network and the part fits the 8 MB embed limit. The server instructions,
+  `AGENTS.md` (the `b123d-print://guide` resource) and the prompts say the same.
+  `download_part(embed=True)` now also works over SSH, and an embedded zip comes with the one
+  `unzip -o <saved zip> -d <project folder>` command. Locally (stdio) nothing changes. The HTTP
+  end-to-end test runs the Antigravity flow: export, `download_part(embed=True)`, unzip into a
+  fresh project folder, compare.
+
 ## 0.3.6 — 2026-10-20
 
 - **From part to print** ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/), #65): a new

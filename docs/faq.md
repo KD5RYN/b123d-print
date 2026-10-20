@@ -21,7 +21,7 @@ They all run the same MCP server.
 
 - **Claude Code plugin:** one command in Claude Code, the server plus a skill, the project folder
   as workspace ([Claude Code](getting-started/mcp-clients.md#claude-code)).
-- **MCP server through `uvx`:** for every other client (Claude Desktop, Cursor, Gemini CLI, ...):
+- **MCP server through `uvx`:** for every other client (Claude Desktop, Cursor, Gemini CLI, Antigravity, ...):
   a few lines in the client's config ([Quick start](getting-started/quick-start.md)).
 - **Docker:** the strongest isolation (the way to get a real sandbox on Windows), or the shared
   HTTP server for several machines ([Docker](getting-started/docker.md), [Which mode?](advanced/index.md)).
@@ -85,6 +85,14 @@ The STEP file is a normal solid you can take elsewhere, but nothing here checks 
 Locally, into your workspace: `parts/<name>/<name>.py` (the script) and `parts/<name>/out/`
 (STEP, STL, 3MF, PNG and section views). On a remote server they live on the server until
 `download_part` brings them home ([Output formats](using/formats.md), [Which mode?](advanced/index.md)).
+
+**The assistant says the part is done, but the files aren't in my project folder.**
+On a remote server it must still bring them home: a remote `export` ends with a NEXT STEP
+saying so, but some agents skip it. Ask for `download_part` and an unzip into the project
+folder. If its shell has no network (Antigravity's `agy` with the terminal sandbox on),
+`download_part(name, embed=True)` returns the zip inside the result, and `unzip` works offline
+([Antigravity](getting-started/mcp-clients.md#antigravity-agy-cli-and-ide)). Locally (stdio) the
+files are written straight into the project folder.
 
 **A big part times out.**
 Each build has 240 s. The build's timing report names the slow piece; build one piece at a time

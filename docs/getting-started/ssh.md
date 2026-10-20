@@ -128,7 +128,9 @@ b123d-print push bracket.stl --part bracket --to you@server
 ```
 
 `export(..., embed=true)` instead puts each file up to 2 MB (8 MB in all) into the tool result,
-over SSH as well as locally; it costs a lot of context, so it is off by default.
+over SSH as well as locally; it costs a lot of context, so it is off by default. For a client
+whose shell can't run `pull` (a sandbox without network), `download_part(name, embed=True)`
+puts the whole part's zip (up to 8 MB) into the result: unzip it in the project folder.
 
 SSH workspaces are folders you chose on the server (`setup-ssh --workspace`), so the server never
 removes them on its own ([retention](http.md#workspace-retention) is for HTTP workspaces); clean
