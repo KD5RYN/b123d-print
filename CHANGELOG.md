@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.7 — unreleased
 
 - **Workspace isolation on a shared server** ([docs](https://kd5ryn.github.io/b123d-print/using/sandbox/#what-keeps-workspaces-apart)):
   per-job mounts so one client's part script cannot reach another client's files, the job queue or
@@ -14,6 +14,51 @@
   captures its configuration and avoids rebindable names when it is installed and refuses reads of
   other workspaces and the tokens file; it remains best-effort defense in depth, not an isolation
   boundary on its own.
+- **Antigravity** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#antigravity-agy-cli-and-ide)):
+  Google Antigravity (the `agy` CLI and the IDE, driving Gemini) is a documented, tested client:
+  the global (`~/.gemini/config/mcp_config.json`) and per-project (`.agents/`) config with
+  `serverUrl` and a Bearer header, reloading with `/mcp`, approvals (`permissions.allow` with
+  `mcp(b123d-print/*)` and `command(unzip)`; one command at a time, no `&&` or pipes), and
+  bringing the files home from a shell without network. Gemini CLI's section gains the remote
+  (`httpUrl`) config. The FAQ and Troubleshooting cover a part left on the server.
+- **Files home by default**: on a remote server (HTTP or SSH), the results of `export` and
+  `make_template` end with a **NEXT STEP**: a part is not done until its files are on the user's
+  machine, with the exact `download_part` call, and `download_part(name, embed=True)` when the
+  agent's shell has no network and the part fits the 8 MB embed limit. The server instructions,
+  `AGENTS.md` (the `b123d-print://guide` resource) and the prompts say the same.
+  `download_part(embed=True)` now also works over SSH, and an embedded zip comes with the one
+  `unzip -o <saved zip> -d <project folder>` command. Locally (stdio) nothing changes. The HTTP
+  end-to-end test runs the Antigravity flow: export, `download_part(embed=True)`, unzip into a
+  fresh project folder, compare.
+
+- **Pinned build tooling** (#70): every GitHub Action in the workflows is pinned to a full commit
+  SHA (version in a comment), including `pypa/gh-action-pypi-publish`, which tracked the
+  `release/v1` branch (now v1.14.2), and the Dockerfile's `python:3.12-slim-bookworm` and
+  `ghcr.io/astral-sh/uv:0.13.0` images by their multi-arch index digest. A moved upstream tag can
+  no longer run in the release jobs that hold OIDC, package or write tokens, and the GHCR image
+  is built from known bases. Dependabot updates them weekly (one grouped PR for actions, one for
+  images), and CI fails on an unpinned `uses:` or base image. How to update the pins by hand:
+  [Releasing](https://kd5ryn.github.io/b123d-print/contributing/releasing/#pinned-actions-and-images).
+- **First-run setup** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/#tell-it-your-printer), #66):
+  `b123d-print setup` asks for the printer (search words, then pick one), material, export
+  formats, default style and a measured hole compensation, and writes them to the user config
+  (`--workspace`: the workspace's `b123d-print.toml`; with a printer, hole compensation goes to
+  its calibration for that material). Flags for scripted use (`--printer`, `--material`,
+  `--formats`, `--style`, `--hole-comp`, `--hole-comp-h`, `--no-input`). A value already set is
+  never replaced without a yes or `--overwrite`. Over MCP, the new prompt `setup_workspace` walks
+  the assistant through the same questions and the coupons (hole, fit, overhang and bridge, in
+  that order), and the new tool `save_setup` saves the answers (where `use_printer` saves:
+  per workspace on a shared server), reporting values already set as conflicts until
+  `overwrite=true`. `list_parts` in generic mode now tells the assistant to offer setup, and
+  `AGENTS.md` says to offer it once before the first part. Quick start has a "Tell it your
+  printer" step.
+- **Tutorials** ([docs](https://kd5ryn.github.io/b123d-print/tutorials/first-bracket/), #68): a
+  new "Start here" section with two end-to-end sessions recorded from the real server: a shelf
+  bracket from install to print (setup, confirming dimensions, sections, checks, the structural
+  design review, `suggest_orientation` with a load, a fit-test template, export, files home
+  locally and on a shared server, the slicer and print sheet, then "the holes are tight"), and a
+  remix of a downloaded STL (where the file goes, `describe_model`, the license, MODIFY,
+  inherited findings, `before_after` and `compare`, a template, export, attribution).
 
 ## 0.3.6 — 2026-10-20
 

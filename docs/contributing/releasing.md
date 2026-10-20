@@ -76,6 +76,28 @@ feature pull request of the release.
    the quick job runs.
 5. Update the pinned-version examples in the docs (`b123d-print==X.Y.Z`) if they should follow.
 
+## Pinned actions and images
+
+The release jobs hold OIDC (`id-token: write`) and write tokens, so nothing they run may move
+under them. Every action in `.github/workflows/` is pinned to a full commit SHA with its version
+in a comment (`uses: actions/checkout@<40-hex sha> # v7.0.1`), and both images in the
+`Dockerfile` by their multi-arch index digest (`python:3.12-slim-bookworm@sha256:...`,
+`ghcr.io/astral-sh/uv:0.13.0@sha256:...`). Python dependencies are already pinned with hashes in
+`uv.lock`. The `changes` job in CI fails on a `uses:` or `FROM`/`COPY --from` without a pin.
+
+- **Updates come from Dependabot** (`.github/dependabot.yml`): weekly, one grouped PR for the
+  actions and one for the images; it moves the SHA or digest and the version comment together.
+  Review the upstream release notes, let CI run, merge.
+- **By hand**, keep the same major version. For an action, take the commit of the tag (the
+  `^{}` line is the commit an annotated tag points to; a lightweight tag has only the one line):
+
+    ```bash
+    git ls-remote --tags https://github.com/actions/checkout.git 'v7*'
+    ```
+
+    For an image, the index digest (not a single platform's manifest), for example with
+    `docker buildx imagetools inspect python:3.12-slim-bookworm` (the `Digest:` line at the top).
+
 ## MCP Registry
 
 The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as

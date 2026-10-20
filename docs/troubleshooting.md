@@ -5,6 +5,9 @@
 | First start is very slow, or the client gives up | it is downloading the dependencies; run `uvx --from b123d-print b123d-print-mcp --help` once in a terminal, then restart the client |
 | Bambu Studio says "The 3mf file has invalid config, load geometry data only" | expected: the file has no Bambu project settings, only the shape. Click OK; the part loads and you slice it with your own settings (Arrange with A if it lands off the plate) |
 | Client says `uvx` not found | use the full path from `which uvx` (Windows: `where.exe uvx`) as the command |
+| The assistant finished but the files are still on the server | ask it to bring the part home: `download_part`, then unzip in the project folder; if its shell has no network (Antigravity's `agy`), `download_part(name, embed=True)` and unzip the saved zip ([get the files](getting-started/http.md#get-the-files)) |
+| Antigravity (`agy`) doesn't list the b123d-print tools | the remote key is `serverUrl`, not `url`; then `/mcp` to reload, or restart `agy` ([Antigravity](getting-started/mcp-clients.md#antigravity-agy-cli-and-ide)) |
+| Antigravity asks before every tool call | allow `mcp(b123d-print/*)` in `permissions.allow` ([Antigravity](getting-started/mcp-clients.md#antigravity-agy-cli-and-ide)) |
 | Model never looks at the renders | your client doesn't pass tool images to the model; open `out/*.png` yourself |
 | `timed out after 240 s` | a slow or endless script. Read the timing report of `build_part` (or `b123d-print build`), build one piece at a time with `parts=`, and see [big and multi-piece projects](scripts/convention.md#big-and-multi-piece-projects); raise `--timeout` only if the part is genuinely heavy |
 | `[FAIL] timeout ... time limit reached while running ...` | `check` ran out of time; the findings above it are complete. Raise `--check-timeout` (`B123D_PRINT_CHECK_TIMEOUT`), or narrow the check it names ([time limit](using/checks.md#time-limit)) |

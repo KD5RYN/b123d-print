@@ -92,11 +92,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe"},
+                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe", "save_setup"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
-                       "fit_test"},
+                       "fit_test", "setup_workspace"},
            f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
@@ -151,6 +151,12 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
     shown = None if pw is None else [p.name for p in (pw / "parts/box/out").iterdir() if not p.name.startswith(".")]  # not .cache/
     expect(files == ["parts/box/out/box.3mf"] and (pw is None or shown == ["box.3mf"]), "export honors formats='3mf'")
+    t = text(res)
+    nxt = t[t.find("NEXT STEP"):] if "NEXT STEP" in t else ""
+    expect(bool(nxt) == (mode != "stdio") and (not nxt or ("download_part('box')" in nxt
+                                                          and "download_part('box', embed=True)" in nxt)),
+           "a remote export ends with the NEXT STEP: download_part, embed=True for a shell without network"
+           + ("" if mode == "stdio" else f"\n{nxt[:400]}"))
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "embed": True})
     emb = blobs(res)
     got = next((v for k, v in emb.items() if k.endswith("/parts/box/out/box.3mf")), None)
@@ -161,7 +167,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     res = await c.call_tool("export", {"name": "box", "formats": "3mf", "view": "sideways"})
     expect(res.is_error and "assembly" in text(res), "an unknown view layout is refused with the choices")
     await c.call_tool("export", {"name": "box", "formats": "3mf,png"})
-    await template_checks(c, pw, expect)
+    await template_checks(c, pw, expect, mode)
     await handoff_checks(c, pw, expect, mode)
 
     # compare parses the files in the sandbox, like a build
@@ -248,6 +254,7 @@ async def handoff_checks(c, pw, expect, mode: str) -> None:
         return
     expect("deleted after" in t or "not your copy" in t, "download_part says the server copy is temporary")
     expect("Do not use ssh/scp" in t and "parts/box/box.py" in t, "download_part names the local layout and rules out ssh/scp")
+    await embedded_flow(c, pw, expect)
     if mode == "ssh":
         expect("b123d-print pull box --from" in t, "download_part over SSH gives the pull command")
         return
@@ -280,7 +287,7 @@ async def handoff_checks(c, pw, expect, mode: str) -> None:
     expect(res.is_error and "no variant 'nope'" in text(res), "download_part refuses an unknown variant, listing them")
 
 
-async def template_checks(c, pw, expect) -> None:
+async def template_checks(c, pw, expect, mode: str = "stdio") -> None:
     """Fit-test templates: list_faces with a highlight picture, a slice, a face and a crop template
     (files written, checked, over HTTP downloadable by their link), and a slice that misses."""
 
@@ -302,6 +309,7 @@ async def template_checks(c, pw, expect) -> None:
     ok = "box_template_xy1" in t and "Checks: PASSED" in t and "x 1.20 mm" in t and images(res)
     expect(ok and on_disk("parts/box/out/box_template_xy1.3mf") and on_disk("parts/box/out/box_template_xy1_where.png"),
            "make_template slice: a 1.2 mm template, checked, files and the where-picture" + ("" if ok else f"\n{t[:2000]}"))
+    expect(("NEXT STEP" in t) == (mode != "stdio"), "make_template: the NEXT STEP to bring the files home, only when remote")
     m = re.search(r"parts/box/out/box_template_xy1\.3mf\s+(https?://\S+)", t)
     if m:  # over HTTP: the template's own download link works without a token
         async with create_mcp_http_client() as h:
@@ -516,6 +524,41 @@ def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+async def embedded_flow(c, pw, expect) -> None:
+    """The Antigravity (agy) flow, for a shell without network: export, download_part(embed=True),
+    write the embedded zip to a file the way the client saves it, unzip it into a fresh project
+    folder and check the files (no link fetched)."""
+    import io
+    import zipfile
+
+    await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf,png", "view": "none"})
+    res = await c.call_tool("download_part", {"name": "box", "embed": True})
+    t = text(res)
+    expect("EMBEDDED" in t and "unzip -o <saved zip> -d <project folder>" in t,
+           "download_part(embed=True) says how to unzip the embedded zip")
+    zips = [b for u, b in blobs(res).items() if u.startswith("b123d-print://download/")]
+    expect(len(zips) == 1, f"download_part(embed=True) puts one zip into the result ({len(zips)})")
+    if not zips:
+        return
+    home = Path(tempfile.mkdtemp(prefix="b123d-print-smoke-agy-"))
+    saved = home / "brain" / "media_0.zip"  # where the client saved it, outside the project folder
+    saved.parent.mkdir()
+    saved.write_bytes(zips[0])
+    project = home / "project"
+    with zipfile.ZipFile(io.BytesIO(saved.read_bytes())) as zf:
+        names = zf.namelist()
+        expect(all(n.startswith("parts/box/") and ".." not in n for n in names), "the embedded zip holds only parts/box/...")
+        zf.extractall(project)
+    script = (project / "parts/box/box.py").read_text(encoding="utf-8") if (project / "parts/box/box.py").exists() else ""
+    expect(script == text(await c.call_tool("read_part", {"name": "box"})), "embedded zip unzipped: parts/box/box.py is the script")
+    expect((project / "parts/box/out/box.3mf").is_file() and (project / "parts/box/out/box.png").is_file(),
+           f"embedded zip unzipped: parts/box/out/ has the 3MF and the preview ({len(names)} files)")
+    if pw is not None:
+        expect(all((project / n).read_bytes() == (pw / n).read_bytes() for n in names),
+               "every file from the embedded zip is byte-identical to the server's")
+    shutil.rmtree(home, ignore_errors=True)
 
 
 def links_in(res) -> list[str]:
