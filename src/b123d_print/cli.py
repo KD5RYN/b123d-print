@@ -10,7 +10,6 @@ import sys
 from importlib.resources import files
 from pathlib import Path
 
-from . import checks as ck
 from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, safe_console, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -70,7 +69,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
 
 
 def _targets(args) -> list[Path]:
-    from .project import find_parts, resolve_part
+    from .partfiles import find_parts, resolve_part
 
     root, parts_dir = workspace(args.root)
     if args.parts:
@@ -82,6 +81,7 @@ def _targets(args) -> list[Path]:
 
 
 def cmd_check(args) -> int:
+    from . import checks as ck
     from .project import load, run_checks, variant_key, variants
 
     worst = 0
@@ -122,7 +122,7 @@ def cmd_check(args) -> int:
 
 def cmd_fit(args) -> int:
     """Fit between the pieces of each part's assembly(d): interference and hole alignment."""
-    from . import fit
+    from . import checks as ck, fit
     from .project import load, variant_key, variants
 
     worst, out = 0, []
@@ -419,7 +419,7 @@ def _triple(text: str, what: str) -> tuple[float, float, float]:
 
 def cmd_template(args) -> int:
     """Make a fit-test template from a part (--slice, --face or --crop), write it and check it."""
-    from . import templates as tp
+    from . import checks as ck, templates as tp
     from .project import dims, load, printables, resolve_part, write_template
 
     root, parts_dir = workspace(args.root)
@@ -491,7 +491,7 @@ def cmd_diagnose(args) -> int:
 def cmd_params(args) -> int:
     """The Dims fields of a part (read from the script, not run)."""
     from .params import read
-    from .project import resolve_part
+    from .partfiles import resolve_part
 
     root, parts_dir = workspace(args.root)
     script = resolve_part(args.part, root, parts_dir)
@@ -1101,7 +1101,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(examples()))
         return 0
     if args.cmd == "list":
-        from .project import find_parts
+        from .partfiles import find_parts
 
         root, parts_dir = workspace(args.root)
         for p in find_parts(root, parts_dir):

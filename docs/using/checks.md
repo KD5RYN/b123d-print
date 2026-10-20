@@ -161,6 +161,10 @@ nearly all flat) are cut from their triangulation, which is exact for flat faces
 A remix's original does not change while you work on the remix, so its findings are cached in
 `out/.cache/` next to the converted model, keyed by its geometry, the check's arguments, your
 settings and the b123d-print version: after the first `check`, only the remix is checked.
+The same goes for the pieces of any part checked by the MCP server: each piece's per-piece
+findings are cached by its geometry, so after changing one piece only that piece is checked again,
+while the checks across pieces always run ([the build cache](../scripts/convention.md#big-and-multi-piece-projects)).
+`fresh=True` checks everything again.
 
 !!! warning "Why wall checks matter"
     `is_valid` and hole-diameter checks do not catch a 0.05 mm skin. A real print broke there.

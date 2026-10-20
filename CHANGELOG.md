@@ -2,6 +2,26 @@
 
 ## 0.3.7 — unreleased
 
+- **The MCP server starts in about a second and holds ~66 MB** instead of ~6 s and ~440 MB
+  (#76): `import b123d_print` and the server front no longer load build123d, OCP, matplotlib or
+  scipy, which only the sandboxed workers need. The package's names (`Wall`, `import_model`,
+  `render`, ...) are imported when first used, so part scripts' `from b123d_print import ...`
+  is unchanged; `find_parts`, `resolve_part` and `timing_lines` now live in the light
+  `b123d_print.partfiles` (still importable from `project`). The CLI's light commands start
+  faster too. A test keeps it that way.
+- **`check` reuses each unchanged piece's findings** (#72): the worker saves the findings of the
+  per-piece checks (thin features, overhang, holes, bed edge, tip-over, gaps within a piece, and
+  `Wall` / `Probe` in the print frame) in the part's `out/.cache/`, keyed by the piece's geometry,
+  the check's arguments, the settings and the b123d-print code. After changing one piece only
+  that piece is checked again; checks across pieces (overlap, `Mates`, `Gap` between parts,
+  `frame="assembly"`, `Motion`, `Slide`) and the build-volume fit always run. A broken entry is
+  rechecked; `fresh=True` checks everything again.
+- **`export` writes only what changed** (#75): each file it writes is stamped (in `out/.cache/`)
+  with what it was made from; a file still as written for the same pieces, format and code is
+  left alone, and a file you edit or delete is written again. Fit-test templates are cached by
+  the piece they are cut from and their spec. Without `png`, export no longer builds the
+  assembly. Template previews (`_template_<id>.png`, `_where.png`) from `export` are now ~800 px
+  wide; `make_template` keeps them full size. `tools/bench_multi_piece.py --check` times it.
 - **Antigravity** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#antigravity-agy-cli-and-ide)):
   Google Antigravity (the `agy` CLI and the IDE, driving Gemini) is a documented, tested client:
   the global (`~/.gemini/config/mcp_config.json`) and per-project (`.agents/`) config with
