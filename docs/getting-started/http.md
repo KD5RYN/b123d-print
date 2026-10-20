@@ -394,7 +394,14 @@ The repository has a ready-to-copy Compose file,
 - `worker` runs the model-written part scripts with **no network at all** (`network_mode:
   none`). The two talk only through a job folder on the shared volume
   (`--job-queue` / `B123D_PRINT_JOB_QUEUE` on the server, `b123d-print-mcp worker --queue` on the
-  worker).
+  worker). Inside the worker each job runs in its own [bubblewrap](https://github.com/containers/bubblewrap)
+  mount namespace that sees only that client's workspace, so clients are isolated from each other
+  (see [Sandbox](../using/sandbox.md#what-keeps-workspaces-apart)). This needs **unprivileged user
+  namespaces** in the container: the compose file sets a custom seccomp profile
+  (`deploy/seccomp-bwrap.json`) and `apparmor:unconfined` for the worker. If the host cannot
+  provide user namespaces (some hardened kernels, or a nested LXC container), the worker reports
+  unhealthy and refuses jobs rather than running them unisolated; set `B123D_PRINT_SANDBOX=none` on
+  the worker to accept the audit hook alone, or run a separate deployment per client.
 
 Next to the file:
 

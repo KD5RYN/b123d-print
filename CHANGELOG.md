@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.8 — unreleased
+
+- **Workspace isolation on a shared server** ([docs](https://kd5ryn.github.io/b123d-print/using/sandbox/#what-keeps-workspaces-apart)):
+  per-job mounts so one client's part script cannot reach another client's files, the job queue or
+  the shared config. The macOS and Linux sandboxes bind or allow only the job's own workspace, the
+  Python install and its config, and hide the rest; each workspace gets its own Matplotlib cache.
+  The Docker HTTP deployment's network-less `worker` container now runs each job in its own
+  bubblewrap mount namespace; it needs unprivileged user namespaces, so `deploy/compose.yaml` ships
+  a custom seccomp profile (`deploy/seccomp-bwrap.json`) and `apparmor:unconfined` for the worker,
+  and if the sandbox cannot start the worker **refuses jobs and reports unhealthy** instead of
+  running them unisolated (`B123D_PRINT_SANDBOX=none` is the explicit opt-out). The audit hook
+  captures its configuration and avoids rebindable names when it is installed and refuses reads of
+  other workspaces and the tokens file; it remains best-effort defense in depth, not an isolation
+  boundary on its own.
+
 ## 0.3.7 — 2026-10-20
 
 - **Place assembly pieces by contact** ([docs](https://kd5ryn.github.io/b123d-print/using/fit/#placing-pieces-by-contact), #56):

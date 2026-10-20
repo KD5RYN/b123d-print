@@ -76,6 +76,12 @@ def images(res):
     return [c for c in res.content if getattr(c, "type", "") == "image"]
 
 
+def why(*results) -> str:
+    """Why a build-type step failed (the tool's error and the worker's log), for the CI log. Wide
+    enough to include the worker's stderr (the 'Output:' section), which carries a sandbox error."""
+    return "\n".join(text(r).strip()[:1500] for r in results[:1] if text(r).strip())
+
+
 async def flow(c, pw, expect, mode: str = "stdio") -> None:
     """The whole tool tour. pw: the server's workspace folder as seen from here (None: remote, skip file checks).
     mode: stdio, http or ssh (what download_part should answer)."""
@@ -575,7 +581,11 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
     urls = links_in(res)
     rlinks = [c for c in res.content if getattr(c, "type", "") == "resource_link"]
     expect(len(urls) >= 4 and len(rlinks) == len(urls) and "expire" in text(res),
-           f"export returns a download link and a resource link per file ({len(urls)} links)")
+           f"export returns a download link and a resource link per file ({len(urls)} links)"
+           + ("" if len(urls) >= 4 else f"\n     why: {why(res)}"))
+    if not urls:  # the export produced nothing (a build failure): the checks below need a file
+        expect(False, "export produced files to download (skipping link checks: none were returned)")
+        return
     async with create_mcp_http_client() as h:  # no Authorization header
         same = True
         for u, rl in zip(urls, rlinks):
@@ -738,7 +748,15 @@ async def http_checks(url: str, token: str, expect, wsroot: Path | None = None) 
         ra, rb = await asyncio.gather(ca.call_tool("render_preview", {"name": "only_in_a"}),
                                       cb.call_tool("render_preview", {"name": "only_in_b"}))
         both = time.monotonic() - t0
-        expect(images(ra) and images(rb), f"two clients render at the same time ({both:.1f} s; one build {one:.1f} s)")
+        expect(images(ra) and images(rb), f"two clients render at the same time ({both:.1f} s; one build {one:.1f} s)"
+               + ("" if images(ra) and images(rb) else f"\n     why: {why(ra, rb)}"))
+        if wsroot is not None:  # a script in workspace a must not reach b's files (OS sandbox on this runner)
+            secret = wsroot / "workspaces" / b / "parts" / "only_in_b" / "only_in_b.py"
+            peek = BOX + f"\nopen({str(secret)!r}).read()\n"
+            await ca.call_tool("write_part", {"name": "only_in_a", "code": peek})
+            res = await ca.call_tool("build_part", {"name": "only_in_a"})
+            expect("ERROR" in text(res), "a script cannot read another workspace's files")
+            await ca.call_tool("write_part", {"name": "only_in_a", "code": BOX})
         res = await ca.call_tool("list_parts", {})
         mx = json.loads(text(res)).get("max_concurrent_builds")
         print(f"     max_concurrent_builds: {mx}")

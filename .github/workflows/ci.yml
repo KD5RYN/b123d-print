@@ -242,6 +242,9 @@ jobs:
         if: env.FULL == 'true'
         with:
           enable-cache: true
+      - name: Allow unprivileged user namespaces (the worker runs each job in bubblewrap)
+        if: env.FULL == 'true'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - run: docker build -t b123d-print-mcp .
         if: env.FULL == 'true'
       - name: The compose example is valid
@@ -274,8 +277,26 @@ jobs:
           docker compose exec -T worker python -c "import socket; print(socket.if_nameindex())"
           docker compose exec -T b123d-print python -c "import socket; socket.create_connection(('1.1.1.1', 53), 5); print('front: network ok')" \
             || echo "front: no internet from this runner (not needed for the test)"
+          # diagnostic: can bubblewrap set up a namespace inside the worker container? a fresh /proc
+          # is refused when the container masks parts of /proc, so the worker falls back to an empty
+          # /proc; show both so the log says which path is in use (prints the exit code either way)
+          # the worker runs each job in its own bubblewrap namespace; a fresh /proc is refused where
+          # the container masks /proc, so it falls back to an empty /proc (non-fatal probes, the
+          # step runs under `bash -e`)
+          echo "bwrap probe (fresh /proc) in worker:"
+          docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --proc /proc \
+            --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --proc exit: 0" || echo "bwrap --proc exit: $?"
+          echo "bwrap probe (empty /proc) in worker:"
+          docker compose exec -T worker bwrap --unshare-user --ro-bind / / --dev /dev --tmpfs /proc \
+            --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
+          # the worker must actually be running in bubblewrap (not silently falling back to the hook
+          # only). list_parts reports the FRONT's sandbox (which is none, as it runs no scripts), so
+          # assert the worker's own startup line instead (this still runs in the deploy/ dir).
+          docker compose logs worker | grep -q "sandbox: Linux bubblewrap" \
+            || { echo "worker is not using bubblewrap"; docker compose logs worker | tail -40; exit 1; }
           cd .. && B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" \
             B123D_PRINT_SMOKE_WORKSPACE_DIR="$B123D_PRINT_PARTS" B123D_PRINT_TOKENS_FILE="$B123D_PRINT_CONFIG/tokens.toml" \
-            B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py || { (cd deploy && docker compose logs | tail -80); exit 1; }
+            B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py \
+            || { (cd deploy && docker compose logs worker | tail -120; echo "--- front ---"; docker compose logs b123d-print | tail -40); exit 1; }
           (cd deploy && docker compose logs b123d-print | grep -q " ci POST /mcp ") || { echo "token name not in the log"; exit 1; }
           (cd deploy && docker compose down)

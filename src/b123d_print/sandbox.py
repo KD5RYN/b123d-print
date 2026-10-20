@@ -64,36 +64,115 @@ def _sbpl_str(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def macos_profile(writable: list[str], readable: list[str]) -> str:
+def macos_profile(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = ()) -> str:
+    """`hidden`: folders a job never reads, even inside `readable` (other workspaces), except the
+    `readable`/`writable` folders inside them; `secrets`: files never read or even listed."""
     home = _real(Path.home())
     w = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in writable)
     r = " ".join(f"(subpath {_sbpl_str(_real(p))})" for p in readable + writable)
+    # later rules win: hide, then allow back the job's own folders inside a hidden one, then the secrets for good
+    hide = "".join(f"(deny file-read* (subpath {_sbpl_str(_real(p))}))\n" for p in hidden)
+    inside = _inside(readable + writable, hidden)
+    back = f"(allow file-read* {' '.join(f'(subpath {_sbpl_str(p)})' for p in inside)})\n" if inside else ""
+    sec = "".join(f"(deny file-read* file-read-metadata (literal {_sbpl_str(_real(p))}))\n" for p in secrets)
+    # hide the home folder, but never when it is "/" (that would deny every read); then allow back
+    # what the job needs to read
+    hide_home = f"(deny file-read* (subpath {_sbpl_str(home)}))\n" if home and home not in ("/", os.sep) else ""
     return f"""(version 1)
 (allow default)
 (deny network*)
 (deny process-fork)
 (deny file-write*)
 (allow file-write* {w} (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr"))
-(deny file-read* (subpath {_sbpl_str(home)}))
-(allow file-read* (literal {_sbpl_str(home)}) {r})
+{hide_home}(allow file-read* (literal {_sbpl_str(home)}) {r})
 (allow file-read-metadata)
-"""
+{hide}{back}{sec}"""
 
 
-def linux_bwrap(writable: list[str], readable: list[str]) -> list[str]:
+def linux_bwrap(writable: list[str], readable: list[str], hidden: list[str] = (), secrets: list[str] = (),
+                proc: bool | None = None) -> list[str]:
+    """`hidden` folders become empty (tmpfs) before the job's own folders are bound back in;
+    `secrets` files read as empty (/dev/null over them), wherever they are.
+
+    `proc`: mount a fresh procfs at /proc (True), or leave /proc an empty tmpfs (False). None asks
+    `_bwrap_caps()`. A fresh procfs is refused where the container masks parts of /proc (Docker's
+    `mount_too_revealing`); an empty /proc keeps the job from seeing other jobs' `/proc/<pid>` in
+    the same container, and `--unshare-pid` still gives it its own PID namespace."""
+    if proc is None:
+        proc = _bwrap_caps()["proc"]
     home = _real(Path.home())
-    cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net",
-           "--unshare-pid", "--die-with-parent", "--new-session", "--tmpfs", home]
+    proc_args = ["--proc", "/proc"] if proc else ["--tmpfs", "/proc"]
+    # --unshare-user: create a user namespace explicitly. On a normal host bwrap does this on its
+    # own when unprivileged, but inside an unprivileged container (the Docker worker, uid != 0, no
+    # CAP_SYS_ADMIN) it is the user namespace that grants the privilege to mount/pivot_root, so it
+    # must be requested or every bind fails.
+    cmd = ["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", *proc_args,
+           "--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session"]
+    # hide the home folder (scripts don't read ~), but never when HOME is the root — a container
+    # running as a uid with no passwd entry gets HOME=/, and a tmpfs over / would wipe the whole
+    # root (including the dynamic loader), so the interpreter could not even start. bwrap paths are
+    # POSIX, so "/" is the root whatever os.sep is on the host building the argv.
+    if home and home not in ("/", os.sep):
+        cmd += ["--tmpfs", home]
     for p in readable:
         cmd += ["--ro-bind-try", p, p]
     for p in writable:
         cmd += ["--bind", p, p]
+    for p in hidden:  # after the binds (a hidden folder may lie inside a readable one) ...
+        if os.path.isdir(p):
+            cmd += ["--tmpfs", p]
+    for p in _inside(readable, hidden):  # ... then the job's own folders inside it, back again
+        cmd += ["--ro-bind-try", p, p]
+    for p in _inside(writable, hidden):
+        cmd += ["--bind", p, p]
+    for p in secrets:
+        if os.path.isfile(p):
+            cmd += ["--ro-bind", "/dev/null", p]
     return cmd
 
 
-def kind() -> str:
-    if os.environ.get("B123D_PRINT_SANDBOX") == "none":
-        return "none"
+def _inside(paths: list[str], dirs: list[str]) -> list[str]:
+    """The `paths` that lie strictly inside one of `dirs` (real paths)."""
+    ds = [_real(d) for d in dirs]
+    return [p for p in map(_real, paths) if any(p.startswith(d + os.sep) for d in ds)]
+
+
+# files no job may read, wherever they are: the HTTP server's tokens (hashes and the link secret);
+# mcp_server adds the tokens file it was started with
+SECRET_FILES: set[str] = set()
+
+
+def _secret_files() -> list[str]:
+    out = set(SECRET_FILES)
+    for var in ("B123D_PRINT_TOKENS_FILE", "B123D_PRINT_TOKEN_FILE"):
+        if os.environ.get(var):
+            out.add(os.path.expanduser(os.environ[var]))
+    return sorted({_real(p) for p in out} | {os.path.abspath(p) for p in out})
+
+
+# folders no job may see beyond the ones derived from its workspace: the HTTP job queue, which
+# jobqueue.serve registers so a worker's jobs cannot read each other's queue files
+EXTRA_HIDDEN: set[str] = set()
+
+
+def _hidden_dirs(workspace: Path) -> list[str]:
+    """Other workspaces: the root workspace's workspaces/ folder (a job in the root workspace) and
+    the siblings of a named workspace (workspaces/<name>), plus the job queue (EXTRA_HIDDEN)."""
+    ws = Path(_real(workspace))
+    out = [ws / "workspaces"]
+    if ws.parent.name == "workspaces":
+        out.append(ws.parent)
+    return sorted({str(p) for p in out} | {_real(p) for p in EXTRA_HIDDEN})
+
+
+def mpl_cache(workspace: Path) -> Path:
+    """Matplotlib's cache and config folder, one per workspace (a job may write it)."""
+    import hashlib
+
+    return CACHE / "matplotlib" / hashlib.sha256(_real(workspace).encode("utf-8")).hexdigest()[:16]
+
+
+def _auto_kind() -> str:
     if sys.platform == "darwin" and shutil.which("sandbox-exec"):
         return "sandbox-exec"
     if sys.platform.startswith("linux") and shutil.which("bwrap"):
@@ -101,11 +180,83 @@ def kind() -> str:
     return "none"
 
 
+# B123D_PRINT_SANDBOX values: "none" (explicit opt-out: run with the audit hook only, e.g. the
+# single-container Docker image); unset or "auto" (use the best OS sandbox available, else none —
+# for local and dev use); a sandbox name ("bubblewrap"/"bwrap", "sandbox-exec") to REQUIRE it, so
+# a deployment that must isolate jobs fails closed instead of running them with the hook alone.
+_REQUIRE_ALIASES = {"bubblewrap": "bwrap", "bwrap": "bwrap", "sandbox-exec": "sandbox-exec"}
+
+
+def required_sandbox() -> str | None:
+    """The sandbox the operator requires (B123D_PRINT_SANDBOX names one), or None for opt-out/auto."""
+    v = (os.environ.get("B123D_PRINT_SANDBOX") or "").strip().lower()
+    if v in ("", "auto", "none"):
+        return None
+    return _REQUIRE_ALIASES.get(v, v)
+
+
+def kind() -> str:
+    if os.environ.get("B123D_PRINT_SANDBOX") == "none":
+        return "none"
+    req = required_sandbox()
+    k = _auto_kind()
+    if req and req != k:  # required but not what is available here: run_job fails closed
+        return "none"
+    return k
+
+
+def _bwrap_try(extra: list[str]) -> tuple[int, str]:
+    try:
+        r = subprocess.run(["bwrap", "--unshare-user", "--ro-bind", "/", "/", "--dev", "/dev", *extra,
+                            "--unshare-net", "--unshare-pid", "--die-with-parent", "true"],
+                           capture_output=True, timeout=15)
+        return r.returncode, (r.stderr or b"").decode(errors="replace").strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, str(e)
+
+
+@functools.cache
+def _bwrap_caps() -> dict:
+    """What bubblewrap can do here, probed once: {"usable": bool, "proc": bool, "error": str|None}.
+    `proc` is False where a fresh procfs cannot be mounted (a container that masks parts of /proc);
+    the job then gets an empty /proc instead. `usable` is False only if even that minimal namespace
+    cannot start (no unprivileged user namespaces) — that is what fails the deployment closed."""
+    if not shutil.which("bwrap"):
+        return {"usable": False, "proc": False, "error": "bubblewrap (bwrap) is not installed"}
+    rc, _ = _bwrap_try(["--proc", "/proc"])
+    if rc == 0:
+        return {"usable": True, "proc": True, "error": None}
+    rc2, err = _bwrap_try(["--tmpfs", "/proc"])  # can we at least run without a real /proc?
+    if rc2 == 0:
+        return {"usable": True, "proc": False, "error": None}
+    last = err.splitlines()
+    return {"usable": False, "proc": False,
+            "error": "bubblewrap could not start a namespace" + (f": {last[-1]}" if last else
+                     " (unprivileged user namespaces may be disabled on the host)")}
+
+
+@functools.cache
+def sandbox_error() -> str | None:
+    """Why the required sandbox is unusable here, or None if there is none to require or it works.
+    Used to fail closed: a deployment that asked for a sandbox must not silently run with the hook
+    only. B123D_PRINT_SANDBOX=none is the explicit opt-out and never reports an error."""
+    req = required_sandbox()
+    if not req:
+        return None
+    if _auto_kind() != req:
+        return f"sandbox {req!r} is required (B123D_PRINT_SANDBOX) but not available in this environment"
+    return _bwrap_caps()["error"] if req == "bwrap" else None
+
+
 def describe() -> str:
+    err = sandbox_error()
+    if err:
+        return f"REQUIRED SANDBOX UNAVAILABLE: {err}; jobs are refused until this is fixed"
     k = kind()
+    bwrap_note = "" if _bwrap_caps().get("proc", True) else ", /proc empty (container masks it)"
     return {
         "sandbox-exec": "macOS sandbox-exec (no network, no subprocesses, writes limited to out/ and scratch, home hidden)",
-        "bwrap": "Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden)",
+        "bwrap": f"Linux bubblewrap (no network, read-only system, writes limited to out/ and scratch, home hidden{bwrap_note})",
         "none": ("Windows has no OS sandbox here: process isolation (a Job Object with a CPU-time limit, killed "
                  "with all its child processes on a timeout) + audit hook only; for untrusted scripts run the "
                  "server in WSL2 with bubblewrap, or in the Docker image") if WINDOWS else
@@ -172,18 +323,27 @@ def soft_margin(timeout: float) -> float:
 
 def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_TIMEOUT, epoch: int | None = None) -> dict:
     """Run b123d_print.worker on `job` and return its result dict (never raises for script errors)."""
+    err = sandbox_error()
+    if err:  # a sandbox was required but cannot run here: refuse rather than run with the hook only
+        return {"ok": False, "error": f"refusing to run untrusted code: {err}", "sandbox": "unavailable"}
     out_dir.mkdir(parents=True, exist_ok=True)
-    mpl = CACHE / "matplotlib"
+    mpl = mpl_cache(workspace)
     mpl.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="b123d-print-") as tmp:
         tmp = _real(tmp)
         writable = [_real(out_dir), tmp, _real(mpl)]
-        readable = [_real(workspace)] + _python_roots()
+        cfg = _real(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "b123d-print")
+        readable = [_real(workspace)] + _python_roots() + [cfg]
+        # other workspaces and the secret files: hidden by the OS sandbox, and refused by the
+        # worker's own audit hook too (which is all there is on Windows and SANDBOX=none). readable
+        # is what the hook allows a job to read even where it overlaps a hidden folder (its own
+        # workspace lives under the hidden workspaces/ parent)
+        hidden, secrets = _hidden_dirs(workspace), _secret_files()
         # the worker's own soft limit, a little before the hard one kills it: `check` stops there and
         # returns what it finished instead of nothing (see project.run_checks)
         # workspace: where the build cache looks for files a build read outside the part's folder
         job = {**job, "out_dir": _real(out_dir), "result": os.path.join(tmp, "result.json"), "writable": writable,
-               "workspace": _real(workspace),
+               "readable": readable, "hidden": hidden, "secrets": secrets, "workspace": _real(workspace),
                "deadline": min(job.get("deadline", math.inf), time.time() + timeout - soft_margin(timeout))}
         job_file = os.path.join(tmp, "job.json")
         with open(job_file, "w", encoding="utf-8") as f:
@@ -206,15 +366,17 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
         # settings: the worker resolves the user config from the real home, so pass it explicitly
         env.setdefault("XDG_CONFIG_HOME", _real(Path.home() / ".config"))
         readable.append(_real(Path(env["XDG_CONFIG_HOME"]) / "b123d-print"))  # only b123d-print's own config
+        # keep the venv interpreter (its pyvenv.cfg puts the venv's site-packages on sys.path); the
+        # venv must be built on a base Python the sandbox can reach (see the Dockerfile's UV_PYTHON_*)
         cmd = [sys.executable, "-s", "-m", "b123d_print.worker", job_file]
         k = kind()
         if k == "sandbox-exec":
             prof = os.path.join(tmp, "profile.sb")
             with open(prof, "w", encoding="utf-8") as f:
-                f.write(macos_profile(writable, readable))
+                f.write(macos_profile(writable, readable, hidden, secrets))
             cmd = ["sandbox-exec", "-f", prof] + cmd
         elif k == "bwrap":
-            cmd = linux_bwrap(writable, readable) + cmd
+            cmd = linux_bwrap(writable, readable, hidden, secrets) + cmd
 
         def limits():  # in the child, before exec
             try:

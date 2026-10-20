@@ -18,13 +18,18 @@ FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 /uv /uvx /usr/local/bin/
 
-# OpenCascade (in the OCP wheel) links against these on Linux
+# OpenCascade (in the OCP wheel) links against the libGL/X libraries; bubblewrap lets the HTTP
+# deployment's worker run each job in its own mount namespace (deploy/compose.yaml)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 \
+ && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 bubblewrap \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/b123d-print
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/b123d-print/.venv
+# Use the base image's system Python for the venv (never a uv-managed download): a managed
+# interpreter lands under a home dir the sandboxed worker user cannot traverse, so .venv/bin/python
+# would dangle inside bubblewrap. The system Python at /usr/local is readable by every user.
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/b123d-print/.venv \
+    UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never
 COPY pyproject.toml uv.lock README.md LICENSE THIRD_PARTY.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src

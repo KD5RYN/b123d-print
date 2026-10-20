@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+from pathlib import Path
 
 from b123d_print import sandbox
 
@@ -38,6 +39,43 @@ def alive(pid: int) -> bool:
         return os.waitpid(pid, os.WNOHANG) == (0, 0)
     except ChildProcessError:
         return True
+
+
+def test_bwrap_binds_the_folders_a_job_needs():
+    # a render/export job writes to out/ and the Matplotlib cache and reads the workspace and the
+    # Python install; all must be in the per-job mount or the job fails inside the sandbox
+    cmd = sandbox.linux_bwrap(["/ws/parts/p/out", "/tmp/scratch", "/cache/mpl"],
+                              ["/ws", "/py"], proc=False)
+    pairs = list(zip(cmd, cmd[1:]))
+    for w in ("/ws/parts/p/out", "/tmp/scratch", "/cache/mpl"):
+        assert ("--bind", w) in pairs, (w, cmd)
+    for r in ("/ws", "/py"):
+        assert ("--ro-bind-try", r) in pairs, (r, cmd)
+
+
+def test_bwrap_never_tmpfs_over_root(monkeypatch):
+    # a container running as a uid with no passwd entry gets HOME=/; a tmpfs over / would wipe the
+    # dynamic loader and the interpreter could not start. The home-hide must be skipped then.
+    # _real returns "/" for the root (str(Path("/")) is "/" on POSIX, "\\" on Windows) and passes
+    # other paths through unchanged, so the test is cross-platform (bwrap paths are POSIX).
+    monkeypatch.setattr(sandbox, "_real", lambda p: "/" if str(p) in ("/", "\\") else str(p))
+    monkeypatch.setattr(sandbox.Path, "home", classmethod(lambda cls: Path("/")))
+    cmd = sandbox.linux_bwrap(["/ws/out"], ["/ws", "/usr/local"], proc=False)
+    pairs = list(zip(cmd, cmd[1:]))
+    assert ("--tmpfs", "/") not in pairs, cmd
+    assert ("--ro-bind", "/") in pairs  # the root is still bound read-only
+
+
+def test_bwrap_command_proc_variants():
+    # a fresh procfs when the host allows it; an empty /proc (not a bound one) where it does not,
+    # so a job never sees other jobs' /proc/<pid> in the same container
+    with_proc = sandbox.linux_bwrap(["/w/out"], ["/w"], proc=True)
+    assert "--proc" in with_proc and "/proc" in with_proc
+    no_proc = sandbox.linux_bwrap(["/w/out"], ["/w"], proc=False)
+    assert "--proc" not in no_proc
+    i = no_proc.index("/proc")
+    assert no_proc[i - 1] == "--tmpfs", no_proc  # /proc is an empty tmpfs, never a bind of the host's
+    assert "--unshare-pid" in no_proc  # own PID namespace regardless
 
 
 def test_timeout_kills_the_worker_and_its_children(tmp_path, monkeypatch):

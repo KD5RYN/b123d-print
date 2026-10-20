@@ -91,9 +91,20 @@ BLOCKED_EVENTS = (
     "winreg.LoadKey",
     "winreg.SaveKey",
     "winreg.SetValue",
+    # introspection that could walk to the guard's own settings and change them: refuse it in a
+    # part script (the libraries are all imported before the guard goes in, so nothing here fires
+    # during a normal build)
+    "gc.get_objects",
+    "gc.get_referrers",
+    "gc.get_referents",
 )
 BLOCKED_IMPORTS = {"_posixsubprocess", "socket", "_socket", "ssl", "_ssl", "subprocess"}
-WRITE_EVENTS = {"os.remove", "os.rename", "os.rmdir", "os.mkdir", "shutil.rmtree", "os.truncate", "os.chmod", "os.symlink", "os.link"}
+# write-ish events whose one path argument (args[0]) must be in a writable folder
+WRITE_ONE = {"os.remove", "os.unlink", "os.rmdir", "os.mkdir", "os.makedirs", "shutil.rmtree",
+             "os.truncate", "os.chmod", "os.chown", "os.chflags", "os.utime", "os.removexattr", "os.setxattr"}
+# events with two path arguments (args[0] and args[1]); both must be writable
+WRITE_TWO = {"os.rename", "os.link"}  # os.replace also raises os.rename
+WRITE_EVENTS = WRITE_ONE | WRITE_TWO | {"os.symlink"}  # kept as the public name of the set
 
 
 class SandboxViolation(PermissionError):
@@ -123,48 +134,114 @@ ALLOWED_NATIVE = _allowed_native_dirs()
 READS = ReadLog()  # what the part script reads, for the build cache (main installs it)
 
 
-def ctypes_guard(event: str, args) -> None:
-    if event == "ctypes.dlopen":
-        name = args[0] if args else None
-        p = _norm(name) if name else ""
-        if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
-            raise SandboxViolation(f"blocked in part scripts: loading native library {name!r}")
-    elif event == "ctypes.dlsym":
-        name = getattr(args[0], "_name", None) if args else None
-        p = _norm(name) if isinstance(name, (str, bytes)) else ""
-        if not any(p.startswith(d + os.sep) for d in ALLOWED_NATIVE):
-            raise SandboxViolation(f"blocked in part scripts: symbol lookup in {name!r}")
-    elif event in ("ctypes.cdata", "ctypes.dlsym/handle", "ctypes.set_errno", "ctypes.seh_exception"):
-        raise SandboxViolation(f"blocked in part scripts: {event}")
+def install_guard(writable: list[str], hidden: list[str] = (), secrets: list[str] = (),
+                  readable: list[str] = ()) -> None:
+    """Install the audit hook. Its configuration (the allowed and denied folders, the event
+    lists) is captured as frozen copies in this closure, and the functions it calls on the hot
+    path — realpath/normcase/fsdecode and the builtins any/isinstance/len — are captured as
+    closure locals too, so the hook does not go through names a part script could rebind
+    (os.path.*, builtins.*) or a module global or list it could reach. The stdlib internals those
+    functions use (posixpath's own globals) are not frozen, so this is best-effort: the hook is
+    defense in depth, and the OS sandbox or the container is the isolation boundary — see
+    sandbox.describe()."""
+    sep = os.sep
+    realpath, normcase, fsdecode = os.path.realpath, os.path.normcase, os.fsdecode
+    _any, _isinstance, _len, _getattr = any, isinstance, len, getattr
+    violation = SandboxViolation
 
+    def norm(path) -> str:
+        return normcase(realpath(fsdecode(path)))
 
-def install_guard(writable: list[str]) -> None:
-    roots = [_norm(p) for p in writable]
+    roots = tuple(norm(p) for p in writable)
+    # folders a job may read: its own workspace, the Python installation, its config. A read under
+    # one of these is always allowed, even where it sits inside a hidden folder (the job's own
+    # workspace is under the hidden workspaces/ parent).
+    allow_read = tuple(norm(p) for p in list(readable) + list(writable))
+    # reads refused even where the OS does not hide them (Windows, SANDBOX=none in the container):
+    # other workspaces, and the secret files (tokens, link secret), wherever they are
+    deny_dirs = tuple(norm(p) for p in hidden)
+    deny_files = frozenset(norm(p) for p in secrets)
+    blocked_events = tuple(BLOCKED_EVENTS)
+    blocked_imports = frozenset(BLOCKED_IMPORTS)
+    write_one = frozenset(WRITE_ONE)
+    write_two = frozenset(WRITE_TWO)
+    allowed_native = tuple(ALLOWED_NATIVE)
+    read_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT
 
     def can_write(path) -> bool:
-        if isinstance(path, int):
+        if _isinstance(path, int):
             return True  # an already-open fd
-        p = _norm(path)
-        return any(p == r or p.startswith(r + os.sep) for r in roots)
+        p = norm(path)
+        return _any(p == r or p.startswith(r + sep) for r in roots)
+
+    def longest(p, dirs) -> int:
+        """Length of the longest folder in `dirs` that contains `p` (-1 for none)."""
+        best = -1
+        for d in dirs:
+            if (p == d or p.startswith(d + sep)) and _len(d) > best:
+                best = _len(d)
+        return best
+
+    def denied_read(path) -> bool:
+        if _isinstance(path, int) or path is None:
+            return False
+        p = norm(path)
+        if p in deny_files:  # the secret files are off limits wherever they are
+            return True
+        # the server's own environment (where a single-container HTTP setup keeps its token) is not
+        # the script's to read; a normal build never looks here
+        if p.startswith("/proc/") and p.endswith("/environ"):
+            return True
+        # the most specific folder wins: a job's own workspace (readable) sits inside the hidden
+        # workspaces/ parent, so it stays readable, while a sibling workspace under that parent does not
+        return longest(p, deny_dirs) > longest(p, allow_read)
+
+    def ctypes_guard(event: str, args) -> None:
+        if event == "ctypes.dlopen":
+            name = args[0] if args else None
+            p = norm(name) if name else ""
+            if not _any(p.startswith(d + sep) for d in allowed_native):
+                raise violation(f"blocked in part scripts: loading native library {name!r}")
+        elif event == "ctypes.dlsym":
+            name = _getattr(args[0], "_name", None) if args else None
+            p = norm(name) if _isinstance(name, (str, bytes)) else ""
+            if not _any(p.startswith(d + sep) for d in allowed_native):
+                raise violation(f"blocked in part scripts: symbol lookup in {name!r}")
+        elif event in ("ctypes.cdata", "ctypes.dlsym/handle", "ctypes.set_errno", "ctypes.seh_exception"):
+            raise violation(f"blocked in part scripts: {event}")
 
     def hook(event: str, args) -> None:
         if event.startswith("ctypes."):
             ctypes_guard(event, args)
             return
-        if event.startswith(BLOCKED_EVENTS):
-            raise SandboxViolation(f"blocked in part scripts: {event}")
-        if event == "import" and args and args[0] in BLOCKED_IMPORTS:
-            raise SandboxViolation(f"blocked in part scripts: import {args[0]}")
-        if event == "open" and len(args) >= 2:
-            path, mode = args[0], args[1]
-            flags = args[2] if len(args) > 2 else 0
-            writing = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
-                isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT)
+        if event.startswith(blocked_events):
+            raise violation(f"blocked in part scripts: {event}")
+        if event == "import" and args and args[0] in blocked_imports:
+            raise violation(f"blocked in part scripts: import {args[0]}")
+        if event == "open" and args:
+            path = args[0]
+            mode = args[1] if _len(args) > 1 else None
+            flags = args[2] if _len(args) > 2 else 0
+            writing = (_isinstance(mode, str) and _any(c in mode for c in "wax+")) or (
+                _isinstance(flags, int) and flags & read_flags
             )
             if writing and path is not None and not can_write(path):
-                raise SandboxViolation(f"blocked in part scripts: writing {path}")
-        if event in WRITE_EVENTS and args and not can_write(args[0]):
-            raise SandboxViolation(f"blocked in part scripts: {event} {args[0]}")
+                raise violation(f"blocked in part scripts: writing {path}")
+            if not writing and denied_read(path):
+                raise violation(f"blocked in part scripts: reading {path}")
+            return
+        if event in ("os.scandir", "os.listdir") and args and denied_read(args[0]):
+            raise violation(f"blocked in part scripts: listing {args[0]}")
+        if event in write_one and args and not can_write(args[0]):
+            raise violation(f"blocked in part scripts: {event} {args[0]}")
+        if event in write_two and args:  # rename/replace/link: the source and the destination
+            for p in args[:2]:
+                if p is not None and not can_write(p):
+                    raise violation(f"blocked in part scripts: {event} {p}")
+        if event == "os.symlink" and _len(args) >= 2 and not can_write(args[1]):
+            # the link is created at args[1]; a link pointing outside is harmless because any read
+            # or write through it resolves to its real target, which is checked in turn
+            raise violation(f"blocked in part scripts: os.symlink at {args[1]}")
 
     sys.addaudithook(hook)
 
@@ -421,7 +498,7 @@ def main() -> int:
     os.chdir(job["out_dir"])
     READS.install()  # before the guard, which refuses any later audit hook
     if job.get("guard", True):
-        install_guard(job["writable"])
+        install_guard(job["writable"], job.get("hidden", []), job.get("secrets", []), job.get("readable", []))
     # what is being built, for a timeout's diagnosis (the server reads these lines when the worker is killed)
     Pieces.progress = lambda msg: print(diagnose.PROGRESS + msg, file=sys.stderr, flush=True)
     with warnings.catch_warnings(record=True) as warned:

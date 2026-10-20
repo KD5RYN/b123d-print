@@ -2330,6 +2330,9 @@ def main(argv: list[str] | None = None) -> None:
     if token and len(token) < 16:
         sys.exit("b123d-print-mcp: B123D_PRINT_TOKEN is too short (use at least 16 characters)")
     tokens_file = Path(args.tokens_file).expanduser() if args.tokens_file else None
+    for f in (tokens_file, env("B123D_PRINT_TOKEN_FILE")):
+        if f:  # never readable by a job, wherever it is
+            sandbox.SECRET_FILES.add(str(Path(f).expanduser().resolve()))
     if tokens_file and not tokens_file.is_file():
         sys.exit(f"b123d-print-mcp: no tokens file {tokens_file}: create it with "
                  f"`b123d-print-mcp --tokens-file {tokens_file} token add <name> --workspace <pattern>`")
