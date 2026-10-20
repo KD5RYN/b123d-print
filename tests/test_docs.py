@@ -85,6 +85,21 @@ def test_mcp_prompts_and_resources_documented(server):
     assert documented == registered, "resources table vs registered resources and resource templates"
 
 
+def test_mcp_guide_includes_declared_hardware():
+    """Remote clients can discover the hardware API through the actual guide resource."""
+    from b123d_print.mcp_server import mcp
+
+    async def read():
+        return await mcp.read_resource("b123d-print://guide")
+
+    text = "\n".join(item.content for item in anyio.run(read))
+    assert text == (ROOT / "src/b123d_print/data/AGENTS.md").read_text(encoding="utf-8")
+    for required in ("hardware(d)", "Hardware(id, description, quantity", "Hardware.from_bd_warehouse",
+                     "whole selected variant", "import_model", "item.standin", "out of `build(d)`",
+                     'formats="print,hardware"', "_hardware.json", "needs_confirmation=True"):
+        assert required in text
+
+
 def test_skill_points_to_the_guide():
     """The Claude plugin's skill is a thin pointer to the shared workflow guide. It need not list
     every tool: clients get the full tool list from the server, docs/using/tools.md must document
