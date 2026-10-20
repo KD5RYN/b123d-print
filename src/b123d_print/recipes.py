@@ -129,6 +129,98 @@ def demo_screw_hole() -> Part:
     return p
 
 
+def _mount_sizes(shaft_d, head_d, plate_t, travel, head_depth, clearance, hole_comp, size, min_lip):
+    """Resolve mount diameters and reject a cutter that cannot retain the specified head."""
+    if shaft_d is None or head_d is None:
+        if size is None:
+            raise ValueError("supply shaft_d and head_d, or a supported screw size")
+        screw = _screw(size)
+        shaft_d = screw["clearance"] if shaft_d is None else shaft_d
+        head_d = screw["head_d"] if head_d is None else head_d
+    values = (shaft_d, head_d, plate_t, travel, head_depth, clearance, hole_comp, min_lip)
+    if not all(math.isfinite(v) for v in values):
+        raise ValueError("mount dimensions must be finite")
+    if min(shaft_d, head_d, plate_t) <= 0 or travel < 0:
+        raise ValueError("diameters and plate_t must be positive; travel must be nonnegative")
+    if min(head_depth, clearance, min_lip) < 0:
+        raise ValueError("head_depth, clearance and min_lip must be nonnegative")
+    shaft = shaft_d + 2 * clearance + hole_comp
+    head = head_d + 2 * clearance + hole_comp
+    if shaft <= 0 or head <= 0 or head_d <= shaft:
+        raise ValueError("head_d must exceed the compensated shaft opening to retain the head")
+    if head < head_d:
+        raise ValueError("compensated entry/recess must still admit head_d")
+    if head_depth >= plate_t or plate_t - head_depth < min_lip:
+        raise ValueError("head_depth leaves insufficient retaining lip; increase plate_t or reduce head_depth")
+    return shaft, head
+
+
+def _mount_capsule(diameter: float, travel: float, depth: float) -> Part:
+    """A round-ended cutter from Y=0 to Y=travel, opening on Z=0 into -Z."""
+    cutter = Cylinder(diameter / 2, depth, align=TOP)
+    if travel:
+        cutter += Pos(0, travel, 0) * Cylinder(diameter / 2, depth, align=TOP)
+        cutter += Pos(0, travel / 2, 0) * Box(diameter, travel, depth, align=TOP)
+    return cutter
+
+
+def mounting_slot(shaft_d: float | None = None, head_d: float | None = None, plate_t: float = 5.0,
+                  travel: float = 10.0, head_depth: float = 0.0, clearance: float = 0.2,
+                  hole_comp: float = 0.0, size: str | None = "M3", min_lip: float = 0.0) -> Part:
+    """An adjustable screw slot: shaft centers travel from (0, 0) to (0, travel) along +Y.
+    Subtract at the insertion face Z=0; the cutter ends at -plate_t. Diameters gain
+    2 x clearance (per side) and hole_comp (total) once. Omitted diameters use the size's
+    ISO 273 normal clearance and ISO 4762 head via _screw, already fitted before this extra
+    allowance. Explicit shaft_d is a base opening diameter; head_d is the actual head diameter.
+    head_depth=0 leaves the head proud beyond -plate_t. Otherwise a head-sized cavity opens
+    on the OPPOSITE face (-plate_t), leaving plate_t-head_depth of lip at the insertion face.
+    Set min_lip to the project's required thickness; zero only rejects a vanished lip and
+    implies no strength rating. Insert this screw axially before tightening; no head entry."""
+    shaft, head = _mount_sizes(shaft_d, head_d, plate_t, travel, head_depth, clearance,
+                              hole_comp, size, min_lip)
+    cutter = _mount_capsule(shaft, travel, plate_t)
+    if head_depth:
+        cutter += Pos(0, 0, -plate_t + head_depth) * _mount_capsule(head, travel, head_depth)
+    return cutter
+
+
+def keyhole_mount(shaft_d: float | None = None, head_d: float | None = None, plate_t: float = 5.0,
+                  travel: float = 10.0, head_depth: float = 0.0, clearance: float = 0.2,
+                  hole_comp: float = 0.0, size: str | None = "M3", min_lip: float = 0.0) -> Part:
+    """A keyhole cutter with head entry at (0, 0) and retained shaft center at (0, travel).
+    Opens on Z=0 through -plate_t; screw moves +Y relative to the plate after insertion.
+    Dimensions, allowances and opposite-face head recess follow mounting_slot. The recess
+    spans the ENTIRE head travel, not only its retained endpoint. Travel must separate the
+    retained head from the entry; the recipe checks that a full head cannot pass there.
+    Rotate around Z to choose the sliding direction; a hanging plate moves opposite the
+    screw's relative travel. Flat plates/light enclosure mounts only; no load rating."""
+    shaft, head = _mount_sizes(shaft_d, head_d, plate_t, travel, head_depth, clearance,
+                              hole_comp, size, min_lip)
+    actual_head = _screw(size)["head_d"] if head_d is None else head_d
+    # Compare the head/entry arcs where they meet the narrow slot sides. A head can
+    # still escape if the entry plus the narrow slot exposes its entire cross-section.
+    escape_travel = math.sqrt((head / 2) ** 2 - (shaft / 2) ** 2) - math.sqrt(
+        (actual_head / 2) ** 2 - (shaft / 2) ** 2)
+    if travel <= escape_travel:
+        raise ValueError("travel must move the head clear of the entry to retain it")
+    cutter = mounting_slot(shaft_d, head_d, plate_t, travel, head_depth, clearance,
+                           hole_comp, size, min_lip)
+    return cutter + Cylinder(head / 2, plate_t, align=TOP)
+
+
+def demo_mounting_slot() -> Part:
+    # Computational fixture, not a physically validated bundled example.
+    return Box(18, 26, 5, align=BED) - Pos(0, -5, 5) * mounting_slot()
+
+
+def demo_keyhole_mount() -> Part:
+    # Two-hole fit coupon; 30 mm spacing is recipe-defined, not a fastener standard.
+    plate = Box(50, 30, 5, align=BED)
+    for x in (-15, 15):
+        plate -= Pos(x, -5, 5) * keyhole_mount(head_depth=3.4, min_lip=1.6)
+    return plate
+
+
 def nut_trap(size: str = "M3", depth: float | None = None, screw_depth: float = 10.0, clearance: float = 0.1,
              hole_comp: float = 0.0) -> Part:
     """A captive hex nut pocket (ISO 4032 across flats + 2 x clearance; 0.1 per side, BP-T7) with
@@ -412,6 +504,8 @@ class Recipe:
     demo: object
     notes: str
     sources: list = field(default_factory=list)
+    helpers: list = field(default_factory=list)
+    imports: str = ""
 
     def summary(self) -> str:
         return inspect.getdoc(self.functions[0]).split("\n")[0]
@@ -419,7 +513,9 @@ class Recipe:
     def text(self) -> str:
         """The recipe as Markdown: what, how to use it, the code, the printing notes, sources."""
         sig = "\n".join(f"{f.__name__}{inspect.signature(f)}" for f in self.functions)
-        code = "\n\n\n".join(inspect.getsource(f) for f in self.functions)
+        code = "\n\n\n".join(inspect.getsource(f) for f in self.helpers + self.functions)
+        if self.imports:
+            code = self.imports + "\n\n" + code
         demo = inspect.getsource(self.demo)
         src = "\n".join(f"- {s}" for s in self.sources)
         return (f"# {self.title} (`{self.name}`)\n\n{self.summary()}\n\n"
@@ -428,6 +524,12 @@ class Recipe:
                 f"## Printing notes\n\n{self.notes.strip()}\n\n## Sources\n\n{src}\n\n"
                 f"## Code\n\nImport it, or copy it into the part script and keep its numbers as named Dims fields.\n\n"
                 f"```python\n{code}```\n")
+
+
+_MOUNT_IMPORTS = ("import math\nfrom build123d import Align, Box, Cylinder, Part, Pos\n"
+                  "from b123d_print.recipes import _screw\n\n"
+                  "TOP = (Align.CENTER, Align.CENTER, Align.MAX)\n"
+                  "BED = (Align.CENTER, Align.CENTER, Align.MIN)")
 
 
 RECIPES = {r.name: r for r in [
@@ -451,6 +553,35 @@ RECIPES = {r.name: r for r in [
 - Screws into plastic: give the boss 3-4 perimeters (BP-T8).
 """, ["ISO 273 (clearance holes), ISO 4762 (socket head cap screws), ISO 10642 (countersunk heads), via bd_warehouse.fastener",
       "[BP-O5, BP-T8](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"]),
+    Recipe("keyhole_mount", "Keyhole wall mount", [keyhole_mount], demo_keyhole_mount, """
+- Entry center is (0, 0), retained center is (0, travel); screw travel is +Y relative to the
+  plate, so a hanging plate moves -Y. Rotate the cutter around Z for another direction.
+- `clearance` is per side; `hole_comp` is total diameter compensation applied once (BP-F4,
+  BP-H1). Omitted diameters use `_screw(size)` ISO socket-head and normal clearance tables;
+  this optional clearance is extra to that table's shaft clearance. Measure other screw heads.
+- `head_depth` cuts a continuous head cavity on the opposite face at -plate_t, leaving
+  plate_t-head_depth of retaining lip by Z=0. Check head height, radial head overlap and outer
+  edge walls yourself; min_lip only checks axial lip thickness, not strength (BP-W3).
+- Print cavity upward when possible. Facing it down creates a roof/bridge under the lip;
+  inspect sections and run overhang/bridge checks (BP-O3). No certified load rating.
+- See the recipe guide's two-hole coupon and section images. CAD tests pass, but a maintainer
+  must print and try the stated screw before calling the fixture a validated example.
+""", ["[ISO 273](https://www.iso.org/standard/4183.html) clearance holes; not keyhole layout",
+      "[ISO 4762](https://www.iso.org/standard/34460.html) socket head cap screws via bd_warehouse",
+      "[BP-F4, H1, W3, O3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"],
+           helpers=[_mount_sizes, _mount_capsule, mounting_slot], imports=_MOUNT_IMPORTS),
+    Recipe("mounting_slot", "Adjustable screw mounting slot", [mounting_slot], demo_mounting_slot, """
+- Shaft center moves from (0, 0) to (0, travel), +Y; total length includes the round ends.
+  Screw must be inserted axially before tightening: the head cannot enter through this slot.
+- Same dimensions and allowances as keyhole_mount: clearance per side, hole_comp total once
+  (BP-F4, BP-H1), and optional continuous head cavity on the opposite face (-plate_t).
+- Leave a project-appropriate retaining lip, radial head overlap and material to plate edges;
+  `min_lip` verifies only the axial remainder. Verify with a section and Wall checks (BP-W3).
+- Tightening retains an adjusted position; this is not a captive slide or a load-rated mount.
+""", ["[ISO 273](https://www.iso.org/standard/4183.html) clearance holes",
+      "[ISO 4762](https://www.iso.org/standard/34460.html) socket head cap screws via bd_warehouse",
+      "[BP-F4, H1, W3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"],
+           helpers=[_mount_sizes, _mount_capsule], imports=_MOUNT_IMPORTS),
     Recipe("nut_trap", "Hex nut trap", [nut_trap], demo_nut_trap, """
 - Across flats + 0.2 mm total (0.1 per side) holds an ISO 4032 nut captive (BP-T7; up to +0.3 on a
   loose printer). M3 nut: 5.5 mm across flats, 2.4 mm thick.

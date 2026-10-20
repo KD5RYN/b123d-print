@@ -36,6 +36,10 @@ from mcp.client.stdio import StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
+# Integration calls are hang-guarded above legitimate coupon metrics on shared hosts.
+# Production worker timeout remains unchanged (240 seconds by default).
+BUILD_TIMEOUT = "120"
+
 BOX = '''"""Box with a counterbored hole."""
 from dataclasses import dataclass
 from build123d import Align, Box, Cylinder, Mode, Part, Pos
@@ -935,7 +939,7 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
                 worker = subprocess.Popen(cmd + ["--max-builds", "2", "worker", "--queue", str(queue)], env=env)
                 extra = ["--job-queue", str(queue)]
             log = ws.parent / f"{ws.name}-server.log"
-            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", "60", "--transport", "http", "--port", str(port),
+            server = subprocess.Popen(cmd + ["--workspace", str(ws), "--timeout", BUILD_TIMEOUT, "--transport", "http", "--port", str(port),
                                              "--shutdown-grace", "3", *extra],
                                       env={**env, "B123D_PRINT_TOKEN": token}, stderr=open(log, "w"),
                                       creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
@@ -994,7 +998,7 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
             key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKCbiyMIpQvcOhoPsC6yzJoIhRkkG7wuIPlTJDRKILTV smoke"
             dest, pw = "smoke@cad.example", ws
             line = ssh.key_line(key, ws, dest, prog=[sys.executable, "-m", "b123d_print.cli"])
-            env["B123D_PRINT_FAKE_SSH_FORCED"] = ssh.line_command(line) + " --timeout 60"
+            env["B123D_PRINT_FAKE_SSH_FORCED"] = ssh.line_command(line) + f" --timeout {BUILD_TIMEOUT}"
             os.environ["B123D_PRINT_FAKE_SSH_FORCED"] = env["B123D_PRINT_FAKE_SSH_FORCED"]
             ssh_cmd = [sys.executable, str(Path(__file__).with_name("fake_ssh.py"))]
         print(f"     ssh: {' '.join(ssh_cmd)} {dest}")
@@ -1005,7 +1009,7 @@ async def main(keep: bool, http: bool, split: bool = False, over_ssh: bool = Fal
                 no_server_paths(rec, pw, expect)
             await ssh_checks(c, ssh_cmd, dest, pw, expect)
     else:
-        params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", "60"], env=env)
+        params = StdioServerParameters(command=cmd[0], args=cmd[1:] + ["--workspace", str(ws), "--timeout", BUILD_TIMEOUT], env=env)
         async with Client(params) as c:
             await flow(c, ws, expect)
 
