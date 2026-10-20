@@ -732,7 +732,7 @@ def cmd_setup(args) -> int:
         if args.material is None:
             given["material"] = _ask("Material (pla, petg, asa, abs, tpu or your own)", s.material or "pla")
         if args.formats is None:
-            given["formats"] = _ask("Export formats (3mf for Bambu/Orca/Prusa, step to edit in other CAD, png, stl, glb, print)",
+            given["formats"] = _ask("Export formats (3mf for Bambu/Orca/Prusa, step to edit in other CAD, png, stl, glb, print, hardware)",
                                     ",".join(s.formats))
         if args.style is None:
             given["style"] = _ask("Default style (functional, modern, least_cost, rugged, soft, structural)", s.style or "functional")

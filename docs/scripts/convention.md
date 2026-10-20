@@ -50,6 +50,7 @@ if __name__ == "__main__":
 | `joints(d)` | no | `[("peg", "socket", clearance), ...]`: male/female pairs of `assembly(d)` labels that are intentional fits; the [fit check](../using/fit.md) measures them against their own clearance |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
+| `hardware(d)` | no | `[Hardware(...), ...]`: bought parts for the whole variant assembly, in the print sheet and optional JSON BOM ([declared hardware](#declared-hardware)) |
 | `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md); moving parts are declared here too, as `Motion(...)` or `Slide(...)` on `assembly(d)` labels ([motion clearance](../using/checks.md#motion-clearance)) |
 | `original(d)` | no | for a [remix](../using/remix.md): the original model placed as the remix is; default: what `build(d)` loaded with `import_model`. The automatic checks also run on it, so its findings are labeled inherited, and `before_after` and export compare the remix with it |
 
@@ -153,6 +154,129 @@ override them) or at module level:
 [print sheet](../using/slicing.md#the-print-sheet) lists under "Assembly and notes": the order
 to put the pieces together, the glue, inserts to set, a brim. For example
 `PRINT_NOTES: tuple = ("Set the M3 inserts at 230 C before closing the lid.",)`.
+
+## Declared hardware
+
+Declare bought parts explicitly; a hole or a mesh cannot identify screw length, head style,
+thread, material or insert model. `hardware(d)` gets the selected variant's dimensions:
+
+```python
+from b123d_print import Hardware
+
+def hardware(d):
+    return [
+        Hardware("lid-screw", "Lid screw", d.SCREW_COUNT,
+                 specification="M3 × 10 mm, ISO 4762 socket head, stainless A2",
+                 location="lid corners", source_url="https://example.org/part-data"),
+        Hardware("magnet", "Magnet", 2, note="Confirm grade and coating before ordering"),
+    ]
+```
+
+This is an API illustration, not a printed example. Each entry is a `Hardware` or a mapping
+with the same fields: required `id` (stable letters/numbers/`_`/`.`/`-`), nonempty `description`,
+positive integer `quantity`; optional `specification`, `location`, `note`, `source_url`, `source`,
+`units`, boolean `needs_confirmation`, and `model`. Duplicate IDs, invalid quantities (including booleans), unknown mapping
+fields and malformed hooks fail export with an explanation. Use one entry per ID with its total
+quantity; `location` can describe several positions. An omitted/empty specification is marked
+**Needs confirmation** (`needs_confirmation: true` in JSON). Supplying a specification is an
+author declaration, not an independent completeness check: set `needs_confirmation=True` for a
+partial specification (for example, a known M3 thread with unknown length/head). Both outputs
+retain the partial text and mark it for confirmation. Keep assembly instructions in
+`PRINT_NOTES`.
+
+The table (`print` format) and optional `<name>[_<variant>]_hardware.json` (`hardware` format)
+use the same entries sorted by ID. Quantities always cover the **whole selected variant's
+assembly**, even when exporting one printable piece with `parts=` / `--only`. They never scale
+by piece selection. `all` includes both formats; neither changes the default export formats.
+An absent hook preserves the existing sheet; JSON requested without a hook has `declared: false`
+and an empty list, which does not assert that no hardware is needed. An explicit empty hook
+has `declared: true`. URLs and descriptions are escaped table data; they are never fetched or
+executed. Scripts retain the existing network restrictions.
+
+### Library and custom model stand-ins
+
+Reuse `bd_warehouse`'s metadata for its `Screw`, `Nut` (including `HeatSetNut`) and `Washer`
+objects with `Hardware.from_bd_warehouse("lid-screw", screw, quantity=4)`. This copies the
+library's `info` (class, standard/type, thread size, and screw length/hand) into `specification`,
+retaining full insert size selectors and left-hand nut metadata that `info` omits. It
+records the library class in `source` and the model coordinate units as `mm`. It also retains
+the object as `model`. Override `description`, `specification`, `location`, `note` or
+`source_url` as needed, especially to specify material/finish or a supplier part number. These
+are library declarations, not inferred mesh specifications. Other library objects can use the
+ordinary `Hardware` constructor.
+
+For custom hardware, associate a procedural shape or an imported STL/STEP/3MF with the entry's
+`model`. Supply `source` and `units` explicitly when a model is supplied. A lazy model factory
+keeps geometry conversion out of BOM-only work:
+
+```python
+import functools
+from b123d_print import Hardware, import_model
+
+@functools.cache
+def bought_sensor(d):
+    return Hardware("sensor", "Supplier sensor", 1,
+                    specification="Supplier ABC-123, revision B",
+                    source="ref/sensor.stl", units="inch",
+                    model=lambda: import_model("ref/sensor.stl", scale="inch"))
+
+def hardware(d):
+    return [bought_sensor(d)]
+
+def assembly(d):
+    sensor = bought_sensor(d)
+    # Place this shape with place_on/align_axis (or Pos/Rot) in assembly coordinates.
+    shape = sensor.model()
+    return [(printed_base(d), "orange", "base"), sensor.standin(shape)]
+```
+
+This is also an API illustration. `units` records the **source model's units**; it does not
+scale geometry. Match it to `import_model(..., scale=...)`, which converts to build123d's mm.
+`source` identifies the file or provenance and `source_url` optionally identifies its source.
+STL has no trustworthy unit or thread metadata: ask for units/specification and retain the
+existing import warnings and checks. A procedural stand-in can use `source="measured envelope"`,
+`units="mm"`. Nothing in a mesh is used to fill a specification.
+
+`item.standin(shape=None, color="silver", label=None)` returns the existing
+`(shape, color, "<id>[: label] (stand-in)")` assembly tuple. With no shape argument it evaluates
+the entry's model. Pass a placed shape to use the existing contact/axis helpers; use distinct
+labels when placing several instances. The label retains the BOM ID, and existing fit and
+collision checks see a stand-in. Call once per placed instance: this does not count placements
+or verify their number against the declared quantity. Only `build(d)` defines printable pieces;
+keep hardware models out of it. The model and its factory are never serialized, and BOM export
+never calls the factory. Keep imported assets in `ref/` so the normal handoff includes them.
+
+### JSON format (schema version 1)
+
+```json
+{
+  "schema_version": 1,
+  "variant": "standard",
+  "scope": "whole_assembly",
+  "declared": true,
+  "items": [
+    {
+      "id": "magnet",
+      "description": "Magnet",
+      "quantity": 2,
+      "specification": "",
+      "location": "",
+      "note": "Confirm grade and coating before ordering",
+      "source_url": "",
+      "source": "",
+      "units": "",
+      "needs_confirmation": true
+    }
+  ]
+}
+```
+
+All metadata fields are strings except integer `quantity` and boolean `needs_confirmation`.
+The default variant is `standard`; other variants use their key. Output is UTF-8, with sorted
+JSON keys and ID-sorted entries, without timestamps. Repeated exports reuse unchanged files;
+changes to the declaration, variant dimensions or rendered sheet content invalidate them.
+Download links and `download_part` / SSH `pull` include these files through the normal flow;
+when filtering, use `formats="print,hardware"` for both artifacts and the source/ref files.
 
 ## Values from the user's config
 
