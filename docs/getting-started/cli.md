@@ -36,6 +36,7 @@ b123d-print check
 | Command | Does |
 | --- | --- |
 | `init [dir] [--update-agents]` | create a workspace: `b123d-print.toml`, `AGENTS.md`, `parts/`; `--update-agents` replaces `AGENTS.md` with this version's text |
+| `setup [--printer p] [--material m] [--formats f] [--style s] [--hole-comp mm] [--hole-comp-h mm] [--workspace] [--overwrite] [--no-input]` | first-run setup: asks for the printer (search words, then pick one), material, export formats, default style and a measured hole compensation, and writes them to your user config (`--workspace`: this workspace's `b123d-print.toml`; a measured hole compensation with a printer goes to its calibration). A value already set is kept unless you say yes or pass `--overwrite`. `--no-input` (the default when stdin is not a terminal) writes only the flags given, for scripts. Ends with the calibration coupons to print next |
 | `new <name> [-d/--description text] [--from <example>]` | scaffold `parts/<name>/<name>.py` from the template, or from a bundled example |
 | `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |

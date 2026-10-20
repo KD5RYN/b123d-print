@@ -86,11 +86,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe"},
+                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe", "save_setup"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
-                       "fit_test"},
+                       "fit_test", "setup_workspace"},
            f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")

@@ -27,6 +27,26 @@
   is built from known bases. Dependabot updates them weekly (one grouped PR for actions, one for
   images), and CI fails on an unpinned `uses:` or base image. How to update the pins by hand:
   [Releasing](https://kd5ryn.github.io/b123d-print/contributing/releasing/#pinned-actions-and-images).
+- **First-run setup** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/#tell-it-your-printer), #66):
+  `b123d-print setup` asks for the printer (search words, then pick one), material, export
+  formats, default style and a measured hole compensation, and writes them to the user config
+  (`--workspace`: the workspace's `b123d-print.toml`; with a printer, hole compensation goes to
+  its calibration for that material). Flags for scripted use (`--printer`, `--material`,
+  `--formats`, `--style`, `--hole-comp`, `--hole-comp-h`, `--no-input`). A value already set is
+  never replaced without a yes or `--overwrite`. Over MCP, the new prompt `setup_workspace` walks
+  the assistant through the same questions and the coupons (hole, fit, overhang and bridge, in
+  that order), and the new tool `save_setup` saves the answers (where `use_printer` saves:
+  per workspace on a shared server), reporting values already set as conflicts until
+  `overwrite=true`. `list_parts` in generic mode now tells the assistant to offer setup, and
+  `AGENTS.md` says to offer it once before the first part. Quick start has a "Tell it your
+  printer" step.
+- **Tutorials** ([docs](https://kd5ryn.github.io/b123d-print/tutorials/first-bracket/), #68): a
+  new "Start here" section with two end-to-end sessions recorded from the real server: a shelf
+  bracket from install to print (setup, confirming dimensions, sections, checks, the structural
+  design review, `suggest_orientation` with a load, a fit-test template, export, files home
+  locally and on a shared server, the slicer and print sheet, then "the holes are tight"), and a
+  remix of a downloaded STL (where the file goes, `describe_model`, the license, MODIFY,
+  inherited findings, `before_after` and `compare`, a template, export, attribution).
 
 ## 0.3.6 — 2026-10-20
 

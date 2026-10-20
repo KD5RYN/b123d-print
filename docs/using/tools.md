@@ -37,6 +37,7 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `trace_outline(part, file, dpi?, grid?, reference?, points?, distance?, tolerance?, smooth?, pick?, threshold?, invert?, inline?)` | [trace a flat object](tracing.md) in a scan or photo from `parts/<part>/ref/` into an outline in mm with its holes: scale from `dpi` (or the file's metadata), a `grid` cell size, a `reference` object (`card`, or its sides in mm) or two `points` a known `distance` apart; simplified to `tolerance` mm (or `smooth` spline points); `pick` chooses the object. Writes the points (JSON), a Python snippet and an overlay PNG to confirm with the user |
 | `recipe(name?)` | the [recipe library](recipes.md): tested build123d functions for common printable features; no `name` lists them, a name gives the code, a tested example, printing notes and sources |
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP and SSH it is saved per workspace |
+| `save_setup(printer?, material?, formats?, style?, hole_comp?, hole_comp_h?, overwrite?)` | save the [first-run setup](../getting-started/quick-start.md#tell-it-your-printer) answers (the `setup_workspace` prompt asks for them): printer, material, export formats, default style and a measured hole compensation (with a printer: stored for it and the material). Saved where `use_printer` saves; a value already set is kept and reported as a conflict until `overwrite=true`. Lists the calibration coupons still to print |
 
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.
@@ -47,12 +48,12 @@ only those are built. Every tool that builds the part reads the pieces from the
 them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`, `params` and
+Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`, `params` and
 `upload_reference` runs in the
 [sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
 the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
 
-Every tool except `list_parts`, `use_printer`, `new_part`, `read_part`, `write_part`,
+Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`,
 `upload_reference` and `recipe` runs in the
 [sandbox](sandbox.md): the part script, or for `compare`, `describe_model` and `trace_outline`
 the parsing of the model and image files (they may come from model-written scripts or from the
@@ -188,6 +189,7 @@ carries the full [workflow rules](../scripts/rules.md).
 | `remix_part(name, source?, change?)` | remix someone else's model: inspect it, choose modify or redraw, confirm the changes, then verify with inherited and new findings told apart ([remixing](remix.md)) |
 | `design_review(name, style?)` | after the print checks pass: review the design for its style (functional, modern, least_cost, rugged, soft, structural) with `design_metrics` and renders; 3-7 suggestions with rule IDs; changes nothing without your OK ([design review](design-review.md)) |
 | `fit_test(name, what?)` | propose, confirm and make [fit-test templates](templates.md) of a part before the full print |
+| `setup_workspace` | first-run setup: asks for your printer, material, export formats and default style, saves them with `save_setup`, then offers the calibration coupons in order (hole, fit, overhang and bridge) |
 | `calibrate_hole_comp` | walk through printing and measuring the [hole coupon](hole-compensation.md) |
 
 ## Resources
