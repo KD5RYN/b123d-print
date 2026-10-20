@@ -123,6 +123,17 @@ in total is measured by a `Gap` check in the assembly (0.15 mm at the closest po
 flat, with free-fit bores on 5 mm pins.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/gear_pair/gear_pair.py)
 
+## `flip_hinge`
+
+![flip_hinge folded too far: the interference at the worst angle](../images/flip_hinge_motion_220.png)
+
+The [`pip_hinge`](../using/recipes.md) recipe with its motion checked: `assembly(d)` splits the
+print-in-place hinge into its two leaves, and a `Motion` in `checks(d)` folds leaf B 180° over
+leaf A about the pin's axis with every gap held at 0.2 mm or more (it measures the 0.3 mm
+`pip_clearance` all the way). Set `OPEN_DEG = 220` and the check fails where the leaves meet,
+just under 200° (above). See [motion clearance](../using/checks.md#motion-clearance).
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/flip_hinge/flip_hinge.py)
+
 ## `vslot_mount`
 
 ![V-slot mount on a 2020 rail](../images/vslot_mount_assembly.png)

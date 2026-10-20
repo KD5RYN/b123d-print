@@ -13,6 +13,17 @@
   checked by evaluating it on the part, to put in the script instead of ids that change with
   the model. The fillet and chamfer diagnosis now points to `list_edges`.
 
+- **Motion clearance** ([docs](https://kd5ryn.github.io/b123d-print/using/checks/#motion-clearance)):
+  new check specs `Motion` (a piece of `assembly(d)` turned about an axis between two angles: a
+  hinge, a flip lid, a latch) and `Slide` (moved along a direction: a drawer, a sliding lid),
+  declared in `checks(d)` and run by `check`. The motion is sampled coarsely, split where a
+  collision could hide between two steps, then the first contact is bisected or the smallest
+  clearance closed in on (`max_evals` caps it; bounding-box prefilters skip far pairs). The
+  result gives the smallest clearance with its angle or position, the first collision with the
+  interference volume, and a render and section of the worst pose in `out/`. New example
+  `flip_hinge`: the print-in-place hinge recipe folded 180° with every gap held at 0.2 mm
+  (folded 220° it fails where the leaves meet); typical print-in-place clearances are in the docs.
+
 ## 0.3.5 — 2026-10-19
 
 - **HTTP: the workspace is resolved once.** The auth layer works out the request's workspace and the

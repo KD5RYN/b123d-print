@@ -50,7 +50,7 @@ if __name__ == "__main__":
 | `joints(d)` | no | `[("peg", "socket", clearance), ...]`: male/female pairs of `assembly(d)` labels that are intentional fits; the [fit check](../using/fit.md) measures them against their own clearance |
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
-| `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md) |
+| `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md); moving parts are declared here too, as `Motion(...)` or `Slide(...)` on `assembly(d)` labels ([motion clearance](../using/checks.md#motion-clearance)) |
 | `original(d)` | no | for a [remix](../using/remix.md): the original model placed as the remix is; default: what `build(d)` loaded with `import_model`. The automatic checks also run on it, so its findings are labeled inherited, and `before_after` and export compare the remix with it |
 
 A script with only a module-level `part = ...` (no `Dims`) also works, without variants.
@@ -110,6 +110,16 @@ these inputs: a script that reads the clock or random numbers gets the same piec
 **One part script per piece** is the other way: pieces that share little but their dimensions
 build, check and export on their own. Two scripts cannot share a dimensions module by
 convention yet: a script imports only from its own folder.
+
+## Moving parts
+
+A hinge, flip lid, latch or slider is placed in `assembly(d)` at one end of its motion (closed,
+or flat as printed), and its motion is declared in `checks(d)`: `Motion(label, axis_point,
+axis_dir, start_deg, end_deg, against=..., min_clearance=...)` for a rotation, `Slide(label,
+direction, distance, ...)` for a straight move. `check` sweeps it and fails on the first
+collision; see [motion clearance](../using/checks.md#motion-clearance) and the
+[`flip_hinge`](examples.md#flip_hinge) example. A print-in-place mechanism is one printed piece
+of several solids: split it into its solids in `assembly(d)` so each can move.
 
 ## For the design review
 

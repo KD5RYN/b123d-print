@@ -494,6 +494,9 @@ RECIPES = {r.name: r for r in [
   pin turns inside the bore's swept circle.
 - Break it free by flexing the leaves gently after printing; first-layer squish (elephant's foot)
   fuses knuckles that touch the bed: keep the slicer's elephant-foot compensation on.
+- Check the swing, not just the flat print: split the two solids in `assembly(d)` and declare
+  `Motion("leaf B", axis_point=(0, 0, knuckle_d / 2), axis_dir=(1, 0, 0), start_deg=0,
+  end_deg=180, min_clearance=0.2)` in `checks(d)` (the `flip_hinge` example).
 """, ["[BP-F3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) print-in-place: 0.2-0.3 mm per side",
       "[BP-H3, BP-O1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) 45-degree roofs"]),
     Recipe("lid_with_lip", "Lid with a lip and clearance", [lid_with_lip, box_shell], demo_lid_with_lip, """

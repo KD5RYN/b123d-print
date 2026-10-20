@@ -193,6 +193,54 @@ arguments given here). `from b123d_print import Mates`.
 | `align` | `True` | also check hole alignment |
 | `part` | `"assembly"` | the name findings are reported under |
 
+## `Motion`
+
+[Motion clearance](../using/checks.md#motion-clearance): a piece of `assembly(d)` turned about an
+axis (a hinge, a flip lid, a latch), measured against the other pieces at every step, stand-ins
+included. Not automatic: list it in `checks(d)`. Fails on any interference (the first contact
+angle, the volume at the worst angle) and, when `min_clearance` is given, on a smaller gap.
+`from b123d_print import Motion`.
+
+```python
+Motion("lid", axis_point=(0, d.BOX_L / 2, d.BOX_H), axis_dir=(-1, 0, 0), start_deg=0, end_deg=110,
+       against=("box",), min_clearance=d.CLEARANCE, label="opens")
+```
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | the label of the piece that moves in `assembly(d)`, or a tuple of labels that move together |
+| `axis_point` | `(0, 0, 0)` | a point on the axis, in assembly coordinates |
+| `axis_dir` | `(1, 0, 0)` | the axis direction; positive angles turn by the right-hand rule about it |
+| `start_deg` | `0.0` | the first angle (the piece as placed in `assembly(d)` is 0) |
+| `end_deg` | `90.0` | the last angle |
+| `against` | `()` | labels to measure against; empty: every other piece of the assembly |
+| `min_clearance` | `None` | mm: fail when the gap anywhere in the motion is smaller; `None`: only interference fails |
+| `samples` | `24` | coarse steps over the range (refined where a collision could hide, see the page linked above) |
+| `max_evals` | `96` | at most this many poses are measured |
+| `tol` | `0.01` | mm³ of interference that counts |
+| `label` | `""` | shown in the result and the picture's file name |
+| `image` | `None` | where the worst pose is drawn; `check` fills it in (`out/<script>[_<variant>]_motion_<part>[_<label>].png`, plus `..._section.png`); `""` for none |
+
+## `Slide`
+
+The same for a straight motion: a drawer, a sliding lid, a latch bolt, moved `distance` mm along
+`direction`. Fails on any interference (where it jams, the volume) and below `min_clearance`.
+`from b123d_print import Slide`.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | the label (or tuple of labels) that moves |
+| `direction` | `(1, 0, 0)` | the direction of the motion |
+| `distance` | `10.0` | mm moved along `direction` |
+| `start` | `0.0` | mm along `direction` where the motion begins (the piece as placed is 0) |
+| `against` | `()` | labels to measure against; empty: every other piece |
+| `min_clearance` | `None` | mm: fail when the gap anywhere in the motion is smaller |
+| `samples` | `24` | coarse steps over the range |
+| `max_evals` | `96` | at most this many positions are measured |
+| `tol` | `0.01` | mm³ of interference that counts |
+| `label` | `""` | shown in the result and the picture's file name |
+| `image` | `None` | where the worst position is drawn; `check` fills it in; `""` for none |
+
 ## `View`
 
 Not a check: a cross-section saved as a PNG with every export, returned by `views(d)`.

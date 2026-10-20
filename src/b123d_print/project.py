@@ -43,6 +43,8 @@ from build123d import Part
 
 from . import checks as ck
 from .config import Settings, hole_comp_source, load_settings, parse_formats, safe_console
+from .motion import _Swept
+from .motion import image_path as motion_image
 from .render import export_files, render, report, section_view
 
 
@@ -391,6 +393,9 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                     if side == "original":
                         found = originals.get(replace(spec, part=ORIGINAL))
                     else:
+                        if isinstance(spec, _Swept) and spec.image is None and getattr(mod, "__file__", None):
+                            script = Path(mod.__file__)  # a motion draws its worst pose next to the exports
+                            spec = replace(spec, image=str(motion_image(script.parent / "out", out_name(script.stem, key, ""), spec)))
                         found = spec.run(lookup, asm, settings)
                         if isinstance(spec, ck.ThinFeature) and res["inherit"][i]:
                             probe = originals.probe(spec)  # is the original thin at each listed spot? (merge_shares)
