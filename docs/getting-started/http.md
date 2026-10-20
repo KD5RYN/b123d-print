@@ -329,6 +329,40 @@ names vary, check your client's docs):
 }
 ```
 
+Per-client snippets (Zed, Windsurf, LM Studio, Grok, claude.ai, ChatGPT) are in
+[Connect your MCP client](mcp-clients.md#which-clients).
+
+### Clients that can't send a header
+
+The server accepts exactly one kind of credential: `Authorization: Bearer <token>` with a
+[named token](#tokens). It has no OAuth, no sign-in page and no other way to authenticate
+(`--insecure-no-auth` turns authentication off altogether, for a trusted network only). Clients
+whose remote connectors offer only OAuth or no auth can't connect:
+
+- **ChatGPT** (custom MCP servers: no auth or OAuth, no custom headers) can't connect at all.
+- **claude.ai** custom connectors (web, mobile) can only with the Request headers beta, which a
+  limited set of Team and Enterprise organizations has.
+
+What works instead:
+
+1. **Run the server locally over stdio** in a client that starts commands (Claude Desktop, Claude
+   Code, Cursor, ...): no network and no token ([Quick start](quick-start.md)). To keep the parts
+   on a home server, run it over [SSH](ssh.md): still stdio, still no token.
+2. **A small local proxy** that the client starts as a stdio server and that adds the header:
+   `mcp-remote` or `mcp-proxy`, see [a local proxy](mcp-clients.md#remote-server-from-a-stdio-only-client).
+   This helps clients that start commands but can't set headers; it doesn't help ChatGPT or
+   claude.ai, whose connectors run in the vendor's cloud and start nothing on your machine.
+3. **OAuth** (the [MCP authorization spec](https://modelcontextprotocol.io/specification/latest/basic/authorization))
+   is what connector-style clients expect. b123d-print doesn't implement it yet.
+
+**Why there is no `?token=` in the URL.** A token in the URL ends up wherever URLs are written:
+reverse-proxy and load-balancer access logs, the client's own logs and config, shell history,
+browser history and `Referer` headers. Unlike a header, it gets copied around without anyone
+noticing, and a server token is long-lived and opens a whole workspace. The signed download and
+view links are different: each opens one file (or one zip, or one view) for `--link-ttl` seconds,
+and the server log never prints their signatures. So b123d-print doesn't accept tokens in
+URLs, and a reverse proxy that turns `?token=` into a header has the same problem: don't build one.
+
 Python, with the MCP SDK 2.x:
 
 ```python

@@ -58,6 +58,7 @@ nav:
       - Measuring for the AI: using/measuring.md
       - MCP tools and prompts: using/tools.md
       - Output formats: using/formats.md
+      - From part to print: using/slicing.md
       - Settings: using/settings.md
       - Hole compensation: using/hole-compensation.md
       - Printer profiles: using/printer-profiles.md
@@ -81,6 +82,7 @@ nav:
       - Design styles and review (sourced): DESIGN_GUIDE.md
   - Reference: reference.md
   - Updating: updating.md
+  - FAQ: faq.md
   - Troubleshooting: troubleshooting.md
   - Contributing:
       - How to contribute: contributing/index.md
