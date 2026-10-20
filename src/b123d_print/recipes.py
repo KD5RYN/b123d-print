@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from build123d import (Align, Axis, Box, Compound, Cone, Cylinder, Face, FontStyle, Part, Plane, Polygon, Pos, Rectangle,
                        RegularPolygon, Rot, Text, extrude, fillet, make_face, offset)
 
+from .pcb import pcb_board, pcb_mounting_pattern, pcb_standoff
+
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 TOP = (Align.CENTER, Align.CENTER, Align.MAX)  # cutters that open on Z=0 and go down
 
@@ -155,6 +157,15 @@ def magnet_pocket(d: float, h: float, fit: float = 0.05, hole_comp: float = 0.0,
 
 def demo_magnet_pocket() -> Part:
     return Box(20, 20, 6, align=BED) - Pos(0, 0, 6) * magnet_pocket(10, 3)
+
+
+def demo_pcb_standoff() -> Part:
+    # Digital geometry fixture, based on the already printed esp_ir_blaster workflow.
+    # Board measurements here are illustrative, not a physically validated new example.
+    base = box_shell(48, 36, 12, wall=2, floor=2)
+    for x, y in ((-13, -7), (12, -7), (-10, 8)):
+        base += Pos(x, y, 2) * pcb_standoff(5, 7, 2.5, 4, flare=1, flare_h=1)
+    return base
 
 
 # ---------------------------------------------------------------------------------------------
@@ -412,6 +423,8 @@ class Recipe:
     demo: object
     notes: str
     sources: list = field(default_factory=list)
+    helpers: list = field(default_factory=list)
+    imports: str = ""
 
     def summary(self) -> str:
         return inspect.getdoc(self.functions[0]).split("\n")[0]
@@ -419,7 +432,9 @@ class Recipe:
     def text(self) -> str:
         """The recipe as Markdown: what, how to use it, the code, the printing notes, sources."""
         sig = "\n".join(f"{f.__name__}{inspect.signature(f)}" for f in self.functions)
-        code = "\n\n\n".join(inspect.getsource(f) for f in self.functions)
+        code = "\n\n\n".join(inspect.getsource(f) for f in self.helpers + self.functions)
+        if self.imports:
+            code = self.imports + "\n\n" + code
         demo = inspect.getsource(self.demo)
         src = "\n".join(f"- {s}" for s in self.sources)
         return (f"# {self.title} (`{self.name}`)\n\n{self.summary()}\n\n"
@@ -465,6 +480,32 @@ RECIPES = {r.name: r for r in [
 - Fully embedded magnets: pause at the layer above the pocket, drop the magnet in, resume; the
   layer above is then a bridge over the magnet.
 """, ["[BP-F1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) clearance ladder: press 0-0.15 per side"]),
+    Recipe("pcb_standoff", "PCB standoffs and board stand-ins",
+           [pcb_standoff, pcb_board, pcb_mounting_pattern], demo_pcb_standoff, """
+- Explicit pilot diameter/depth: no default screw size. Pass `hole_comp=d.HOLE_COMP` once.
+  Remaining floor is `height - pilot_depth`; a through spacer uses `pilot_depth=height`.
+- Reuse bd_warehouse screw `clearance_hole_diameters["Normal"]` for clearance spacers.
+  Metal tap drills are not plastic pilot recommendations. Inserts use their maker's hole size.
+- `flare` is extra base radius; `flare_h` is its height. Print base down, pilot upright and open
+  at the top; use 3-4 or more perimeters at bosses (BP-T8). Check walls with `Wall`.
+- `pcb_board` is a rectangular stand-in: center datum, X=width, Y=length, underside Z=0;
+  arbitrary hole centers are (x, y), viewed from +Z. Board holes get no printer compensation.
+- `pcb_mounting_pattern` has only `raspberry_pi_zero_v1_2` (65 x 30, 58 x 23 hole spacing,
+  diameter 2.75) and `raspberry_pi_pico_rev3` (21 x 51, 11.4 x 47 spacing, diameter 2.1).
+  Their records include exact model, datum and manufacturer source; supply measured thickness.
+  No universal ESP32 pattern and no inferred component keep-outs or purchased standoff sizes.
+- Add board and underside components to `assembly(d)` labelled "(stand-in)"; use existing
+  `Mates`/`check_fit`, `Wall` and `Template.slice` tools. Resolve interference explicitly.
+- The existing printed esp_ir_blaster is the reference. This recipe's demo is a digital fixture,
+  not a new physically validated print. Print a fit-test slice before a full enclosure.
+""", ["[BP-H1, H2, T2, T6, T8](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) compensation, pilots and bosses",
+      "[Raspberry Pi Zero drawing RPI-ZERO-V1_2](https://datasheets.raspberrypi.com/rpizero/raspberry-pi-zero-mechanical-drawing.pdf)",
+      "[Raspberry Pi Pico datasheet, mechanical specification Rev3](https://datasheets.raspberrypi.com/pico/pico-datasheet.pdf)",
+      "[Pico product brief, physical specifications](https://datasheets.raspberrypi.com/pico/pico-product-brief.pdf)"],
+           imports="import math\nfrom build123d import Align, Box, Cone, Cylinder, Part, Pos\n"
+                   "from b123d_print.pcb import PCBPattern, PCB_PATTERNS\n"
+                   "from b123d_print.recipes import box_shell\n\n"
+                   "BED = (Align.CENTER, Align.CENTER, Align.MIN)"),
     Recipe("snap_arm", "Snap-fit cantilever", [snap_arm, snap_strain, snap_length], demo_snap_arm, """
 - Lie the arm flat so it bends along the layers (BP-N1); across the layers the allowable strain
   halves.
