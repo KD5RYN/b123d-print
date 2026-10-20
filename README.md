@@ -11,7 +11,7 @@
 photo and a few caliper readings. It designs the part, looks at it from every side, checks it
 for printing problems and hands you a file for your slicer. No CAD skills needed, and it works
 with any assistant that supports MCP: Claude, Gemini CLI, Cursor, VS Code Copilot, Codex and
-more.
+[more](<https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#which-clients>) (which clients, and how to connect each).
 
 ## What you can make
 
@@ -169,11 +169,11 @@ Not needed for most people. To keep the parts on a home server and design from a
 
 | | |
 | --- | --- |
-| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, Gemini CLI, Cursor, VS Code, Codex) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
+| **Getting started** | [Quick start](https://kd5ryn.github.io/b123d-print/getting-started/quick-start/) · [MCP clients](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/) (Claude Desktop, Claude Code, claude.ai, ChatGPT, Gemini CLI, Cursor, VS Code, Codex, Grok, Windsurf, Zed, LM Studio) · [CLI and Python](https://kd5ryn.github.io/b123d-print/getting-started/cli/) |
 | **Advanced** | [Which mode?](https://kd5ryn.github.io/b123d-print/advanced/) · [Remote over SSH](https://kd5ryn.github.io/b123d-print/getting-started/ssh/) · [Over the network (HTTP)](https://kd5ryn.github.io/b123d-print/getting-started/http/) · [Docker](https://kd5ryn.github.io/b123d-print/getting-started/docker/) |
-| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [Measuring for the AI](https://kd5ryn.github.io/b123d-print/using/measuring/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) · [Fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/) |
+| **Using it** | [How a session goes](https://kd5ryn.github.io/b123d-print/using/workflow/) · [Measuring for the AI](https://kd5ryn.github.io/b123d-print/using/measuring/) · [MCP tools and prompts](https://kd5ryn.github.io/b123d-print/using/tools/) · [Output formats](https://kd5ryn.github.io/b123d-print/using/formats/) · [From part to print](https://kd5ryn.github.io/b123d-print/using/slicing/) · [Settings](https://kd5ryn.github.io/b123d-print/using/settings/) · [Hole compensation](https://kd5ryn.github.io/b123d-print/using/hole-compensation/) · [Printer profiles](https://kd5ryn.github.io/b123d-print/using/printer-profiles/) · [The checks](https://kd5ryn.github.io/b123d-print/using/checks/) · [Sandbox](https://kd5ryn.github.io/b123d-print/using/sandbox/) · [Comparing parts](https://kd5ryn.github.io/b123d-print/using/compare/) · [Remixing a part](https://kd5ryn.github.io/b123d-print/using/remix/) · [Fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/) |
 | **Part scripts** | [The part script](https://kd5ryn.github.io/b123d-print/scripts/convention/) · [Checks API](https://kd5ryn.github.io/b123d-print/scripts/checks-api/) · [Examples](https://kd5ryn.github.io/b123d-print/scripts/examples/) · [Workflow rules](https://kd5ryn.github.io/b123d-print/scripts/rules/) · [Design rules (sourced)](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) |
-| **More** | [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |
+| **More** | [FAQ](https://kd5ryn.github.io/b123d-print/faq/) · [Reference](https://kd5ryn.github.io/b123d-print/reference/) · [Updating](https://kd5ryn.github.io/b123d-print/updating/) · [Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/) · [Contributing](CONTRIBUTING.md) · [Agent evals](https://kd5ryn.github.io/b123d-print/contributing/evals/) · [Credits and licenses](https://kd5ryn.github.io/b123d-print/credits/) |
 
 ## Status
 

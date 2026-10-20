@@ -16,5 +16,22 @@
 | Windows: install fails with a path-too-long error | the deepest file in the uv cache is about 165 characters below the cache folder; turn on [long paths](https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation#enable-long-paths-in-windows-10-version-1607-and-later), or point `UV_CACHE_DIR` at a short folder such as `C:\uv` |
 | Linux: sandbox says "audit hook only" | install bubblewrap (`apt install bubblewrap`); on Ubuntu 24.04 unprivileged user namespaces must also be allowed (`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`) — or use [Docker](getting-started/docker.md) |
 
+## Print problems
+
+When the part prints but comes out wrong. Tell the assistant what you see (a photo helps): it
+changes the dimension with `set_params` and rebuilds, rather than rewriting the script.
+
+| Symptom | Fix |
+| --- | --- |
+| A fit is too tight or too loose | print the [`fit_coupon`](scripts/examples.md#fit_coupon) and store your `clearance`, `press_fit` and `free_fit` ([Settings](using/settings.md)); for one part, `set_params(name, "CLEARANCE=0.25")`. Test the next try with a [fit-test template](using/templates.md) |
+| Holes too small, or a screw doesn't go in | measure `hole_comp` with the [hole coupon](using/hole-compensation.md); leave the slicer's hole compensation off ([From part to print](using/slicing.md)) |
+| Holes lying on their side sag, string or come out oval | they need a teardrop or flat roof (the `holes` check warns about round ones), or turn the part so they are vertical ([recipes](using/recipes.md)) |
+| Corners lift, the part warps | ABS, ASA, PC and nylon warp over ~100 mm: rounded footprint corners, ribs, a brim and an enclosure ([BP-B3, B4](BEST_PRACTICES.md)); PLA and PETG rarely do: check bed adhesion |
+| A tall, thin part fell over or wobbled | brim (5-10 mm) or mouse ears; the tip-over check warns, `suggest_orientation` may lay it down |
+| Rough faces where supports were | turn the part or chamfer the overhang ([From part to print](using/slicing.md#settings-the-part-assumes)); the print sheet lists which faces need support |
+| It broke along a layer line | the load ran across the layers: lay it down so the load runs along them (`suggest_orientation` with `load=`), more walls ([design guide](DESIGN_GUIDE.md)) |
+| The part is bigger than the bed | set your [printer](using/printer-profiles.md) so the `fit` check catches it, then [split it](using/splitting.md) |
+| The assistant skipped the checks or didn't look at the renders | ask it to run the `verify_part` prompt (or "verify the part before I print it"): a full review with sections and checks, no changes ([MCP tools and prompts](using/tools.md)) |
+
 Still stuck? [Open an issue](https://github.com/KD5RYN/b123d-print/issues) with the output of
 `b123d-print --version`, `b123d-print config` and the error.

@@ -36,7 +36,7 @@ LAST_USE = ".b123d-print-last-use"
 SUBDIRS = ("out", "ref")
 MAX_BYTES = 1_000_000_000  # a zip / tar of one part; refs are capped at 50 MB each, so this is generous
 STORED = (".3mf", ".png", ".zip")  # already compressed
-SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb"}
+SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb", "print": ".md"}
 SWEEP_EVERY = 3600.0  # seconds between retention sweeps
 TRASH = ".trash-"
 WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")  # an HTTP workspace name (?workspace=)  # a workspace being removed is renamed to workspaces/.trash-<name>-<random> first

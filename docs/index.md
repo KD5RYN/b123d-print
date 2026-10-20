@@ -4,7 +4,7 @@
 photo and a few caliper readings. It designs the part, looks at it from every side, checks it
 for printing problems and hands you a file for your slicer. No CAD skills needed, and it works
 with any assistant that supports MCP: Claude, Gemini CLI, Cursor, VS Code Copilot, Codex and
-more.
+[more](<getting-started/mcp-clients.md#which-clients>) (which clients, and how to connect each).
 
 ## What you can make
 
@@ -111,6 +111,7 @@ framework.
   [Advanced: run it on another machine](advanced/index.md).
 - Writing or reviewing part scripts: [The part script](scripts/convention.md) and the
   [Checks API](scripts/checks-api.md).
+- Questions first: the [FAQ](faq.md). Taking a part to the slicer: [From part to print](using/slicing.md).
 - Something wrong: [Troubleshooting](troubleshooting.md).
 
 ## Platforms and status

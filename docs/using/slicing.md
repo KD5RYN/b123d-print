@@ -1,0 +1,107 @@
+# From part to print
+
+The part is checked and exported; here is how to get it from `parts/<name>/out/` onto the
+printer with Bambu Studio, OrcaSlicer or PrusaSlicer (Cura works the same way). Over a remote
+server, [bring the part home](workflow.md) first (`download_part`, or `b123d-print pull`).
+
+## Which file
+
+| File | Use it when | Why |
+| --- | --- | --- |
+| `<name>.3mf` | almost always | carries millimeters, so it can't be scaled wrong; standard 3MF that Bambu Studio, OrcaSlicer, PrusaSlicer and Cura all open |
+| `<name>.stl` | a slicer or service that wants STL | no units: slicers assume millimeters, which is right for these files; a mesh, a little larger |
+| `<name>.step` | you want to edit the part in other CAD | an exact solid without history. Slicers that import STEP turn it into a mesh themselves; use the 3MF instead, which b123d-print meshes finely |
+| `<name>_print.md` | always worth a look | the [print sheet](#the-print-sheet): what the part assumes, in one page |
+
+Pick the formats with `formats=` on `export` (or `formats` in your config): `3mf,print` is a
+good default for printing at home. See [Output formats](formats.md).
+
+!!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
+    Expected. The 3MF has the shape in millimeters but no Bambu project settings (printer,
+    filament, plate). Click **OK** and slice it with your own settings
+    ([more](formats.md), [troubleshooting](../troubleshooting.md)).
+
+## Orientation: as exported
+
+Every piece is exported **in print orientation**, with its bed face on Z = 0: the part
+script's `build(d)` returns it that way, and the checks ran on it that way (overhangs,
+bridges, bed edges, tip-over). So:
+
+- **Don't re-orient it.** Skip Auto Orient, and don't lay it on another face (OrcaSlicer's
+  "Lay on Face", PrusaSlicer's "Place on face", **F**): the overhang and strength choices were
+  made for this side down. If you think another side is better, ask the assistant to run
+  `suggest_orientation` and change `build(d)`, so the checks follow.
+- **Move it freely in X and Y.** If a piece lands off the plate, use **Arrange** (**A**).
+- **Strength:** layers are the weak direction. For a part that carries load (the `structural`
+  [style](design-review.md)), the main load should run along the layers; that is why a bracket
+  may lie on its side. Turning it in the slicer undoes that.
+
+## Settings the part assumes
+
+Most parts print with your usual profile. What to check:
+
+- **Material.** The fits (`clearance`, `press_fit`, `free_fit`) and hole compensation are tuned
+  for your printer and material ([Settings](settings.md), [calibration](hole-compensation.md)).
+  Printing in another material changes them: PETG fits a little tighter than PLA, and ABS, ASA
+  and nylon shrink and warp (brim, enclosure, [BP-B3/B4](../BEST_PRACTICES.md)).
+- **Walls before infill.** Strength comes from the walls (perimeters). The slicer default (2-3
+  walls, 15 % infill) is fine for most parts. For the `structural` style use **4-6 walls and
+  15-30 % gyroid infill**, and **3-4 or more walls around screw holes and bosses**
+  ([design guide](../DESIGN_GUIDE.md)). The setting is **Wall loops** in OrcaSlicer (Bambu
+  Studio, which OrcaSlicer comes from, uses the same idea), **Perimeters** in PrusaSlicer and
+  **Wall Line Count** in Cura; infill is **Sparse infill density** (OrcaSlicer), **Fill density**
+  (PrusaSlicer). For a few bosses only, use a modifier instead of more walls everywhere:
+  PrusaSlicer right-click → **Add modifier** or **Height range modifier**; OrcaSlicer and Bambu
+  Studio have the same right-click modifiers.
+- **Hole compensation: once, not twice.** b123d-print adds your `hole_comp` to the holes in the
+  CAD. Leave the slicer's own hole correction off (OrcaSlicer: **X-Y hole compensation** on the
+  Precision page, Cura: **Hole Horizontal Expansion**); PrusaSlicer has only a general **XY Size
+  Compensation**, which also shrinks or grows the outside: leave it at 0.
+- **Elephant's foot.** Keep the slicer's **Elephant foot compensation** on (OrcaSlicer:
+  Precision; PrusaSlicer: Print settings → Advanced). The CAD stays at nominal size; the bed
+  edges get a chamfer rather than a fillet so they print cleanly.
+- **Supports.** `check` (the overhang check) and `suggest_orientation` say what needs support.
+  Most parts here need none: turn supports off, or set them to **On build plate only**
+  (OrcaSlicer) / **Supports on build plate only** (PrusaSlicer), so nothing grows inside
+  holes and pockets. Where the report or print sheet names supported faces, enable supports;
+  those faces come out rough.
+- **Brim.** The tip-over check warns about tall parts on a small footprint: use a brim of 5-10 mm
+  or mouse ears (OrcaSlicer: Brim type **Auto** or **Mouse Ears**).
+
+## Several pieces
+
+A part with several pieces exports one file per piece (`<name>_base.3mf`, `<name>_lid.3mf`),
+each in its own print orientation.
+
+- **Open them together** (select all the files, or import one after another) and use
+  **Arrange**. If the slicer asks whether to load them as **one object with several parts**,
+  answer **no**: they are separate objects, each with its own bed face.
+- **Print them together or apart.** Together saves time; apart lets each use its own settings
+  (a lid with fewer walls, a bracket with more).
+- **Fit-test templates** (`<name>_template_*.3mf`) are separate quick prints: print one first
+  when the fit matters ([templates](templates.md)).
+- **Assembly:** the order, glue and inserts are in the assistant's report and, if the script sets
+  `PRINT_NOTES`, in the print sheet. For split parts see [Splitting parts](splitting.md).
+
+## The print sheet
+
+`export` with the `print` format writes `out/<name>[_<variant>]_print.md`, one per variant: the
+report you'd otherwise scroll back for, next to the files, and `download_part` brings it home
+with them. It is off by default; ask for it with `formats="3mf,print"`, `--formats 3mf,print`,
+or `formats = ["3mf", "png", "print"]` in your config (`all` includes it). It costs about a
+second per piece.
+
+It lists, from the part as built:
+
+- per piece: size, volume, filament (simple estimate, roughly ±20 %) and print time (rough);
+- the orientation, the faces that need supports (and small overhangs right at the bed), bridges
+  longer than `max_bridge`, tip-over risk with brim advice, and holes lying on their side;
+- the material and printer it was designed for, walls and infill for its style, screw holes that
+  want more walls, the script's `Wall` checks, the fits and hole compensation applied (and the
+  reminder to leave the slicer's hole compensation off);
+- the pieces and `PRINT_NOTES` (a string or list in `Dims`, see
+  [the part script](../scripts/convention.md#for-the-print-sheet)).
+
+It uses the cheap estimates from [`design_metrics`](design-review.md) and the tip-over check,
+not the full check run: run `check` for the verdict. The numbers are the same rough estimates;
+the slicer's are the real ones.

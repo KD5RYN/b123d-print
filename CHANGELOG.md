@@ -1,6 +1,32 @@
 # Changelog
 
-## 0.3.6 — unreleased
+## 0.3.6 — 2026-10-20
+
+- **From part to print** ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/), #65): a new
+  page on taking an exported part into Bambu Studio, OrcaSlicer and PrusaSlicer: which file (3MF,
+  STL or STEP) and why, keeping the exported print orientation, walls and infill (the
+  `structural` style's 4-6 walls), hole compensation once (the CAD's, not the slicer's too),
+  elephant's foot, supports and brims from the checks, the expected Bambu "invalid config"
+  message, and parts with several pieces. New export format **`print`** (off by default; `all`
+  includes it): `out/<name>[_<variant>]_print.md`, a one-page print sheet per variant with each
+  piece's size, volume, filament and time (the design_metrics estimates), the faces that need
+  supports, long bridges, tip-over and brim advice, the material and printer, walls and infill
+  for the part's style, screw holes that want more walls, the script's `Wall` checks, the fits
+  and hole compensation applied, and the script's new optional `PRINT_NOTES` (assembly order,
+  glue, inserts). About a second per piece; `download_part` and `b123d-print pull` bring it home.
+- **More MCP clients** ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#which-clients), #67):
+  a table of clients (local or remote, Bearer header, images to the model, prompts, tested or
+  not) and setup from each client's own docs for claude.ai custom connectors, ChatGPT, Grok
+  (xAI's Grok Build and superagent-ai/grok-cli), Windsurf, Zed and LM Studio, plus a local
+  stdio proxy (`mcp-remote`, `mcp-proxy`) for clients that can start a command but can't send a
+  header. The HTTP page says plainly which clients can't send a Bearer header (ChatGPT; claude.ai
+  without the Request headers beta), what to do instead, and why tokens in URLs are not offered.
+- **FAQ** ([docs](https://kd5ryn.github.io/b123d-print/faq/), #69): the questions a new user has
+  (skills, assistants and cost, plugin vs MCP server vs Docker, install, units, why holes print
+  small, accuracy, the slicer, timeouts, where files go, updating, privacy and network, the
+  sandbox messages, Windows), each linking to the page with the details; and a **Print
+  problems** table in Troubleshooting (fits, holes, warping, tip-over, layer breaks, too big for
+  the bed, an assistant that skips the checks).
 
 - **Choose fillet and chamfer edges by id** ([docs](https://kd5ryn.github.io/b123d-print/using/tools/#choosing-edges-for-fillets-and-chamfers), #53).
   New tool `list_edges` (CLI `b123d-print edges`), like `list_faces`: every edge with a stable

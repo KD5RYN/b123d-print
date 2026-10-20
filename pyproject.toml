@@ -1,6 +1,6 @@
 [project]
 name = "b123d-print"
-version = "0.3.5"
+version = "0.3.6"
 description = "Design, check and export 3D-printable parts with build123d, from any LLM via MCP"
 readme = "README.md"
 license = "MIT"

@@ -826,7 +826,9 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     variant. Uses the pieces cached by an earlier build; fresh=True builds them again.
     formats: comma-separated from step (other CAD: Onshape, Fusion, FreeCAD), stl and 3mf
     (slicers; 3MF keeps units), png (6-view preview + section views), glb (binary glTF, for web
-    and 3D apps), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
+    and 3D apps), print (the print sheet, <name>[_<variant>]_print.md: size, filament and time
+    estimates, supports, tip-over, walls and infill, fits and hole compensation, PRINT_NOTES, for
+    the slicer), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
     png). Ask the user which they want if unclear.
     view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
     parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
@@ -1163,7 +1165,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
     files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
-    = ''); formats: only those out/ files (step, stl, 3mf, png, glb); the script and ref/ always come.
+    = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print); the script and ref/ always come.
     Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
     embed=True also puts the zip (up to 8 MB) into the result, for clients that can neither fetch
     URLs nor read resources. Call it as the last step of remote work, before reporting."""

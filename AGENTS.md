@@ -263,6 +263,10 @@ and **PNG** previews plus the section views. The user picks: the `formats` setti
 config, or `formats="3mf,png"` on one export. If the user has not said what they need and the
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
+The **print sheet** (`formats="print"`, off by default) writes `out/<name>_print.md` for the
+slicer: sizes, filament and time estimates, supports, tip-over, walls and infill, fits and hole
+compensation. Offer it when the user prints the part themselves; put assembly order, glue and
+inserts in a `PRINT_NOTES` field so the sheet carries them.
 After an export, **offer the 3D view** so the user can turn the part in a browser before printing:
 the view link `export` returns over HTTP (no token, it expires), or locally the `_view.html` it
 names (opens offline); `view="assembly"` shows the assembly.
