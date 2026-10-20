@@ -291,9 +291,9 @@ jobs:
             --unshare-net --unshare-pid --die-with-parent true && echo "bwrap --tmpfs /proc exit: 0" || echo "bwrap --tmpfs /proc exit: $?"
           # the worker must actually be running in bubblewrap (not silently falling back to the hook
           # only). list_parts reports the FRONT's sandbox (which is none, as it runs no scripts), so
-          # assert the worker's own startup line instead.
-          (cd deploy && docker compose logs worker | grep -q "sandbox: Linux bubblewrap") \
-            || { echo "worker is not using bubblewrap"; (cd deploy && docker compose logs worker | tail -40); exit 1; }
+          # assert the worker's own startup line instead (this still runs in the deploy/ dir).
+          docker compose logs worker | grep -q "sandbox: Linux bubblewrap" \
+            || { echo "worker is not using bubblewrap"; docker compose logs worker | tail -40; exit 1; }
           cd .. && B123D_PRINT_SMOKE_URL=http://127.0.0.1:8000/mcp B123D_PRINT_SMOKE_TOKEN="$TOKEN" \
             B123D_PRINT_SMOKE_WORKSPACE_DIR="$B123D_PRINT_PARTS" B123D_PRINT_TOKENS_FILE="$B123D_PRINT_CONFIG/tokens.toml" \
             B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py \
