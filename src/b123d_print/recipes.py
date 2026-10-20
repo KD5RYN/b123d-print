@@ -528,7 +528,8 @@ class Recipe:
 
 _MOUNT_IMPORTS = ("import math\nfrom build123d import Align, Box, Cylinder, Part, Pos\n"
                   "from b123d_print.recipes import _screw\n\n"
-                  "TOP = (Align.CENTER, Align.CENTER, Align.MAX)")
+                  "TOP = (Align.CENTER, Align.CENTER, Align.MAX)\n"
+                  "BED = (Align.CENTER, Align.CENTER, Align.MIN)")
 
 
 RECIPES = {r.name: r for r in [

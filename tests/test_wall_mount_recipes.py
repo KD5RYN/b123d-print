@@ -94,6 +94,9 @@ def test_mount_recipe_resource_code_can_be_executed(name):
     scope = {}
     exec(code, scope)
     assert scope[name]().is_valid
+    example = text.split("## Example", 1)[1].split("```python\n", 1)[1].split("```", 1)[0]
+    exec(example, scope)
+    assert scope[f"demo_{name}"]().is_valid
 
 
 def test_documented_coupon_builds_and_has_clear_screw_standins():
