@@ -41,10 +41,11 @@ def assembly(d):
 - `place_on(piece, face_a, target, face_b, offset=0.0, spin=0.0, shift=(0.0, 0.0))` turns and
   moves `piece` so its flat `face_a` rests on `target`'s flat `face_b` (coplanar, with opposed
   outward normals). Faces are picked as in `list_faces`: a side (`"bottom"`, `"top"`, `"-Z"`,
-  `"+X"`, ... — the outermost flat face facing that way), a face id from `list_faces`, a point
-  `(x, y, z)` on the face, or a `Face`. `offset` adds a gap along `face_b`'s outward normal
-  (`0` = touching, `d.CLEARANCE` = a clearance gap); `spin` turns `piece` in the contact plane
-  (degrees); `shift` slides it in that plane.
+  `"+X"`, ... — the outermost flat face facing that global ±X/±Y/±Z direction), or, for a tilted
+  or rotated face (or an interior step), a face id from `list_faces`, a point `(x, y, z)` on the
+  face, or a `Face`. `offset` adds a gap along `face_b`'s outward normal (`0` = touching,
+  `d.CLEARANCE` = a clearance gap); `spin` turns `piece` in the contact plane (degrees); `shift`
+  `(u, v)` slides it in that plane.
 - `align_axis(piece, axis_a, target, axis_b=None, *, clock=None, offset=None, flip=False, keep_contact=None)`
   lines up a round hole, boss or pin on `piece` coaxially with one on `target`. Each axis is a
   point `(x, y, z)` or `(x, y)` near the hole or pin, a cylindrical `Face`, a dict from

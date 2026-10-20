@@ -32,6 +32,8 @@ from itertools import combinations
 import numpy as np
 from build123d import Axis, Face, Location, Part, Pos, Vector
 
+# _bbox_gap, _concave (checks) and _as_part, _rotation, _planar, _side_name (templates) are
+# package-internal geometry helpers shared with fit.py
 from .checks import FAIL, OK, WARN, Finding, Overlap, _bbox_gap, _concave, holes
 from .templates import _as_part, _rotation, find_face
 
@@ -436,14 +438,21 @@ def _place_face(part: Part, face) -> Face:
 def place_on(piece: Part, face_a, target: Part, face_b, offset: float = 0.0, spin: float = 0.0,
              shift: tuple[float, float] = (0.0, 0.0)) -> Part:
     """Move `piece` so its flat `face_a` rests on `target`'s flat `face_b` (coplanar, with opposed
-    outward normals: `face_a` faces into `face_b`). Faces are picked as in `templates.find_face`
-    (for a side name like "bottom", "top", "-Z", "+X", the outermost flat face facing that way;
-    or an id from `list_faces`, a point (x, y, z) on the face, or a `Face`). `offset` (mm)
-    separates the faces along `face_b`'s outward normal (0 = touching, `d.CLEARANCE` = a gap);
-    `spin` (deg) turns `piece` in the contact plane about `face_b`'s normal; `shift` (u, v mm)
-    slides it in that plane ((+X, +Y) on horizontal faces)."""
+    outward normals: `face_a` faces into `face_b`). Faces are picked as in `templates.find_face`:
+    for a side name ("bottom", "top", "-Z", "+X", ...), the outermost flat face facing that global
+    ±X/±Y/±Z direction; for a tilted or rotated face (or an interior step), pass a `list_faces` id,
+    a point (x, y, z) on the face, or a `Face`. `offset` (mm) separates the faces along `face_b`'s
+    outward normal (0 = touching, `d.CLEARANCE` = a gap); `spin` (deg) turns `piece` in the contact
+    plane about `face_b`'s normal; `shift` (u, v mm) slides it in that plane ((+X, +Y) on horizontal
+    faces)."""
     from OCP.TopLoc import TopLoc_Location
 
+    try:
+        if len(shift) != 2:
+            raise ValueError
+        sx, sy = float(shift[0]), float(shift[1])
+    except (TypeError, ValueError):
+        raise ValueError("shift needs two numbers (u, v) in mm") from None
     fa = _place_face(piece, face_a)
     fb = _place_face(target, face_b)
     na = _unit(_vec(fa.normal_at(fa.center())))
@@ -456,7 +465,6 @@ def place_on(piece: Part, face_a, target: Part, face_b, offset: float = 0.0, spi
         ax = Axis(tuple(ca), tuple(nb))
         moved = _as_part(moved.rotate(ax, float(spin)))
     u, v = _tangent_basis(nb)
-    sx, sy = (float(shift[0]), float(shift[1])) if len(shift) == 2 else (0.0, 0.0)
     dest = _vec(fb.center()) + float(offset) * nb + sx * u + sy * v
     return _preserve(piece, Pos(*(dest - ca)) * moved)
 

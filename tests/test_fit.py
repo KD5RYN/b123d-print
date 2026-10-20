@@ -201,6 +201,9 @@ def test_place_on_stacks_flips_and_mounts_on_any_flat_face():
     d = distance(on_wedge, wedge)
     assert d["touching"] and not d["overlap"]
 
+    with pytest.raises(ValueError, match=r"shift needs two numbers \(u, v\) in mm"):
+        place_on(raw_lid, "bottom", b, "top", shift=(5,))
+
 
 def test_align_axis_lines_up_holes_and_clocks_second_hole():
     # Box with a side lip merged into the rim so its top face center is shifted in X from the hole pattern

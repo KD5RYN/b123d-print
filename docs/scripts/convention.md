@@ -107,6 +107,20 @@ rebuilds and overwrites the entry; `B123D_PRINT_NO_CACHE=1` on the server turns 
 The CLI and `uv run` build in your own process and do not use it. The build has to depend only on
 these inputs: a script that reads the clock or random numbers gets the same pieces back.
 
+**Check findings and export files are reused too.** In the same `out/.cache/`, the worker keeps
+each piece's findings of the per-piece checks (thin features, overhang, holes, bed edge,
+tip-over, gaps within the piece, and the script's `Wall` and `Probe` checks in the print frame),
+keyed by the piece's geometry, the check's arguments, your settings and the b123d-print version.
+A `check` after changing one piece rechecks that piece; the checks across pieces (overlap,
+`Mates`, a `Gap` between two parts, `Wall` and `Probe` with `frame="assembly"`, `Motion`,
+`Slide`) and the printer's build-volume fit run every time. `export` stamps each file it writes
+with what it was made from (the shapes' geometry, names and colors, the format and the code): a
+file still as written for the same inputs is not written again, and a fit-test template is read
+back instead of cut again. A file you edit, replace or delete is written again. `fresh=True`
+reads none of it and writes everything again. Template previews (`_template_<id>.png` and
+`_where.png`) are rendered small (about 800 px wide) by `export`; `make_template` renders them at
+full size.
+
 **One part script per piece** is the other way: pieces that share little but their dimensions
 build, check and export on their own. Two scripts cannot share a dimensions module by
 convention yet: a script imports only from its own folder.
@@ -152,7 +166,7 @@ to put the pieces together, the glue, inserts to set, a brim. For example
 
 | Helper | Use |
 | --- | --- |
-| `place_on(piece, face_a, target, face_b, offset=0, spin=0, shift=(0, 0))` | move `piece` so flat `face_a` rests on `target`'s flat `face_b` (coplanar, opposed normals); faces by side (`"bottom"`, `"top"`, `"+X"`), `list_faces` id, point or `Face`. See [Fit between pieces](../using/fit.md#placing-pieces-by-contact) |
+| `place_on(piece, face_a, target, face_b, offset=0, spin=0, shift=(0, 0))` | move `piece` so flat `face_a` rests on `target`'s flat `face_b` (coplanar, opposed normals); faces by global side (`"bottom"`, `"top"`, `"+X"`), `list_faces` id, point or `Face`. See [Fit between pieces](../using/fit.md#placing-pieces-by-contact) |
 | `align_axis(piece, axis_a, target, axis_b?, clock=...)` | line up round holes, bosses or pins across pieces (slides in the contact plane after `place_on`; `clock=` clocks around a second hole pair) |
 
 ## Splitting into pieces

@@ -25,6 +25,7 @@ from pathlib import Path
 WORKSPACE_FILE = "b123d-print.toml"
 FORMATS = ("step", "stl", "3mf", "png", "glb", "print")  # every export format; `formats` picks a subset
 DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb, not print)
+IMAGE_SIZES = ("normal", "small")  # render size: "small" is about 800 px wide (cheaper to send to a model)
 
 
 @dataclass(frozen=True)

@@ -75,7 +75,8 @@ A part that takes long to build makes every step slow. The time limit is 240 s p
 - **Built pieces are cached** in `out/.cache/` per variant. `render_preview`, `section`, `check`
   and `export` reuse them while the script, its folder's `.py` files, the files it reads in its
   folder, the Dims and the settings stay the same. `fresh=True` rebuilds. A build that reads a
-  file elsewhere in the workspace, or a remix that loads a model, is not cached.
+  file elsewhere in the workspace, or a remix that loads a model, is not cached. `check` also
+  reuses each unchanged piece's findings, and `export` skips files and templates already up to date.
 - **Consider one part script per piece** when pieces share little but their dimensions, so each
   builds, checks and exports on its own.
 
