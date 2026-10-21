@@ -5,7 +5,9 @@ volume, filament and time (rough estimates, design_metrics' rules), the supports
 overhang rule finds, tip-over advice (the tip-over check's measure), then the settings the part
 was designed for (material, printer, clearance, hole compensation), walls and infill (the style's
 guidance), screw holes that want more perimeters, the Wall checks the script declares, and the
-script's PRINT_NOTES (assembly order, glue, inserts). It uses only the cheap metrics, not the full
+script's PRINT_NOTES (assembly order, glue, inserts). The script's PRINT intent (intent.py) and
+your settings override the recommendations (supports, walls, infill, brim, orientation), never the
+facts: each recommendation names its source, the part, your settings or the geometry/style. It uses only the cheap metrics, not the full
 design review, so the format costs a second or two per piece. Off by default (not in
 DEFAULT_FORMATS); `all` includes it. Nothing here changes the part.
 """
@@ -17,6 +19,7 @@ from pathlib import Path
 from build123d import Part
 
 from . import checks as ck
+from . import intent
 from . import metrics as mt
 
 STRUCTURAL_WALLS = "4-6 walls, 15-30 % gyroid infill"  # structural style review, DS-T2 / DS-T4
@@ -67,6 +70,54 @@ def _walls(mod, d, min_wall: float) -> list[str]:
     return out
 
 
+def _brim(v) -> str:
+    return ("on" if v else "none") if isinstance(v, bool) else f"{v:g} mm"
+
+
+def _supports_line(want: dict, needed: bool) -> str:
+    """The supports recommendation and its source: the part's PRINT, your settings or the geometry."""
+    if "supports" not in want:
+        if needed:
+            return (f"- **Supports: on, {intent.SUGGESTED}**, under the faces listed in Orientation. Supported faces come "
+                    "out rough; `check` and `suggest_orientation` say whether turning the part avoids them.")
+        return (f"- **Supports: off, {intent.SUGGESTED}**: turn slicer supports off, or set them to \"on build plate "
+                "only\".")
+    v, src = want["supports"]
+    line = f"- **Supports: {intent.supports_label(v)}, {src}**"
+    if src == intent.PART:
+        line += f": {want['why'][0]}."
+    if v == "none" and needed:
+        line += (" The faces listed in Orientation print unsupported, as intended." if src == intent.PART else
+                 " The faces listed in Orientation would need them: check they print acceptably, or turn supports on "
+                 "for this part.")
+    return line
+
+
+def _walls_lines(want: dict, style: str, p: mt.Params) -> list[str]:
+    """Walls and infill: the part's PRINT, else your settings, else the style's suggestion (structural)
+    or the slicer defaults the estimates assume."""
+    set_ = {k: want[k] for k in ("walls", "infill", "infill_pattern") if k in want}
+    if not set_:
+        if style == "structural":
+            return [f"- **Walls and infill: {STRUCTURAL_WALLS}, {intent.SUGGESTED}** (structural style: strength comes "
+                    "from the walls); nozzle temperature near the top of the material's range."]
+        return [f"- **Walls and infill: {p.walls} walls, {p.infill:.0%} infill, {intent.SUGGESTED}** ({style} style; "
+                "slicer defaults, the estimates assume them). Use more walls, not more infill, where the part carries load."]
+    out = []
+    why = want["why"][0]
+    for k, label in (("walls", "Walls"), ("infill", "Infill"), ("infill_pattern", "Infill pattern")):
+        if k in set_:
+            v, src = set_[k]
+            text = f"{v:g} %" if k == "infill" else str(v)
+            out.append(f"- **{label}: {text}, {src}**" + (f": {why}" if src == intent.PART else ""))
+        elif k == "walls":
+            out.append(f"- **Walls: {STRUCTURAL_WALLS.split(',')[0] if style == 'structural' else p.walls}, {intent.SUGGESTED}**")
+        elif k == "infill":
+            out.append(f"- **Infill: {p.infill:.0%}, {intent.SUGGESTED}**")
+    out.append(f"- The estimates assume {p.walls} walls and {p.infill:.0%} infill.")
+    return out
+
+
 def _notes(mod, d) -> list[str]:
     v = mt.script_attr(mod, d, "PRINT_NOTES", None)
     if not v:
@@ -81,8 +132,14 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
 
     if not hardware_resolved:
         hardware_items = hardware.declared(mod, d)
-    p = mt.Params.from_settings(settings)
+    p = mt.Params.from_settings(settings)  # your settings' walls and infill
     style, _ = mt.resolve_style(mod, d, settings)
+    want = intent.resolve(mod, d, settings)
+    why = want["why"][0]
+    if "walls" in want:
+        p.walls = int(want["walls"][0])
+    if "infill" in want:
+        p.infill = want["infill"][0] / 100
     named = {(k or "part"): v for k, v in parts.items()}
     per = {n: piece_numbers(v, p, settings.tip_speed) for n, v in named.items()}
     for n, m in per.items():  # supports right at the bed are bed-edge flares, listed apart
@@ -112,27 +169,32 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
           "Arrange." + (" Each piece is its own file (or object): print them together or one at a time." if many else "")
           + (" Structural style: the main load should run along the layers (in XY); `suggest_orientation` with "
              "`load=` checks it." if style == "structural" else "")]
+    if "orientation" in want:
+        L.append(f"- **Orientation: locked, {intent.PART}**: {why}. Keep it as exported; ignore `suggest_orientation`'s "
+                 "other choices for it.")
+    brim = want.get("brim")
     for n, m in per.items():
         sup, tip, who = m["supports"], m["tip"], (f"**{n}**: " if many else "")
         high, low = m["high"], m["low"]
         if high:
             where = "; ".join(f"{f['area']:g} mm² at ({', '.join(f'{x:g}' for x in f['center'])})" for f in high[:4])
             more = f" and {len(high) - 4} more" if len(high) > 4 else ""
-            L.append(f"- {who}supports needed under {len(high)} face(s), ~{sum(f['area'] for f in high):.1f} mm² "
-                     f"({_grams(sup['grams'])}): {where}{more}. Supported faces come out rough; `check` and "
-                     "`suggest_orientation` say whether turning the part avoids them.")
+            L.append(f"- {who}{len(high)} face(s), ~{sum(f['area'] for f in high):.1f} mm² ({_grams(sup['grams'])}), "
+                     f"would need supports by the geometry (steeper than {p.max_overhang:g}° or bridges over "
+                     f"{p.max_bridge:g} mm): {where}{more}.")
         else:
             L.append(f"- {who}no supports needed (overhangs within {p.max_overhang:g}° from vertical, "
-                     f"bridges up to {p.max_bridge:g} mm). Turn slicer supports off, or set them to \"on build plate only\".")
+                     f"bridges up to {p.max_bridge:g} mm).")
         if low:
             L.append(f"- {who}{len(low)} small overhang(s) within {NEAR_BED:g} mm of the bed (~{sum(f['area'] for f in low):.1f} mm²), "
                      "usually a fillet or rounded edge on the bed (the `bed edge` check): the slicer seldom supports them, "
                      "they print with a slight flare.")
         long = [b for b in sup.get("bridges", []) if b > p.max_bridge]
         if long:
-            L.append(f"- {who}bridges over {p.max_bridge:g} mm: {', '.join(f'{b:g} mm' for b in long)} (counted as supported above).")
+            L.append(f"- {who}bridges over {p.max_bridge:g} mm: {', '.join(f'{b:g} mm' for b in long)} (in the faces above).")
         if tip:
-            L.append(f"- {who}tip-over risk ({'; '.join(tip['why'])}): use a brim of 5-10 mm or mouse ears.")
+            L.append(f"- {who}tip-over risk ({'; '.join(tip['why'])}): "
+                     + (f"brim {_brim(brim[0])}, {brim[1]} (below)." if brim else "use a brim of 5-10 mm or mouse ears."))
         if m["horizontal_holes"]:
             L.append(f"- {who}{m['horizontal_holes']} hole(s) lie on their side (axis in XY): with a teardrop or flat "
                      "roof (the `holes` check says) they need no supports; keep slicer supports out of them.")
@@ -147,12 +209,10 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
                  f"{printer.layer_height:g} mm layers")
     else:
         L.append(f"- **Printer:** generic profile; the estimates assume a {p.nozzle:g} mm nozzle and {p.layer:g} mm layers")
-    if style == "structural":
-        L.append(f"- **Walls and infill:** structural style: {STRUCTURAL_WALLS} (strength comes from the walls); "
-                 "nozzle temperature near the top of the material's range.")
-    else:
-        L.append(f"- **Walls and infill:** {style} style; the estimates assume {p.walls} walls and {p.infill:.0%} infill "
-                 "(slicer defaults). Use more walls, not more infill, where the part carries load.")
+    L.append(_supports_line(want, any(m["high"] for m in per.values())))
+    L += _walls_lines(want, style, p)
+    if brim:
+        L.append(f"- **Brim: {_brim(brim[0])}, {brim[1]}**" + (f": {why}" if brim[1] == intent.PART else ""))
     screws = sorted({s for m in per.values() for s in m["screw_holes"]})
     if screws:
         L.append(f"- **Screw holes** ({', '.join(screws)}): {SCREW_WALLS} around them (a height-range or "

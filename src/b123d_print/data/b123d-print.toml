@@ -21,3 +21,6 @@ parts_dir = "parts"
 # filament_price = 25  # per kg; design_metrics then shows a cost
 # print_flow = 10      # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
 # tip_speed = 200      # mm/s, your slicer's fastest print speed: the tip-over check scales with it; 0 turns it off
+# supports = "tree"    # your support style for the print sheet: none, auto, build_plate_only, tree (a part's PRINT wins)
+# walls = 3            # your wall count (perimeters) for the print sheet and the estimates (a part's PRINT wins)
+# infill = 20          # your infill percent for the print sheet and the estimates (a part's PRINT wins)

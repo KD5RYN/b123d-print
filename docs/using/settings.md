@@ -56,6 +56,9 @@ An unknown key is an error, so typos don't pass silently.
 | `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
 | `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |
 | `tip_speed` | `200` | mm/s, your slicer's fastest print move (infill or inner walls); the [tip-over check](checks.md) estimates the brim OrcaSlicer's Auto brim would give at this speed and warns from 5 mm; `0` turns the check off |
+| `supports` | `""` (from the geometry) | your support style for the [print sheet](slicing.md#the-print-sheet): `none`, `auto`, `build_plate_only` or `tree`; a part's [`PRINT`](../scripts/convention.md#print-intent) wins. It changes the advice only, not the checks |
+| `walls` | `0` (the slicer default, 2) | your wall count (perimeters) for the print sheet and the filament and time estimates; a part's `PRINT` wins |
+| `infill` | none (15) | your infill percent for the print sheet and the estimates; a part's `PRINT` wins |
 | `parts_dir` | `"parts"` | folder in the workspace that holds `<name>/<name>.py` |
 
 All clearances are per side. Part scripts read any of them with `load_settings(__file__)`, e.g.

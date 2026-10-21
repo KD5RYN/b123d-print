@@ -43,6 +43,7 @@ from types import ModuleType
 from build123d import Part
 
 from . import checks as ck
+from . import intent
 from .config import Settings, hole_comp_source, load_settings, parse_formats, safe_console
 from .motion import _Swept
 from .motion import image_path as motion_image
@@ -295,6 +296,9 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
     specs = list(f(d) if f else [])
     covered = {s.part or "part" for s in specs if isinstance(s, ck.Overhang)}
     specs += [ck.Overhang(p) for p in parts if p not in covered]  # always report overhangs
+    why = intent.no_supports_why(mod, d)  # PRINT supports "none": overhangs reported as accepted, FAILs kept
+    if why:
+        specs = [replace(s, accept=why) if isinstance(s, ck.Overhang) and not s.accept else s for s in specs]
     if asm and not any(isinstance(s, ck.Overlap) for s in specs):
         specs.append(ck.Overlap())
     fitted = {s.part or "part" for s in specs if isinstance(s, ck.Fit)}
@@ -350,6 +354,7 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
         try:
             try:
                 d = dims(mod, key)
+                intent.declared(mod, d)  # a bad PRINT is a build error, said before any check runs
                 pc = make_pieces(mod, key, d, settings, cache)
                 parts, orig, imports = built(mod, d, pc)
                 imported_before_assembly = len(pc.imports)

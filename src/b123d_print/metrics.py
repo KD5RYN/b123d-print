@@ -60,6 +60,10 @@ class Params:
         p = cls(price=s.filament_price, flow=s.print_flow or FLOW, max_overhang=s.max_overhang,
                 max_bridge=s.max_bridge, material=s.material, hole_comp=s.hole_comp,
                 hole_comp_h=s.hole_comp if s.hole_comp_h is None else s.hole_comp_h)
+        if getattr(s, "walls", 0):  # your settings' walls and infill (a part's PRINT: printsheet)
+            p.walls = int(s.walls)
+        if getattr(s, "infill", None) is not None:
+            p.infill = s.infill / 100
         if s.printer:
             from .profiles import load_printer
 

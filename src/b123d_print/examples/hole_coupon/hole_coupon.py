@@ -111,6 +111,14 @@ class Dims:
 
 VARIANTS = {"": {}}
 
+# Print intent (PRINT): the coupon measures holes printed without supports; supports in the
+# horizontal holes would spoil exactly what it measures. The print sheet and the overhang check say so.
+PRINT = {
+    "supports": "none",
+    "orientation": "locked",
+    "why": "a calibration coupon: it measures holes printed without supports, flat as modeled",
+}
+
 
 def teardrop(d: float, length: float, angle: float) -> Part:
     """A horizontal teardrop hole along Y, centered on the origin: a circle with a pointed roof

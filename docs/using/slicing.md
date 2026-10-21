@@ -60,7 +60,9 @@ Most parts print with your usual profile. What to check:
 - **Elephant's foot.** Keep the slicer's **Elephant foot compensation** on (OrcaSlicer:
   Precision; PrusaSlicer: Print settings → Advanced). The CAD stays at nominal size; the bed
   edges get a chamfer rather than a fillet so they print cleanly.
-- **Supports.** `check` (the overhang check) and `suggest_orientation` say what needs support.
+- **Supports.** `check` (the overhang check) and `suggest_orientation` say what needs support,
+  unless the part declares otherwise ([print intent](../scripts/convention.md#print-intent): a
+  calibration coupon prints without supports on purpose).
   Most parts here need none: turn supports off, or set them to **On build plate only**
   (OrcaSlicer) / **Supports on build plate only** (PrusaSlicer), so nothing grows inside
   holes and pockets. Where the report or print sheet names supported faces, enable supports;
@@ -96,11 +98,25 @@ It lists, from the part as built:
 - per piece: size, volume, filament (simple estimate, roughly ±20 %) and print time (rough);
 - the orientation, the faces that need supports (and small overhangs right at the bed), bridges
   longer than `max_bridge`, tip-over risk with brim advice, and holes lying on their side;
-- the material and printer it was designed for, walls and infill for its style, screw holes that
-  want more walls, the script's `Wall` checks, the fits and hole compensation applied (and the
-  reminder to leave the slicer's hole compensation off);
+- the material and printer it was designed for, the supports, walls and infill (and brim) to
+  use, screw holes that want more walls, the script's `Wall` checks, the fits and hole
+  compensation applied (and the reminder to leave the slicer's hole compensation off);
 - the pieces and `PRINT_NOTES` (a string or list in `Dims`, see
   [the part script](../scripts/convention.md#for-the-print-sheet)).
+
+**Facts and recommendations.** The geometry is always reported as found: the faces that would
+need supports, the bridges, the tip-over risk. Each recommendation (supports, walls, infill,
+brim, orientation) says where it comes from, in this order:
+
+| Label | Source |
+| --- | --- |
+| **set by the part** | the script's [`PRINT`](../scripts/convention.md#print-intent), with its `why` |
+| **your settings** | `supports`, `walls`, `infill` in the workspace `b123d-print.toml`, else your user config ([Settings](settings.md#keys)) |
+| **suggested from the geometry/style** | the overhang rule and the part's style (structural: 4-6 walls), else the slicer defaults (2 walls, 15 %) |
+
+So the hole coupon's sheet lists the five hole roofs that would need supports, then
+**Supports: none, set by the part**: it measures holes printed without supports. Walls and
+infill from the part or your settings also feed the filament and time estimates.
 
 It uses the cheap estimates from [`design_metrics`](design-review.md) and the tip-over check,
 not the full check run: run `check` for the verdict. The numbers are the same rough estimates;

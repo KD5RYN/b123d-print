@@ -1,0 +1,24 @@
+# When an issue closes, drop the status labels that only mean something while it is open
+# ("in progress", "blocked"); GitHub keeps labels on closed issues otherwise.
+name: Issue status labels
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove "in progress" and "blocked"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          for label in "in progress" "blocked"; do
+            gh issue edit "$NUMBER" --repo "$REPO" --remove-label "$label" 2>/dev/null || true
+          done

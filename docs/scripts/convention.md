@@ -155,6 +155,44 @@ override them) or at module level:
 to put the pieces together, the glue, inserts to set, a brim. For example
 `PRINT_NOTES: tuple = ("Set the M3 inserts at 230 C before closing the lid.",)`.
 
+### Print intent
+
+The print sheet's advice is inferred from the geometry and the style; it cannot know what the
+part is for. A calibration coupon that tests holes printed **without** supports would be told to
+use them. `PRINT` states how the part must be printed:
+
+```python
+PRINT = {
+    "supports": "none",
+    "orientation": "locked",
+    "why": "a calibration coupon: it measures holes printed without supports",
+}
+```
+
+| Key | Takes | Effect |
+| --- | --- | --- |
+| `supports` | `"none"`, `"auto"`, `"build_plate_only"`, `"tree"` | the print sheet's supports advice; `"none"` also makes the overhang check report overhangs and long bridges as accepted |
+| `walls` | an int | the walls (perimeters) the sheet recommends and the estimates use |
+| `infill` | a percent, 0-100 | the infill the sheet recommends and the estimates use |
+| `infill_pattern` | a string, e.g. `"gyroid"` | named next to the infill |
+| `brim` | `True` / `False`, or a width in mm | the sheet's brim advice (and its tip-over line) |
+| `orientation` | `"locked"` | don't re-orient: the sheet says so and `suggest_orientation` ranks for information only |
+| `why` | free text | **required** whenever anything else is set; shown next to every setting it overrides |
+
+- An unknown key or a bad value is an error that lists the valid keys (a typo such as
+  `suports` never passes silently); `check` reports it as a build failure.
+- **It overrides the recommendation, never the facts.** The sheet still says "5 face(s), ~100 mm²
+  would need supports by the geometry", then **Supports: none, set by the part**: the why.
+- **A declared intent never turns a FAIL into a pass.** `supports: "none"` changes the overhang
+  and bridge warnings only (see [accepted findings](../using/checks.md#accepted-findings)).
+- Put it at module level, or in `Dims` so a variant can override it (the `Dims` value replaces the
+  module's). In a frozen `Dims` keep it out of the hash, so `functools.cache` on piece functions
+  still works: `PRINT: dict | None = field(default=None, hash=False, compare=False)`, then
+  `VARIANTS = {"": {}, "tall": dict(PRINT={"supports": "tree", "why": "..."})}`.
+- Your own defaults for `supports`, `walls` and `infill` go in the [settings](../using/settings.md#keys);
+  a part's `PRINT` wins over them. The calibration coupons in the examples declare
+  `supports: "none"`.
+
 ## Declared hardware
 
 Declare bought parts explicitly; a hole or a mesh cannot identify screw length, head style,
