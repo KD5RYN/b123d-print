@@ -58,7 +58,7 @@ Qwen Code (~/.qwen/settings.json or the project's .qwen/settings.json):
     "headers": {"Authorization": "Bearer <token>"}, "timeout": 300000}}}
 
 pi (pi coding agent; token from an environment variable, export B123D_TOKEN=<token>):
-  pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; read the b123d-print guide first"
+  pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; call read_guide first"
   then set "timeout": 300 on it in ~/.pi/agent/mcp.json (the default is 60 s)
 
 Grok Build (xAI grok CLI):

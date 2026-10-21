@@ -427,7 +427,7 @@ shared server over HTTP, with the Ollama model `gemma4:31b-cloud`. The easiest w
 command, with the token in an environment variable:
 
 ```bash
-pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; read the b123d-print guide first"
+pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; call read_guide first"
 ```
 
 That writes this entry; add `"timeout"`:
@@ -438,7 +438,7 @@ That writes this entry; add `"timeout"`:
     "b123d-print": {
       "url": "https://cad.example.com/mcp",
       "headers": {"Authorization": "Bearer ${B123D_TOKEN}"},
-      "description": "Design 3D-printable parts; read the b123d-print guide first",
+      "description": "Design 3D-printable parts; call read_guide first",
       "timeout": 300
     }
   }

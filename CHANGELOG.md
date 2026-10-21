@@ -1,14 +1,7 @@
 # Changelog
 
-## 0.3.9 — unreleased
+## 0.3.9 — 2026-10-21
 
-- **OpenCode**, **Qwen Code** and **pi** are documented, tested clients ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#opencode)):
-  OpenCode's own config format (`"mcp"`, `"type": "remote"`) Qwen Code's (`httpUrl`) and pi's (`pi mcp add`, a
-  `description` for the system prompt, a longer `timeout`), all tested over HTTP with the Ollama model `gemma4:31b-cloud`. The client table also marks Claude Desktop, Claude Code, Antigravity,
-  Codex and Grok Build as tested, and the Codex snippets raise its 60 s tool timeout.
-- `token add` prints ready-to-paste config for each tested client: Claude Code, OpenCode, Qwen Code, pi,
-  Antigravity, Codex (token from an environment variable) and Grok Build, besides the generic
-  JSON.
 - **The workflow rules reach every client** (#110): non-Claude clients (OpenCode, Qwen Code,
   Grok Build, Antigravity with Gemini) passed neither the `b123d-print://guide` resource nor the
   server instructions to the model, so it modeled on guessed dimensions and left exports on the
@@ -17,7 +10,15 @@
   (confirm dimensions and wait, named `Dims` in mm, verify, bring the files home); the first 512
   characters of the server instructions (all Codex keeps) state those rules and "call read_guide"
   on their own; `new_part`, `write_part` and `export` descriptions name the rules they need
-  ([docs](https://kd5ryn.github.io/b123d-print/using/tools/)).
+  ([docs](https://kd5ryn.github.io/b123d-print/using/tools/)). Measured with `gemma4:31b-cloud` on the
+  new `ask_missing_dims` eval task (below): 0 of 8 runs asked first before, 7 of 8 after.
+- **OpenCode**, **Qwen Code** and **pi** are documented, tested clients ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#opencode)):
+  OpenCode's own config format (`"mcp"`, `"type": "remote"`), Qwen Code's (`httpUrl`) and pi's (`pi mcp add`, a
+  `description` for the system prompt, a longer `timeout`; its `description` now says "call read_guide first"), all tested over HTTP with the Ollama model `gemma4:31b-cloud`. The client table also marks Claude Desktop, Claude Code, Antigravity,
+  Codex and Grok Build as tested, and the Codex snippets raise its 60 s tool timeout.
+- `token add` prints ready-to-paste config for each tested client: Claude Code, OpenCode, Qwen Code, pi,
+  Antigravity, Codex (token from an environment variable) and Grok Build, besides the generic
+  JSON.
 - Eval: dialog tasks score an agent's first turn instead of a script; the first one,
   `ask_missing_dims`, leaves the sizes out and passes only when the agent lists what it has and
   needs, asks, and writes nothing. A new `ollama` agent runs any OpenAI-compatible endpoint (a
