@@ -62,6 +62,7 @@ nav:
       - MCP tools and prompts: using/tools.md
       - Output formats: using/formats.md
       - From part to print: using/slicing.md
+      - What to save: using/what-to-save.md
       - Settings: using/settings.md
       - Hole compensation: using/hole-compensation.md
       - Printer profiles: using/printer-profiles.md

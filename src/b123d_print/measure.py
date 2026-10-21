@@ -405,10 +405,11 @@ def run(pc, query: dict, settings, out_dir=None, tag: str = "part", size: str = 
     if query.get("image") and out_dir is not None:
         from pathlib import Path
 
+        from . import outdir
         from .templates import highlight
 
         small = "_small" if size == "small" else ""
         name = f"{tag}_measure_{kind}{small}.png"
-        res["image"] = str(highlight(base, [s for s in hl if isinstance(s, (Shape, Face))], Path(out_dir) / name,
+        res["image"] = str(highlight(base, [s for s in hl if isinstance(s, (Shape, Face))], outdir.path(out_dir, name),
                                      f"{tag}: {res['summary'][:90]}", size=size))
     return res

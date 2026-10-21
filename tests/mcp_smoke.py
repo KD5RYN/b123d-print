@@ -138,11 +138,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     res = await c.call_tool("check", {"name": "box", "variant": "thin"})
     expect(text(res).startswith("FAILED") and "[FAIL] wall" in text(res), "check catches the thin wall in the 'thin' variant")
     res = await c.call_tool("export", {"name": "box"})
-    expect("box.stl" in text(res) and on_disk("parts/box/out/box_thin.3mf"), "export writes STEP/STL/3MF/PNG for each variant")
-    expect("3D view" in text(res) and on_disk("parts/box/out/box_view.glb") and on_disk("parts/box/out/box_thin_view.glb"),
+    expect("box.stl" in text(res) and on_disk("parts/box/out/print/box_thin.3mf") and on_disk("parts/box/out/README.md"), "export writes STEP/STL/3MF/PNG for each variant")
+    expect("3D view" in text(res) and on_disk("parts/box/out/cad/box_view.glb") and on_disk("parts/box/out/cad/box_thin_view.glb"),
            "export writes a 3D view (GLB) for each variant and says so")
     if mode == "stdio" and pw is not None:
-        page = pw / "parts/box/out/box_view.html"
+        page = pw / "parts/box/out/docs/box_view.html"
         html = page.read_text(encoding="utf-8") if page.is_file() else ""
         # by name: on Windows the workspace may be an 8.3 short path here and a long one in the result
         expect(page.name in text(res) and str(page.parent.name) in text(res), "stdio: export names the view HTML it wrote")
@@ -153,8 +153,10 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
         shutil.rmtree(pw / "parts/box/out")
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "view": "none"})
     files = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]  # over HTTP a link follows
-    shown = None if pw is None else [p.name for p in (pw / "parts/box/out").iterdir() if not p.name.startswith(".")]  # not .cache/
-    expect(files == ["parts/box/out/box.3mf"] and (pw is None or shown == ["box.3mf"]), "export honors formats='3mf'")
+    shown = None if pw is None else sorted(p.relative_to(pw / "parts/box/out").as_posix() for p in (pw / "parts/box/out").rglob("*")
+                                           if p.is_file() and ".cache" not in p.parts)
+    expect(files == ["parts/box/out/print/box.3mf"] and (pw is None or shown == ["README.md", "print/box.3mf"]),
+           "export honors formats='3mf', into out/print/ with the README index")
     t = text(res)
     nxt = t[t.find("NEXT STEP"):] if "NEXT STEP" in t else ""
     expect(bool(nxt) == (mode != "stdio") and (not nxt or ("download_part('box')" in nxt
@@ -163,8 +165,8 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
            + ("" if mode == "stdio" else f"\n{nxt[:400]}"))
     res = await c.call_tool("export", {"name": "box", "variant": "standard", "formats": "3mf", "embed": True})
     emb = blobs(res)
-    got = next((v for k, v in emb.items() if k.endswith("/parts/box/out/box.3mf")), None)
-    expect(got and (pw is None or got == (pw / "parts/box/out/box.3mf").read_bytes()),
+    got = next((v for k, v in emb.items() if k.endswith("/parts/box/out/print/box.3mf")), None)
+    expect(got and (pw is None or got == (pw / "parts/box/out/print/box.3mf").read_bytes()),
            f"export embed=True puts the file into the result ({len(emb)} embedded)")
     res = await c.call_tool("export", {"name": "box", "formats": "obj"})
     expect(res.is_error and "unknown format" in text(res), "unknown format is refused with the choices")
@@ -175,14 +177,14 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     await handoff_checks(c, pw, expect, mode)
 
     # compare parses the files in the sandbox, like a build
-    res = await c.call_tool("compare", {"reference": "parts/box/out/box.3mf", "candidate": "parts/box/out/box.3mf", "image": True})
-    ok_cmp = "PASS" in text(res) and bool(images(res))
+    res = await c.call_tool("compare", {"reference": "parts/box/out/print/box.3mf", "candidate": "parts/box/out/print/box.3mf", "image": True})
+    ok_cmp = "PASS" in text(res) and bool(images(res)) and (pw is None or (pw / "parts/box/out/images/box_vs_box.png").is_file())
     expect(ok_cmp, "compare: a part matches itself, with a deviation image" + ("" if ok_cmp else f"\n{text(res)[:3000]}"))
-    res = await c.call_tool("compare", {"reference": "../outside.stl", "candidate": "parts/box/out/box.3mf"})
+    res = await c.call_tool("compare", {"reference": "../outside.stl", "candidate": "parts/box/out/print/box.3mf"})
     expect(res.is_error and "outside the workspace" in text(res), "compare refuses files outside the workspace")
     if pw is not None:
         (pw / "junk.stl").write_bytes(b"\x00" * 80 + b"\xff\xff\xff\x7f" + b"garbage")
-        res = await c.call_tool("compare", {"reference": "junk.stl", "candidate": "parts/box/out/box.3mf"})
+        res = await c.call_tool("compare", {"reference": "junk.stl", "candidate": "parts/box/out/print/box.3mf"})
         expect("ERROR" in text(res), "compare reports a corrupt file as an error (parsed in the sandbox)")
 
     # sandbox: a script that tries to reach the network / escape gets a clear error
@@ -277,8 +279,9 @@ async def handoff_checks(c, pw, expect, mode: str) -> None:
         zf.extractall(home)
     script = (home / "parts/box/box.py").read_bytes() if (home / "parts/box/box.py").exists() else b""
     expect(script.decode() == text(await c.call_tool("read_part", {"name": "box"})), "unzipped: parts/box/box.py is the script")
-    expect((home / "parts/box/out/box.3mf").is_file() and any(n.endswith(".png") for n in names),
-           f"unzipped: parts/box/out/ has the exports ({len(names)} files)")
+    expect((home / "parts/box/out/print/box.3mf").is_file() and any(n.startswith("parts/box/out/images/") for n in names)
+           and (home / "parts/box/out/README.md").is_file(),
+           f"unzipped: parts/box/out/ has the exports in their folders ({len(names)} files)")
     if pw is not None:
         same = all((home / n).read_bytes() == (pw / n).read_bytes() for n in names)
         expect(same, "every unzipped file is byte-identical to the server's")
@@ -311,18 +314,18 @@ async def template_checks(c, pw, expect, mode: str = "stdio") -> None:
     res = await c.call_tool("make_template", {"name": "box", "kind": "slice", "plane": "XY", "at": 1.0, "formats": "3mf,png"})
     t = text(res)
     ok = "box_template_xy1" in t and "Checks: PASSED" in t and "x 1.20 mm" in t and images(res)
-    expect(ok and on_disk("parts/box/out/box_template_xy1.3mf") and on_disk("parts/box/out/box_template_xy1_where.png"),
+    expect(ok and on_disk("parts/box/out/print/templates/box_template_xy1.3mf") and on_disk("parts/box/out/images/box_template_xy1_where.png"),
            "make_template slice: a 1.2 mm template, checked, files and the where-picture" + ("" if ok else f"\n{t[:2000]}"))
     expect(("NEXT STEP" in t) == (mode != "stdio"), "make_template: the NEXT STEP to bring the files home, only when remote")
-    m = re.search(r"parts/box/out/box_template_xy1\.3mf\s+(https?://\S+)", t)
+    m = re.search(r"parts/box/out/print/templates/box_template_xy1\.3mf\s+(https?://\S+)", t)
     if m:  # over HTTP: the template's own download link works without a token
         async with create_mcp_http_client() as h:
             r = await h.get(m.group(1))
         expect(r.status_code == 200 and len(r.content) > 500 and (pw is None or
-               r.content == (pw / "parts/box/out/box_template_xy1.3mf").read_bytes()),
+               r.content == (pw / "parts/box/out/print/templates/box_template_xy1.3mf").read_bytes()),
                f"the template's download link serves the 3MF ({r.status_code})")
     res = await c.call_tool("make_template", {"name": "box", "kind": "face", "face": "bottom", "formats": "stl", "label": False})
-    expect("box_template_face_bottom" in text(res) and "Label: none" in text(res) and on_disk("parts/box/out/box_template_face_bottom.stl"),
+    expect("box_template_face_bottom" in text(res) and "Label: none" in text(res) and on_disk("parts/box/out/print/templates/box_template_face_bottom.stl"),
            "make_template face: the bottom face as a plate, no label")
     res = await c.call_tool("make_template", {"name": "box", "kind": "crop", "center": "10,10,4", "size": [12, 12, 20],
                                               "formats": "3mf", "inline": False})
@@ -418,7 +421,7 @@ async def trace_recipe_checks(c, pw, expect) -> None:
     t = text(res)
     ok = not res.is_error and "traced 80" in t and "1 hole(s)" in t and "300 dpi" in t and images(res) and "OUTLINE = [" in t
     expect(ok, "trace_outline: 80 x 50 mm with one hole at the file's 300 dpi, overlay and snippet" + ("" if ok else f"\n{t[:1500]}"))
-    expect(on_disk_ok(pw, "parts/gasket/out/scan_outline.json") and on_disk_ok(pw, "parts/gasket/out/scan_trace.png"),
+    expect(on_disk_ok(pw, "parts/gasket/out/docs/scan_outline.json") and on_disk_ok(pw, "parts/gasket/out/images/scan_trace.png"),
            "trace_outline writes the outline JSON and the overlay")
     res = await c.call_tool("trace_outline", {"part": "gasket", "file": "../../../etc/passwd"})
     expect(res.is_error, "trace_outline refuses a path out of the part's ref/ folder")
@@ -501,7 +504,7 @@ async def multipart_checks(c, expect) -> None:
     expect(res.is_error and "size must be" in text(res), "a bad size is refused")
     res = await c.call_tool("export", {"name": "two", "parts": "lid", "formats": "3mf"})
     lines = [x.split()[0] for x in text(res).splitlines() if x.strip().startswith("parts/")]
-    expect(lines == ["parts/two/out/two_lid.3mf"] and "Exported 1 file(s)" in text(res),
+    expect(lines == ["parts/two/out/print/two_lid.3mf"] and "Exported 1 file(s)" in text(res),
            f"export parts='lid' formats='3mf': one file, counted ({lines})")
     expect("default formats" not in text(res), "no formats note when formats= is given")
     res = await c.call_tool("export", {"name": "two"})
@@ -557,7 +560,7 @@ async def embedded_flow(c, pw, expect) -> None:
         zf.extractall(project)
     script = (project / "parts/box/box.py").read_text(encoding="utf-8") if (project / "parts/box/box.py").exists() else ""
     expect(script == text(await c.call_tool("read_part", {"name": "box"})), "embedded zip unzipped: parts/box/box.py is the script")
-    expect((project / "parts/box/out/box.3mf").is_file() and (project / "parts/box/out/box.png").is_file(),
+    expect((project / "parts/box/out/print/box.3mf").is_file() and (project / "parts/box/out/images/box.png").is_file(),
            f"embedded zip unzipped: parts/box/out/ has the 3MF and the preview ({len(names)} files)")
     if pw is not None:
         expect(all((project / n).read_bytes() == (pw / n).read_bytes() for n in names),
@@ -615,6 +618,7 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
             "other file, same signature": f"{head}/files/{ws_}/{tok}/{path.replace('.3mf', '.stl')}",
             "workspace A's link pointed at workspace B": f"{head}/files/{b}/{tok}/{path.replace('only_in_a', 'only_in_b')}",
             "traversal": f"{head}/files/{ws_}/{tok}/parts/only_in_a/out/%2e%2e/%2e%2e/%2e%2e/b123d-print.toml",
+            "traversal from a folder": f"{head}/files/{ws_}/{tok}/parts/only_in_a/out/print/%2e%2e/%2e%2e/only_in_a.py",
             "the part script": f"{head}/files/{ws_}/{tok}/parts/only_in_a/only_in_a.py",
         }
         for what, u in bad.items():
@@ -643,7 +647,7 @@ async def link_checks(ca, cb, a: str, b: str, token: str, wsroot: Path | None, e
         expect(True, "workspace B cannot read workspace A's file as a resource")
     res = await ca.call_tool("export", {"name": "only_in_a", "variant": "standard", "formats": "3mf,png", "embed": True})
     emb = blobs(res)
-    want = (wsroot / "workspaces" / a / "parts/only_in_a/out/only_in_a.3mf").read_bytes() if wsroot else None
+    want = (wsroot / "workspaces" / a / "parts/only_in_a/out/print/only_in_a.3mf").read_bytes() if wsroot else None
     got = next((v for k, v in emb.items() if k.endswith(".3mf")), None)
     expect(got and (want is None or got == want), f"embed=True puts the files into the result ({len(emb)} embedded)")
     res = await ca.call_tool("render_preview", {"name": "only_in_a"})
@@ -891,7 +895,7 @@ async def ssh_checks(c, ssh_cmd: list[str], dest: str, pw: Path | None, expect) 
                        capture_output=True, text=True, timeout=120)
     names = sorted(p.relative_to(got).as_posix() for p in got.rglob("*") if p.is_file())
     same = pw is None or all((got / n).read_bytes() == (pw / n).read_bytes() for n in names)
-    base = ["parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"]
+    base = ["parts/box/box.py", "parts/box/out/print/box.3mf", "parts/box/out/print/box.stl"]
     if pw is not None:  # everything the server has for that variant and those formats (templates included)
         from b123d_print.handoff import part_files
 

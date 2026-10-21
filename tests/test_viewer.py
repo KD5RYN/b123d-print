@@ -174,9 +174,9 @@ def test_view_link_from_export_text(monkeypatch, tmp_path):
     monkeypatch.setitem(ms.STATE, "transport", "http")
     monkeypatch.setitem(ms.STATE, "public_url", "https://cad.example.com/pre")
     monkeypatch.setitem(ms.STATE, "link_secret", SECRET)
-    (tmp_path / "parts/p/out").mkdir(parents=True)
-    (tmp_path / "parts/p/out/p_view.glb").write_bytes(GLB)
-    lines = ms._view_lines("p", [{"variant": "standard", "view": str(tmp_path / "parts/p/out/p_view.glb")},
+    (tmp_path / "parts/p/out/cad").mkdir(parents=True)
+    (tmp_path / "parts/p/out/cad/p_view.glb").write_bytes(GLB)
+    lines = ms._view_lines("p", [{"variant": "standard", "view": str(tmp_path / "parts/p/out/cad/p_view.glb")},
                                  {"variant": "big", "view_error": "this script has no assembly(d)"}])
     text = "\n".join(lines)
     m = re.search(r"\[standard\] (https://cad\.example\.com/pre/view/_/(\d+)\.[\w-]+/p/p_view)$", text, re.M)
@@ -191,8 +191,9 @@ def test_export_trusts_no_view_path_from_the_build(monkeypatch, tmp_path):
     from b123d_print import mcp_server as ms
 
     init_workspace(tmp_path)
-    (tmp_path / "parts/p/out").mkdir(parents=True)
-    good = tmp_path / "parts/p/out/p_view.glb"
+    (tmp_path / "parts/p/out/cad").mkdir(parents=True)
+    (tmp_path / "parts/p/out/p_view.glb").write_bytes(GLB)  # the flat layout: not what export writes now
+    good = tmp_path / "parts/p/out/cad/p_view.glb"
     viewer.write_glb([(__import__("build123d").Box(5, 5, 5), None, "p")], good)
     outside = tmp_path.parent / f"{tmp_path.name}-secret_view.glb"
     outside.write_bytes(GLB)
@@ -201,10 +202,11 @@ def test_export_trusts_no_view_path_from_the_build(monkeypatch, tmp_path):
     monkeypatch.setitem(ms.STATE, "root", tmp_path)
     monkeypatch.setitem(ms.STATE, "transport", "stdio")
     forged = [str(outside), str(tmp_path / "parts/q/out/q_view.glb"), str(tmp_path / "b123d-print.toml"),
-              str(tmp_path / "parts/p/out/../../../b123d-print.toml")]
+              str(tmp_path / "parts/p/out/../../../b123d-print.toml"), str(tmp_path / "parts/p/out/p_view.glb"),
+              str(tmp_path / "parts/p/out/cad/../../../q/out/q_view.glb")]
     lines = ms._view_lines("p", [{"variant": f"v{i}", "view": f} for i, f in enumerate(forged)]
                            + [{"variant": "standard", "view": str(good)}])
-    assert len(lines) == 2 and lines[1].endswith("p_view.html") and (tmp_path / "parts/p/out/p_view.html").is_file()
+    assert len(lines) == 2 and lines[1].endswith("p_view.html") and (tmp_path / "parts/p/out/docs/p_view.html").is_file()
     assert not outside.with_suffix(".html").exists() and not (tmp_path / "parts/q/out/q_view.html").exists()
     outside.unlink()
 

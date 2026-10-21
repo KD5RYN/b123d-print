@@ -234,7 +234,8 @@ the part in the same layout a local install writes into the project folder:
 
 ```text
 parts/bracket/bracket.py      the script
-parts/bracket/out/...         exports, renders, section views (all variants and formats)
+parts/bracket/out/...         exports, renders, section views (all variants and formats),
+                              sorted into print/, cad/, images/ and docs/, with a README.md
 parts/bracket/ref/...         reference models (remixes)
 ```
 
@@ -243,13 +244,15 @@ curl -fLo bracket.zip '<link>'
 unzip -o bracket.zip          # in the project folder; on Windows: tar -xf bracket.zip
 ```
 
-`variant=` and `formats=` narrow the `out/` files (the script and `ref/` always come along);
+`variant=` and `formats=` narrow the `out/` files (the script, `ref/` and `out/README.md` always
+come along);
 the zip is made when the link is fetched, so it holds the files as they are then. Like the other
 links it needs no token, opens only that part (with that filter) in that workspace, and expires.
 The server's instructions, `AGENTS.md` and the prompts make this the required last step of
 remote work: `download_part`, unzip, check the files are there, then report. The results of
 `export` and `make_template` end with a **NEXT STEP** that says so, with the exact call. Results
-show workspace-relative paths (`parts/bracket/out/bracket.3mf`), never the server's own folders.
+show workspace-relative paths (`parts/bracket/out/print/bracket.3mf`), never the server's own folders.
+What to keep of all this, and why the downloaded copy is your record: [What to save](../using/what-to-save.md).
 
 **No network in the agent's shell?** Some clients run shell commands in a sandbox without
 network ([Antigravity's `agy`](mcp-clients.md#antigravity-agy-cli-and-ide), for one), so `curl`
@@ -267,7 +270,7 @@ Single files, too:
   `B123D_PRINT_LINK_SECRET`, or with only `B123D_PRINT_TOKEN` a key derived from it: they survive
   a restart, and revoking a token does not cancel links it already got (they expire on their own).
 - **Resource links.** The same results carry MCP resource links
-  (`b123d-print://files/<workspace>/parts/<part>/out/<file>`) that a client can read over the MCP
+  (`b123d-print://files/<workspace>/parts/<part>/out/<folder>/<file>`) that a client can read over the MCP
   connection itself. A session can read only its own workspace's files.
 - **Images.** `render_preview`, `section` and `compare` still return their image inline, so the
   model sees the part. `size="small"` makes it ~800 px wide; `inline=false` returns only the
@@ -294,7 +297,7 @@ each piece, the bed at Z = 0, the size in mm and a section plane
 ([what the viewer shows](../using/formats.md#3d-view-in-the-browser)). Like a download link it
 needs no token, is signed for one model of one part in one workspace, and expires with the others
 (`--link-ttl`; an expired one answers 410). The page loads the model,
-`parts/<part>/out/<part>_view.glb`, through the same signed link (`.../bracket_view.glb`), and
+`parts/<part>/out/cad/<part>_view.glb`, through the same signed link (`.../bracket_view.glb`), and
 its scripts from `/view-assets/`, a fixed list of files from the package that needs no token
 (they hold nothing of anyone's). The viewer library, three.js, ships inside the package: the
 browser loads nothing from the internet, so it works on a lab network without internet access.

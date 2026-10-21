@@ -83,10 +83,16 @@ def task_for(item: Item, part: str, images: list[Path], ref_size) -> Task:
 
 
 def find_export(out_dir: Path, part: str) -> list[Path]:
-    for name in (f"{part}.stl", f"{part}.3mf"):
-        if (out_dir / name).is_file():
-            return [out_dir / name]
-    return sorted(out_dir.glob("*.stl")) or sorted(out_dir.glob("*.3mf")) if out_dir.is_dir() else []
+    """The part's slicer files: in out/print/ (0.3.11 and later) or directly in out/ (before)."""
+    for d in (out_dir / "print", out_dir):
+        for name in (f"{part}.stl", f"{part}.3mf"):
+            if (d / name).is_file():
+                return [d / name]
+    for d in (out_dir / "print", out_dir):
+        found = sorted(d.glob("*.stl")) or sorted(d.glob("*.3mf")) if d.is_dir() else []
+        if found:
+            return found
+    return []
 
 
 async def run_item(item: Item, agent_name: str, endpoint: Endpoint, out: Path, limits: Limits,

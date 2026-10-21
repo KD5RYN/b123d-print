@@ -78,7 +78,7 @@ b123d-print with it yet: tell us how it went in an
 **Images matter.** The workflow has the model look at its own renders and sections
 (`render_preview`, `section`). If your client doesn't pass tool-result images to the model, the
 assistant works blind: ask it to render the part and describe what it sees, and check the PNGs
-in `parts/<name>/out/` yourself. "Not documented" means the client's MCP docs don't say.
+in `parts/<name>/out/images/` yourself. "Not documented" means the client's MCP docs don't say.
 **Prompts** (`design_review`, `new_part_workflow`, ...) are shortcuts; every tool works without them.
 
 **The rules.** The workflow rules (confirm dimensions before modeling, verify before reporting,

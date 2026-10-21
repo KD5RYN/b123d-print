@@ -132,33 +132,33 @@ def test_export_bom_files_variants_and_handoff(tmp_path):
     project.export_variant(mod, script, "wide", formats=("bom", "bom_csv", "print"), only="pin")
     project.export_variant(mod, script, "", formats=("bom", "bom_csv"), only="pin")
     out = script.parent / "out"
-    md = squash((out / "duo_wide_bom.md").read_text(encoding="utf-8"))
+    md = squash((out / "docs/duo_wide_bom.md").read_text(encoding="utf-8"))
     assert md.startswith("# Hardware for duo (wide)\n") and "Variant: wide · exported 20" in md
     assert "| 6 | Lid screw | M3 x 10 mm ISO 4762 stainless A2 | lid corners | <https://example.invalid/spec> | confirmed" in md
     assert "| 2 | Insert" in md and "**check before ordering**" in md  # W=60: 6 screws, independent of only=
-    assert "| 4 | Lid screw" in squash((out / "duo_bom.md").read_text(encoding="utf-8"))
-    raw = (out / "duo_wide_bom.csv").read_bytes()
+    assert "| 4 | Lid screw" in squash((out / "docs/duo_bom.md").read_text(encoding="utf-8"))
+    raw = (out / "docs/duo_wide_bom.csv").read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf") and b"\r\n" in raw and b"\r\r\n" not in raw
     table = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline="")))
     assert table[0] == list(hardware.BOM_COLUMNS) and ["6", "Lid screw"] == table[2][:2]
-    sheet = (out / "duo_wide_print.md").read_text(encoding="utf-8")
+    sheet = (out / "print/duo_wide_print.md").read_text(encoding="utf-8")
     assert "Full list to order from: the `bom`" in sheet and "hardware_list" in sheet
-    (out / "unrelated.csv").write_text("x", encoding="utf-8")
+    (out / "docs/unrelated.csv").write_text("x", encoding="utf-8")
     files = dict(handoff.part_files(tmp_path, "parts", "duo", variant="wide", formats=["bom", "bom_csv"]))
-    assert set(files) == {"duo.py", "out/duo_wide_bom.md", "out/duo_wide_bom.csv"}
+    assert set(files) == {"duo.py", "out/README.md", "out/docs/duo_wide_bom.md", "out/docs/duo_wide_bom.csv"}
     files = dict(handoff.part_files(tmp_path, "parts", "duo", formats=["print"]))
-    assert set(files) == {"duo.py", "out/duo_wide_print.md"}  # the print filter no longer brings the BOM
+    assert set(files) == {"duo.py", "out/README.md", "out/print/duo_wide_print.md"}  # the print filter no longer brings the BOM
     files = dict(handoff.part_files(tmp_path, "parts", "duo", formats=["bom"]))
-    assert set(files) == {"duo.py", "out/duo_bom.md", "out/duo_wide_bom.md"}
+    assert set(files) == {"duo.py", "out/README.md", "out/docs/duo_bom.md", "out/docs/duo_wide_bom.md"}
     assert {p.name for p in ssh.out_files(tmp_path, "duo", ["bom_csv"])} == {"duo_bom.csv", "duo_wide_bom.csv"}
 
 
 def test_export_without_hook(tmp_path):
     script = _part(tmp_path)
     project.export_variant(project.load(script), script, "", formats=("bom", "bom_csv"), only="pin")
-    md = (script.parent / "out/duo_bom.md").read_text(encoding="utf-8")
+    md = (script.parent / "out/docs/duo_bom.md").read_text(encoding="utf-8")
     assert "The script declares no hardware: it has no `hardware(d)`." in md and "| Qty" not in md
-    assert (script.parent / "out/duo_bom.csv").read_bytes() == "\ufeffQty,Item,Specification,Used for,Source/link,Status\r\n".encode()
+    assert (script.parent / "out/docs/duo_bom.csv").read_bytes() == "\ufeffQty,Item,Specification,Used for,Source/link,Status\r\n".encode()
 
 
 def test_cli_bom(tmp_path, capsys):

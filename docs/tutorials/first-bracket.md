@@ -113,11 +113,16 @@ printing the whole bracket ([fit-test templates](../using/templates.md)).
 Then it exports the bracket. In your project folder, under `parts/shelf_bracket/out/`, you now
 have:
 
-- `shelf_bracket.3mf`: open this in your slicer
-- `shelf_bracket.step`: for other CAD programs
-- `shelf_bracket_print.md`: a print sheet with the settings to use
-- `shelf_bracket_view.html`: open it in a browser to turn the part around
-- the test plate's files
+- `print/shelf_bracket.3mf`: open this in your slicer
+- `print/shelf_bracket_print.md`: a print sheet with the settings to use
+- `print/templates/`: the test plate, to print first
+- `cad/shelf_bracket.step`: for other CAD programs
+- `docs/shelf_bracket_view.html`: open it in a browser to turn the part around
+- `images/`: the pictures and section views
+- `README.md`: a short list of what is where
+
+All of `out/` can be made again from the script; what to back up is in
+[What to save](../using/what-to-save.md).
 
 !!! tip "Using a shared server?"
     If the server runs on another machine (your lab server, over HTTP or SSH), the files are made
@@ -133,7 +138,7 @@ have:
 
 ## 7. Slice and print
 
-Open `shelf_bracket.3mf` in Bambu Studio, OrcaSlicer or PrusaSlicer. It opens already lying the
+Open `out/print/shelf_bracket.3mf` in Bambu Studio, OrcaSlicer or PrusaSlicer. It opens already lying the
 right way: don't let the slicer auto-orient it. The print sheet says what settings this part
 needs: for a strong bracket, **5 walls and 20 % gyroid infill**. Print the test plate first,
 then the bracket. More in [From part to print](../using/slicing.md).

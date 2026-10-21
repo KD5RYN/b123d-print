@@ -83,9 +83,12 @@ No: the rules and checks are for FDM printing (overhangs, bridges, layer strengt
 The STEP file is a normal solid you can take elsewhere, but nothing here checks it for those.
 
 **Where do the files go?**
-Locally, into your workspace: `parts/<name>/<name>.py` (the script) and `parts/<name>/out/`
-(STEP, STL, 3MF, PNG and section views). On a remote server they live on the server until
-`download_part` brings them home ([Output formats](using/formats.md), [Which mode?](advanced/index.md)).
+Locally, into your workspace: `parts/<name>/<name>.py` (the script) and `parts/<name>/out/`,
+sorted into folders: `out/print/` (3MF, STL: for the slicer), `out/cad/` (STEP), `out/images/`
+(PNG previews and section views) and `out/docs/`; `out/README.md` says what is where. On a remote
+server they live on the server until `download_part` brings them home ([Output formats](using/formats.md#where-each-file-goes),
+[Which mode?](advanced/index.md)). Only the script, `ref/` and `b123d-print.toml` need keeping:
+[What to save](using/what-to-save.md).
 
 **The assistant says the part is done, but the files aren't in my project folder.**
 On a remote server it must still bring them home: a remote `export` ends with a NEXT STEP

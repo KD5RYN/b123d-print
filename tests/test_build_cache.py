@@ -364,7 +364,9 @@ def test_cli_build_only(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "trim b: 10.00 x 20.00 x 5.00 mm" in out and "trim a:" not in out
     assert "  b: 7 faces, " in out
-    assert sorted(f.name for f in (tmp_path / "parts" / "trim" / "out").iterdir()) == ["trim_b.stl"]
+    from b123d_print import outdir
+
+    assert [rel for rel, _ in outdir.files(tmp_path / "parts" / "trim" / "out")] == ["README.md", "print/trim_b.stl"]
     with pytest.raises(SystemExit, match="no part"):
         main(["--root", str(tmp_path), "build", "trim", "--only", "x"])
 

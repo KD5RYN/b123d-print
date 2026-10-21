@@ -8,10 +8,14 @@ sshd runs that command whatever the client asks for, and puts what it asked for 
 SSH_ORIGINAL_COMMAND. `ssh-serve` answers only:
 
     (nothing), mcp, b123d-print-mcp   the MCP server over stdio, in the key's workspace
-    pull <part> [--formats f]         a tar stream of that part's out/ files (read-only; what 0.3.0 clients ask for)
-    pull <part> --tree [--formats f] [--variant v]
+    pull <part> [--formats f]         a tar stream of that part's out/ files, by file name (read-only;
+                                      what 0.3.0 clients ask for)
+    pull <part> --tree [--nested] [--formats f] [--variant v]
                                       a tar of the whole part, relative to its folder: <part>.py,
-                                      out/..., ref/... (handoff.part_files; what `b123d-print pull` asks for)
+                                      out/..., ref/... (handoff.part_files; what `b123d-print pull` asks
+                                      for). --nested keeps out/'s folders (out/print/x.3mf, 0.3.11
+                                      clients); without it they are flattened to out/<file>, the only
+                                      layout 0.3.1-0.3.10 clients accept
     push <part> <file> [--overwrite]  store stdin as the reference file <parts_dir>/<part>/ref/<file>
                                       (STL/3MF/STEP only, size-capped; see refs.py)
     version                           version, workspace and sandbox, to check the setup
@@ -56,6 +60,7 @@ def _serve_parser() -> argparse.ArgumentParser:
     ap.add_argument("--formats")
     ap.add_argument("--variant")
     ap.add_argument("--tree", action="store_true")
+    ap.add_argument("--nested", action="store_true")
     return ap
 
 
@@ -85,7 +90,7 @@ def parse_request(original: str | None) -> tuple[str, dict]:
         try:
             a, extra = _serve_parser().parse_known_args(words[1:])
         except (argparse.ArgumentError, SystemExit):
-            raise Refused("usage: pull <part> [--tree] [--formats step,stl,3mf,png] [--variant v]") from None
+            raise Refused("usage: pull <part> [--tree [--nested]] [--formats step,stl,3mf,png] [--variant v]") from None
         if extra:
             raise Refused(f"pull: unexpected {' '.join(extra)!r}")
         if not PART_RE.match(a.part):
@@ -96,8 +101,10 @@ def parse_request(original: str | None) -> tuple[str, dict]:
             raise Refused(f"pull: {e}") from None
         if a.variant is not None and (not a.tree or not re.match(r"^[A-Za-z0-9_.-]{0,64}$", a.variant)):
             raise Refused(f"pull: bad --variant {a.variant!r}")
+        if a.nested and not a.tree:
+            raise Refused("pull: --nested goes with --tree")
         return "pull", {"part": a.part, "formats": fmts, "tree": a.tree, "variant": a.variant,
-                        "filtered": bool(a.formats)}
+                        "filtered": bool(a.formats), "nested": a.nested}
     if words[0] == "push":
         from .refs import RefError, check_name
 
@@ -119,20 +126,18 @@ def parse_request(original: str | None) -> tuple[str, dict]:
 
 
 def out_files(workspace: Path, part: str, formats=FORMATS) -> list[Path]:
-    """The regular files in <workspace>/<parts_dir>/<part>/out/ with a suffix of `formats` (no
-    symlinks, no hidden files, nothing below out/)."""
+    """The regular files in <workspace>/<parts_dir>/<part>/out/ and its folders (outdir.FOLDERS)
+    with a suffix of `formats` (no symlinks, no hidden files, no other folders)."""
     from .links import LinkError, servable
+    from .outdir import files
 
     parts_dir = load_settings(workspace).parts_dir
-    out = workspace / parts_dir / part / "out"
-    if not out.is_dir() or out.is_symlink():
-        return []
     found = []
-    for p in sorted(out.iterdir()):
+    for rel, p in files(workspace / parts_dir / part / "out"):
         if not out_file_wanted(p.name, formats):
             continue
         try:
-            found.append(servable(workspace, parts_dir, f"{parts_dir}/{part}/out/{p.name}"))
+            found.append(servable(workspace, parts_dir, f"{parts_dir}/{part}/out/{rel}"))
         except LinkError:
             continue
     return found
@@ -203,6 +208,8 @@ def serve(workspace: str, dest: str | None, timeout: float | None, original: str
         except (HandoffError, SyntaxError, OSError) as e:
             print(f"b123d-print: refused: pull: {e}", file=stderr)
             return 1
+        if not args.get("nested"):  # a 0.3.1-0.3.10 client: out/<file> only (file names are unique across the folders)
+            tree = [(f"out/{rel.rsplit('/', 1)[1]}" if rel.startswith("out/") else rel, p) for rel, p in tree]
         write_tar(tree, stdout)
         stdout.flush()
         return 0
@@ -233,15 +240,35 @@ def pull(part: str, dest: str, project: Path, formats: str | None = None, ssh: s
     """Run `ssh <dest> pull <part> --tree` and write the part into the project folder, in the same
     layout as a local install: <project>/<parts_dir>/<part>/<part>.py, out/..., ref/... (parts_dir
     from the project's b123d-print.toml, default parts). Raises RuntimeError on failure."""
-    from .handoff import safe_rel
-
     if not PART_RE.match(part):
         raise RuntimeError(f"bad part name {part!r}")
     if formats:
         parse_formats(formats)  # fail here, not on the server
-    remote = ["pull", part, "--tree"] + (["--formats", formats] if formats else []) + (
+    remote = ["pull", part, "--tree", "--nested"] + (["--formats", formats] if formats else []) + (
         ["--variant", variant] if variant is not None else [])
     out_dir = project / load_settings(project).parts_dir / part
+    try:
+        got = _pull(remote, dest, out_dir, ssh)
+    except RuntimeError as e:
+        if "unexpected '--nested'" not in str(e):
+            raise
+        remote.remove("--nested")  # a server older than 0.3.11: its out/ is flat anyway
+        got = _pull(remote, dest, out_dir, ssh)
+    from .outdir import tidy
+
+    tidy(out_dir / "out")  # an older flat copy here, or a flat server's files: into out/'s folders
+    return [p if p.exists() else _moved(p) for p in got]
+
+
+def _moved(p: Path) -> Path:
+    from .outdir import path
+
+    return path(p.parent, p.name, template="_template_" in p.name)
+
+
+def _pull(remote: list[str], dest: str, out_dir: Path, ssh: str) -> list[Path]:
+    from .handoff import safe_rel
+
     # ssh joins the remote words with spaces and the server splits them again: quote each
     cmd = split_command(ssh) + ["-T", dest, " ".join(shlex.quote(w) for w in remote)]
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -264,7 +291,7 @@ def pull(part: str, dest: str, project: Path, formats: str | None = None, ssh: s
         err = proc.stderr.read().decode(errors="replace").strip()
         proc.wait()
     if proc.returncode != 0 or not got:
-        if "unexpected '--tree'" in err or "usage: pull" in err:
+        if "unexpected '--tree" in err or "usage: pull" in err:
             err += "\n(the server runs b123d-print 0.3.0 or older: upgrade it for `pull` of a whole part)"
         raise RuntimeError(err or f"ssh exited with code {proc.returncode}" + (f" ({rest[:200]!r})" if rest else ""))
     return got

@@ -29,7 +29,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import handoff, jobqueue, links, sandbox, tokens, viewer
+from . import handoff, jobqueue, links, outdir, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 from .partfiles import find_parts, timing_lines
@@ -454,6 +454,8 @@ def list_parts() -> str:
                                                     "brings a part home"} if _remote() else {"workspace": str(_root())}),
             "parts_dir": s.parts_dir,
             "parts": parts,
+            "out": f"{s.parts_dir}/<name>/out/: print/ (3MF, STL, print sheet: for the slicer; templates in "
+                   "print/templates/), cad/ (STEP, GLB), images/, docs/ (BOM, view HTML), README.md",
             "examples": examples(),
             "settings": {"hole_comp": s.hole_comp, "hole_comp_h": s.hole_comp_h, "clearance": s.clearance,
                          "press_fit": s.press_fit, "free_fit": s.free_fit, "pip_clearance": s.pip_clearance,
@@ -947,7 +949,8 @@ async def suggest_orientation(name: str, variant: str | None = None, piece: str 
 @_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
                  embed: bool = False, fresh: bool = False, view: str = "print") -> list:
-    """Export printable parts to parts/<name>/out/. Default: every part, all variants. The
+    """Export printable parts to parts/<name>/out/, sorted: print/ (3MF, STL, print sheet: for the
+    slicer), cad/ (STEP, GLB), images/, docs/ (BOM, view HTML), README.md. Default: every part, all variants. The
     files must reach the user: on a remote server download_part brings them home.
     parts: comma-separated part names from build() to build and export only those; variant: one
     variant. Uses the pieces cached by an earlier build and leaves files already up to date as
@@ -963,8 +966,8 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     png). Ask the user which they want if unclear.
     view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
     parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
-    signed link (no token, expires like the downloads); locally a self-contained HTML file next to
-    the outputs (works offline). Offer it to the user after an export.
+    signed link (no token, expires like the downloads); locally a self-contained HTML file in
+    out/docs/ (works offline). Offer it to the user after an export.
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
     and a b123d-print://files/ resource link; download_part gets the whole part (script, out/,
     ref/) in one zip. embed=True also puts files up to 2 MB into the result itself, for clients
@@ -1031,21 +1034,22 @@ def _baked_note(s) -> str:
 
 
 def _view_link(part: str, glb: Path) -> tuple[str, int]:
-    """HTTP: the signed /view/ link of out/<stem>.glb (the page; the model sits behind the same token)."""
+    """HTTP: the signed /view/ link of out/cad/<stem>.glb (the page; the model sits behind the same token)."""
     url, expires = links.sign_view(STATE["link_secret"], _ws_name(), part, glb.stem, STATE["link_ttl"])
     return _base_url() + url, expires
 
 
 def _view_glb(name: str, path: str) -> Path | None:
-    """The view GLB a build reported, if it really is a regular <parts_dir>/<name>/out/*_view.glb in
-    this workspace (the report comes from the process that ran the part script: never trust a path in it)."""
+    """The view GLB a build reported, if it really is a regular <parts_dir>/<name>/out/cad/*_view.glb
+    in this workspace (the report comes from the process that ran the part script: never trust a path in it)."""
     root = _root()
+    parts_dir = load_settings(root).parts_dir
     try:
         rel = Path(path).resolve().relative_to(root.resolve()).as_posix()
-        f = links.servable(root, load_settings(root).parts_dir, rel)
+        f = links.servable(root, parts_dir, rel)
     except (ValueError, OSError, links.LinkError):
         return None
-    return f if f.parent.parent.name == name and f.name.endswith("_view.glb") else None
+    return f if rel == f"{parts_dir}/{name}/out/{outdir.CAD}/{f.name}" and f.name.endswith("_view.glb") else None
 
 
 def _view_lines(name: str, variants: list[dict]) -> list[str]:
@@ -1063,7 +1067,7 @@ def _view_lines(name: str, variants: list[dict]) -> list[str]:
         return [f"3D view (give the user these links: they open in a browser, need no token and expire {when}; "
                 "rotate, hide pieces, measure the bounding box, cut a section):", *lines]
     if STATE["ssh_dest"]:
-        return [f"3D view: written as out/{glbs[0][1].name} on the server. After `b123d-print pull {name}`, "
+        return [f"3D view: written as out/{outdir.CAD}/{glbs[0][1].name} on the server. After `b123d-print pull {name}`, "
                 f"`b123d-print view {name}` on the user's machine writes a self-contained HTML view of it "
                 "(opens offline in a browser).", *lines]
     for var, glb in glbs:
@@ -1203,8 +1207,8 @@ async def make_template(name: str, kind: str, plane: str | None = None, at: floa
     that box, with a thin base plate where it needs one; base=False: never). thickness: mm
     (default 1.2). label: engrave '<part> <id>' (default), your own text, or false; skipped when
     there is no room. The template is laid flat (template face down, Z=0) and checked like a
-    part. Writes parts/<name>/out/<name>_template_<id>.* in `formats` (default: the formats
-    setting); with png also <...>_where.png, the part with the template's source in red (returned
+    part. Writes <name>_template_<id>.* in `formats` (default: the formats setting): 3MF/STL in
+    parts/<name>/out/print/templates/, STEP in out/cad/; with png also out/images/<...>_where.png, the part with the template's source in red (returned
     as the image; inline=False: only the file). Confirm the face or region with the user first
     (list_faces with highlight)."""
     kind = (kind or "").lower()
@@ -1334,7 +1338,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     url = _base_url() + url
     when = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))
     views = [f"  {_view_link(name, p)[0]}" for rel, p in _part_files(name, variant, "glb")
-             if rel.startswith("out/") and p.name.endswith("_view.glb")]
+             if rel == f"out/{outdir.CAD}/{p.name}" and p.name.endswith("_view.glb")]
     text = (f"{head}\n"
             f"Download it (one zip, no token needed; the link expires {when}; after that call download_part again):\n"
             f"  curl -fLo {name}.zip '{url}'\n"
@@ -1396,7 +1400,7 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
     """Compare a part with a reference model: bounding box, volume and surface area differences,
     surface distances (mean, Hausdorff) after aligning orientation, an F-score, a 0-100 score and
     pass/fail. reference, candidate: STL, 3MF or STEP files inside the workspace, as paths relative
-    to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/bracket.3mf'). thresholds: optional
+    to it (e.g. 'refs/bracket.stl', 'parts/bracket/out/print/bracket.3mf'). thresholds: optional
     overrides, comma-separated name=value (e.g. 'hausdorff_mm=2,volume_rel=0.05'). image: also
     return a view of the reference colored by deviation (green = matches, red = off); size:
     'normal' or 'small' (~800 px wide); inline=False returns only its file (over HTTP: a link)."""
@@ -1413,7 +1417,7 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
     # the files may come from model-written scripts: parse them in the sandbox, like a build
     job = {"op": "compare", "reference": str(ref), "candidate": str(cand), "criteria": asdict(crit),
            "image": f"{cand.stem}_vs_{ref.stem}{'_small' if size == 'small' else ''}.png" if image else None, "size": size}
-    res = await _run(job, cand.parent)
+    res = await _run(job, outdir.out_of(cand) or cand.parent)  # a part's export: the picture in its out/images/
     if not res.get("ok"):
         return [_error_text(res)]
     text = res["text"] + "\n\n" + json.dumps({k: res[k] for k in ("metrics", "checks", "alignment")}, indent=1)
@@ -1517,7 +1521,7 @@ async def describe_model(part: str, file: str, scale: str = "", image: bool = Tr
     the file carries, and a suggestion: MODIFY it or REDRAW it. part: the part it is for. file: a
     name in parts/<part>/ref/ (or a workspace path such as 'refs/x.stl'). scale: '' (as the file
     says), a factor, or the unit the file was drawn in ('inch', 'cm'). image: also a 6-view render
-    (saved as parts/<part>/out/<file>_original.png)."""
+    (saved as parts/<part>/out/images/<file>_original.png)."""
     _image_options(size)
     path = _ref_file(part, file)
     from .refs import IMAGE_SUFFIXES
@@ -1657,9 +1661,9 @@ async def trace_outline(part: str, file: str, dpi: float | None = None, grid: fl
     a credit card 85.60 x 53.98 mm beside the object, or 'L,S' mm of another rectangle), or points
     ('x1,y1,x2,y2' pixels, origin top left) with distance (mm between them). pick: 'x,y' pixel
     inside the object to trace when it is not the largest. threshold (0..1) and invert (object
-    lighter than the background) override the automatic threshold. Writes out/<file>_outline.json
-    (the points), out/<file>_outline.py (a snippet with OUTLINE, OUTLINE_HOLES and a face function)
-    and out/<file>_trace.png (the outline on the image: show it to the user to confirm). A scan is
+    lighter than the background) override the automatic threshold. Writes out/docs/<file>_outline.json
+    (the points), out/docs/<file>_outline.py (a snippet with OUTLINE, OUTLINE_HOLES and a face function)
+    and out/images/<file>_trace.png (the outline on the image: show it to the user to confirm). A scan is
     accurate to about a pixel; a photo only as far as it is square-on, flat and undistorted:
     check a known dimension before trusting it."""
     path = _ref_file(part, file)
@@ -1746,7 +1750,7 @@ def recipe_text(name: str) -> str:
 
 @mcp.resource("b123d-print://files/{workspace}/{+path}", mime_type="application/octet-stream")
 def workspace_file(workspace: str, path: str) -> bytes:
-    """A file the server wrote (parts/<part>/out/...), in this session's own workspace ('_' = the
+    """A file the server wrote (parts/<part>/out/..., e.g. out/print/<part>.3mf), in this session's own workspace ('_' = the
     root workspace). Tool results link to these; over HTTP the same files have download links."""
     from mcp.server.mcpserver.exceptions import ResourceError
 
@@ -1756,7 +1760,7 @@ def workspace_file(workspace: str, path: str) -> bytes:
     try:
         return links.servable(root, load_settings(root).parts_dir, path).read_bytes()
     except links.LinkError:
-        raise ResourceError(f"no file {path!r} (only parts/<part>/out/ files are served)") from None
+        raise ResourceError(f"no file {path!r} (only files in parts/<part>/out/ and its folders are served)") from None
 
 
 @mcp.resource("b123d-print://download/{workspace}/{part}", mime_type="application/zip")
@@ -2138,7 +2142,8 @@ async def download_zip(request):
 async def view_link(request):
     """A signed 3D view link (export's view): needs no bearer token. .../<stem> is the viewer page
     (the same static page for every part), .../<stem>.glb the model, which must be
-    <parts_dir>/<part>/out/<stem>.glb in the workspace the link was signed for; until it expires."""
+    <parts_dir>/<part>/out/cad/<stem>.glb (or the flat out/<stem>.glb before 0.3.11) in the workspace
+    the link was signed for; until it expires."""
     from starlette.responses import FileResponse, PlainTextResponse, Response
 
     ws, token, part, file = (request.path_params[k] for k in ("workspace", "token", "part", "file"))
@@ -2153,7 +2158,10 @@ async def view_link(request):
         if root is None:
             raise links.LinkError(404, "not found")
         parts_dir = load_settings(root).parts_dir
-        glb = links.servable(root, parts_dir, f"{parts_dir}/{part}/out/{stem}.glb")
+        try:
+            glb = links.servable(root, parts_dir, f"{parts_dir}/{part}/out/{outdir.CAD}/{stem}.glb")
+        except links.LinkError:  # a view exported before 0.3.11, in the flat out/
+            glb = links.servable(root, parts_dir, f"{parts_dir}/{part}/out/{stem}.glb")
     except links.LinkError as e:
         return PlainTextResponse(str(e) + "\n", status_code=e.status,
                                  headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})

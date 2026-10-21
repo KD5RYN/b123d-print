@@ -44,7 +44,8 @@ values it gives as estimates in the script's comments.
 
 ## What it writes
 
-In the part's `out/` folder (CLI: next to the image, or `--out`):
+In the part's `out/` folder, the picture in `out/images/` and the outline files in `out/docs/`
+(CLI: all three next to the image, or in `--out`):
 
 - `<image>_trace.png` — the outline (red) and holes (blue) on the picture, the scale reference in
   yellow and a mm scale bar. **Show it to the user and confirm** before modeling.

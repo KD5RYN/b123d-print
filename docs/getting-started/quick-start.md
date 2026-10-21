@@ -89,8 +89,10 @@ questions ([CLI](cli.md)).
 > *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."*
 
 The assistant asks you to confirm the dimensions, designs the part, checks it and saves the
-files in your parts folder, under `parts/<name>/out/` (for example
-`~/parts/parts/spacer/out/spacer.3mf`), ready for your slicer.
+files in your parts folder, under `parts/<name>/out/`. The file for your slicer is in
+`out/print/` (for example `~/parts/parts/spacer/out/print/spacer.3mf`); `out/README.md` says
+what is where. Only the script and a few settings need a backup: see
+[What to save](../using/what-to-save.md).
 
 The very first start downloads a few hundred MB (mostly the geometry engine) and can take a few
 minutes; later starts are fast. If your assistant gives up waiting, see
@@ -99,7 +101,7 @@ minutes; later starts are fast. If your assistant gives up waiting, see
 !!! note "Pictures"
     The assistant checks its own work by looking at the renders and cross-sections it makes.
     Claude Desktop and Claude Code pass those pictures to the model; check your assistant's docs
-    for others. Without it the print checks still run, but look at the PNGs in `out/` yourself.
+    for others. Without it the print checks still run, but look at the PNGs in `out/images/` yourself.
 
 ## Next
 

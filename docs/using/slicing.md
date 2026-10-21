@@ -8,13 +8,14 @@ server, [bring the part home](workflow.md) first (`download_part`, or `b123d-pri
 
 | File | Use it when | Why |
 | --- | --- | --- |
-| `<name>.3mf` | almost always | carries millimeters, so it can't be scaled wrong; standard 3MF that Bambu Studio, OrcaSlicer, PrusaSlicer and Cura all open |
-| `<name>.stl` | a slicer or service that wants STL | no units: slicers assume millimeters, which is right for these files; a mesh, a little larger |
-| `<name>.step` | you want to edit the part in other CAD | an exact solid without history. Slicers that import STEP turn it into a mesh themselves; use the 3MF instead, which b123d-print meshes finely |
-| `<name>_print.md` | always worth a look | the [print sheet](#the-print-sheet): what the part assumes, in one page |
+| `print/<name>.3mf` | almost always | carries millimeters, so it can't be scaled wrong; standard 3MF that Bambu Studio, OrcaSlicer, PrusaSlicer and Cura all open |
+| `print/<name>.stl` | a slicer or service that wants STL | no units: slicers assume millimeters, which is right for these files; a mesh, a little larger |
+| `cad/<name>.step` | you want to edit the part in other CAD | an exact solid without history. Slicers that import STEP turn it into a mesh themselves; use the 3MF instead, which b123d-print meshes finely |
+| `print/<name>_print.md` | always worth a look | the [print sheet](#the-print-sheet): what the part assumes, in one page |
 
-Pick the formats with `formats=` on `export` (or `formats` in your config): `3mf,print` is a
-good default for printing at home. See [Output formats](formats.md).
+The paths are inside `out/`; `out/README.md` lists the files to open in the slicer. Pick the
+formats with `formats=` on `export` (or `formats` in your config): `3mf,print` is a good default
+for printing at home. See [Output formats](formats.md) and [What to save](what-to-save.md).
 
 !!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
     Expected. The 3MF has the shape in millimeters but no Bambu project settings (printer,
@@ -82,7 +83,7 @@ Most parts print with your usual profile. What to check:
 
 ## Several pieces
 
-A part with several pieces exports one file per piece (`<name>_base.3mf`, `<name>_lid.3mf`),
+A part with several pieces exports one file per piece (`out/print/<name>_base.3mf`, `out/print/<name>_lid.3mf`),
 each in its own print orientation.
 
 - **Open them together** (select all the files, or import one after another) and use
@@ -90,14 +91,14 @@ each in its own print orientation.
   answer **no**: they are separate objects, each with its own bed face.
 - **Print them together or apart.** Together saves time; apart lets each use its own settings
   (a lid with fewer walls, a bracket with more).
-- **Fit-test templates** (`<name>_template_*.3mf`) are separate quick prints: print one first
+- **Fit-test templates** (`out/print/templates/<name>_template_*.3mf`) are separate quick prints: print one first
   when the fit matters ([templates](templates.md)).
 - **Assembly:** the order, glue and inserts are in the assistant's report and, if the script sets
   `PRINT_NOTES`, in the print sheet. For split parts see [Splitting parts](splitting.md).
 
 ## The print sheet
 
-`export` with the `print` format writes `out/<name>[_<variant>]_print.md`, one per variant: the
+`export` with the `print` format writes `out/print/<name>[_<variant>]_print.md`, one per variant: the
 report you'd otherwise scroll back for, next to the files, and `download_part` brings it home
 with them. It is off by default; ask for it with `formats="3mf,print"`, `--formats 3mf,print`,
 or `formats = ["3mf", "png", "print"]` in your config (`all` includes it). It costs about a
@@ -139,7 +140,7 @@ not a shopping list. An empty specification says **Needs confirmation**; never g
 length, thread, head or insert model from a hole or imported mesh.
 
 Add `hardware` to the formats (`formats="3mf,print,hardware"`) for the matching
-`<name>[_<variant>]_hardware.json`. Both artifacts go home through the existing export links,
+`out/docs/<name>[_<variant>]_hardware.json`. Both artifacts go home through the existing export links,
 `download_part` and SSH `pull` (include both `print,hardware` when filtering formats).
 See [declared hardware](../scripts/convention.md#declared-hardware) for the hook, custom imported
 stand-ins and JSON format. A script with no hook keeps its existing print sheet.

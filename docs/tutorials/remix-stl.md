@@ -103,7 +103,9 @@ whatever the bracket screws to before printing the real thing.
 ![The test plate comes from the base, in red](../images/tutorial_remix_template_where.png)
 
 Then it exports the remix to `parts/l_bracket_slots/out/` in your project folder: the 3MF and
-STL for your slicer, and pictures. On a shared server the assistant brings the files home before
+STL for your slicer in `out/print/`, and pictures in `out/images/`. Keep the downloaded model in
+`ref/` with the script: the remix is built from it ([What to save](../using/what-to-save.md)).
+On a shared server the assistant brings the files home before
 it's done, the same as in the [first tutorial](first-bracket.md#6-your-files).
 
 Slice the 3MF as usual ([From part to print](../using/slicing.md)).

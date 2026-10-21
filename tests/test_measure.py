@@ -167,7 +167,7 @@ def test_measure_tool_through_the_sandbox(lid, monkeypatch):
     assert text.startswith("gap lid / base: 0.2 mm")
     data = json.loads(text.split("\n", 1)[1].split("\nhighlight:")[0])
     assert data["distance"] == 0.2 and data["frame"] == "assembly"
-    assert (lid.parent / "out" / "lid_measure_distance.png").is_file()
+    assert (lid.parent / "out" / "images" / "lid_measure_distance.png").is_file()
     out = anyio.run(lambda: m.measure("lid", "faces", a="base", face="top", face2="bottom"))
     assert "2 mm apart" in out[0]  # "top" is the largest face facing up: the floor of the cavity, 2 mm thick
     out = anyio.run(lambda: m.measure("lid", "hole", a="base", face="top"))

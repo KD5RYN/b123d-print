@@ -4,7 +4,8 @@ A link is  <base>/files/<workspace>/<expires>.<signature>/<path>  where <workspa
 workspace name ("_" for the shared root workspace), <path> is relative to that workspace and
 <signature> is HMAC-SHA256(secret, workspace NUL path NUL expires), base64url. It needs no bearer
 token, so curl, a browser or another agent can fetch it, but it opens exactly that one file until
-it expires. The server only serves regular files under <workspace>/<parts_dir>/<part>/out/.
+it expires. The server only serves regular files in <workspace>/<parts_dir>/<part>/out/ or one of
+its folders (out/print/, out/cad/, ...: outdir.FOLDERS), and nothing below a symlink.
 
 Zip links (`download_part`) are  <base>/zip/<workspace>/<expires>.<signature>/<part>.zip[?formats=..&variant=..]
 with the purpose "zip" and the filter in the signature: one opens a zip of that one part (script,
@@ -12,7 +13,8 @@ out/, ref/; see handoff.py), filtered as signed, until it expires.
 
 View links (`export`'s 3D view) are  <base>/view/<workspace>/<expires>.<signature>/<part>/<stem>
 with the purpose "view" over "<part>/<stem>": the same token opens the viewer page there and the
-model at .../<stem>.glb, which must be <parts_dir>/<part>/out/<stem>.glb (servable); nothing else.
+model at .../<stem>.glb, which must be <parts_dir>/<part>/out/cad/<stem>.glb (or out/<stem>.glb,
+the flat layout before 0.3.11; servable); nothing else.
 
 Upload links (`upload_reference`) are the same with /upload/ and a signature over a purpose
 ("put" or "put-overwrite") as well: a PUT to one stores one reference file in
@@ -84,7 +86,7 @@ def verify_zip(secret: bytes, workspace: str, token: str, part: str, query: str,
 
 
 def sign_view(secret: bytes, workspace: str, part: str, stem: str, ttl: float, now: float | None = None) -> tuple[str, int]:
-    """URL path ("/view/...") of the 3D view of <parts_dir>/<part>/out/<stem>.glb, and its expiry."""
+    """URL path ("/view/...") of the 3D view of <parts_dir>/<part>/out/cad/<stem>.glb, and its expiry."""
     expires = int((now if now is not None else time.time()) + ttl)
     sig = _sig(secret, workspace, f"{part}/{stem}", expires, "view")
     return f"/view/{workspace}/{expires}.{sig}/{quote(part)}/{quote(stem)}", expires
@@ -121,11 +123,16 @@ def check_path(path: str) -> PurePosixPath:
 
 
 def servable(ws_root: Path, parts_dir: str, path: str) -> Path:
-    """The file `path` (relative to ws_root) if it is a regular file in <parts_dir>/<part>/out/ with no
-    symlink anywhere on the way; else LinkError(404)."""
+    """The file `path` (relative to ws_root) if it is a regular file in <parts_dir>/<part>/out/ or
+    in one of its folders (outdir.FOLDERS: out/print/<file>, out/print/templates/<file>, ...), with
+    no symlink anywhere on the way; else LinkError(404)."""
+    from .outdir import FOLDERS
+
     rel = check_path(path)
     base = PurePosixPath(parts_dir)
-    if len(rel.parts) != len(base.parts) + 3 or rel.parts[: len(base.parts)] != base.parts or rel.parts[-2] != "out":
+    n = len(base.parts)
+    if (len(rel.parts) < n + 3 or rel.parts[:n] != base.parts or rel.parts[n + 1] != "out"
+            or "/".join(rel.parts[n + 2:-1]) not in ("", *FOLDERS)):
         raise LinkError(404, "not found")
     cur = ws_root
     for seg in rel.parts:
