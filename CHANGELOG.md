@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.10 — unreleased
+## 0.3.10 — 2026-10-21
 
 - **Calibration per printer on shared servers, and printer nicknames** (#121): on an HTTP or
   SSH server, `save_setup` stored `hole_comp` for every printer of the workspace, so switching
