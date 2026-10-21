@@ -30,6 +30,8 @@ def build(d): ...
 
 def git(ws: Path, *args: str) -> str:
     env = {k: val for k, val in os.environ.items() if not k.startswith("GIT_")}
+    env.update(GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.com",  # CI runners have no git identity
+               GIT_COMMITTER_NAME="test", GIT_COMMITTER_EMAIL="test@example.com")
     return subprocess.run(["git", *args], cwd=ws, env=env, capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -52,6 +54,19 @@ def ws(tmp_path, monkeypatch):
     (w / "parts" / "shelf_bracket" / "ref" / "scan.png").write_bytes(b"\x89PNG scan")
     v.start(w)
     return w
+
+
+@pytest.fixture
+def server(ws, monkeypatch):
+    """The MCP server on this workspace, run locally (stdio): never the transport another test left behind."""
+    from b123d_print import mcp_server as m
+
+    monkeypatch.setitem(m.STATE, "root", ws)
+    monkeypatch.setitem(m.STATE, "transport", "stdio")
+    monkeypatch.setitem(m.STATE, "ssh_dest", None)
+    token = m._WORKSPACE.set(None)
+    yield m
+    m._WORKSPACE.reset(token)
 
 
 def commits(ws: Path) -> list[str]:
@@ -289,12 +304,10 @@ def test_offer_after_a_change(ws):
     assert v.offer(ws, "shelf_bracket") == ""
 
 
-def test_mcp_tools_local_and_remote(ws, monkeypatch):
+def test_mcp_tools_local_and_remote(ws, server, monkeypatch):
     from mcp.server.mcpserver.exceptions import ToolError
 
-    from b123d_print import mcp_server as m
-
-    monkeypatch.setitem(m.STATE, "root", ws)
+    m = server
     assert "Saved the project" in m.save_version("first")
     write(ws, 130.0)
     assert "ARM_L 115 → 130" in m.save_version("arm", part="shelf_bracket")
@@ -316,12 +329,10 @@ def test_mcp_tools_local_and_remote(ws, monkeypatch):
     assert "160.0" in (ws / "parts/shelf_bracket/shelf_bracket.py").read_text(encoding="utf-8")
 
 
-def test_resume_note_for_a_missing_part_on_a_server(ws, monkeypatch):
+def test_resume_note_for_a_missing_part_on_a_server(ws, server, monkeypatch):
     from mcp.server.mcpserver.exceptions import ToolError
 
-    from b123d_print import mcp_server as m
-
-    monkeypatch.setitem(m.STATE, "root", ws)
+    m = server
     with pytest.raises(ToolError) as e:
         m.read_part("gone")
     assert "resume" not in str(e.value)
@@ -332,16 +343,15 @@ def test_resume_note_for_a_missing_part_on_a_server(ws, monkeypatch):
 
 
 @pytest.mark.parametrize("remote", [False, True])
-def test_check_offers_a_save_only_locally(ws, monkeypatch, remote):
+def test_check_offers_a_save_only_locally(ws, server, monkeypatch, remote):
     """A passing check offers "Save this version?" locally; on a shared server no git runs at all."""
     import anyio
 
-    from b123d_print import mcp_server as m
+    m = server
 
     async def passed(name, variant, fresh=False):
         return {"ok": True, "passed": True, "variants": {"": []}}
 
-    monkeypatch.setitem(m.STATE, "root", ws)
     monkeypatch.setattr(m, "_check", passed)
     ran = []
     real_run = v.run
