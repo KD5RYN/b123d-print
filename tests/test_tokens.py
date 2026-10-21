@@ -104,6 +104,8 @@ def test_cli_default_workspace_and_client_config(tmp_path):
     assert json.loads(oc)["mcp"]["b123d-print"]["headers"]["Authorization"] == f"Bearer {tok}"
     ag = err.split("Antigravity (")[1].split("\n\n")[0].split("\n", 1)[1]
     assert json.loads(ag)["mcpServers"]["b123d-print"]["serverUrl"] == "https://cad.example.com/mcp"
+    qw = err.split("Qwen Code (")[1].split("\n\n")[0].split("\n", 1)[1]
+    assert json.loads(qw)["mcpServers"]["b123d-print"]["httpUrl"] == "https://cad.example.com/mcp"
     assert 'bearer_token_env_var = "B123D_TOKEN"' in err and "tool_timeout_sec = 300" in err  # Codex: no token in the file
     assert f'grok mcp add --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer {tok}"' in err
     r = cli(tmp_path, "add", "eval", "--workspace", "eval-*")

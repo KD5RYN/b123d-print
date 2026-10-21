@@ -69,6 +69,7 @@ b123d-print with it yet: tell us how it went in an
 | [Codex CLI](#codex-cli) | yes | yes (`bearer_token_env_var`) | not documented | not documented | **yes** (stdio, HTTP) |
 | [Grok Build CLI](#grok) (xAI) | yes | yes (`--header`) | not documented | not documented | **yes** (HTTP) |
 | [OpenCode](#opencode) | yes (`"type": "local"`) | yes (`"type": "remote"`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
+| [Qwen Code](#qwen-code) | yes | yes (`httpUrl`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
 | [Windsurf](#windsurf) | yes | yes (`headers`) | not documented | yes | untested |
 | [Zed](#zed) | yes | yes (`headers`) | not documented | yes | untested |
 | [LM Studio](#lm-studio) | yes | yes (`headers`) | not documented | not documented | untested |
@@ -379,6 +380,37 @@ On your own machine:
 ```
 
 The first start downloads the packages, hence the long `timeout`.
+
+## Qwen Code
+
+[Qwen Code](https://github.com/QwenLM/qwen-code) is built on Gemini CLI and uses the same
+format: `~/.qwen/settings.json`, or `.qwen/settings.json` in a project. A remote server is
+**`httpUrl`** with `headers`. Tested against a shared server over HTTP, with the Ollama model
+`gemma4:31b-cloud`.
+
+```json
+{
+  "mcpServers": {
+    "b123d-print": {
+      "httpUrl": "https://cad.example.com/mcp",
+      "headers": {"Authorization": "Bearer <token>"},
+      "timeout": 300000
+    }
+  }
+}
+```
+
+- The token goes in as is (this format has no environment-variable syntax): keep the file
+  private.
+- A token with one workspace needs no `?workspace=`; with several, add one the token may use,
+  or the server answers 403 (its log shows the token's name and the workspace asked for).
+- `"timeout"` (ms) covers long builds and checks.
+- Before using the token, Qwen Code asks the server for OAuth details
+  (`/.well-known/oauth-...`); the server log shows those as 401s. They are harmless.
+
+On your own machine, `"command": "uvx"` and `"args": ["--from", "b123d-print",
+"b123d-print-mcp", "--workspace", "/Users/you/parts"]` instead of `httpUrl`. Check with `/mcp`.
+`token add` prints the remote block filled in.
 
 ## Windsurf
 
