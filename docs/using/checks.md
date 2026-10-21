@@ -77,6 +77,16 @@ also run on the original, and findings the original already had are labeled **in
 the original**: reported, never failing the check, not the remix's to fix. An **import** line
 says what was loaded and warns when its units look wrong.
 
+## Accepted findings
+
+A part whose script declares [`PRINT = {"supports": "none", "why": ...}`](../scripts/convention.md#print-intent)
+(the calibration coupons do) prints its overhangs unsupported on purpose. The **overhang** and
+**bridge** checks still report every face, with the same numbers, but as **accepted** (OK, with
+the why) instead of a WARN every run; `b123d-print check` prints accepted findings even without
+`--verbose`. Only the overhang and bridge warnings change: a declared intent never turns a FAIL
+into a pass, so `Overhang(part, fail=True)` on a hard overhang still fails, and the other checks
+(holes, tip-over, thin, ...) are untouched.
+
 ## Motion clearance
 
 A lid that is clear closed and clear open can still hit a wall half-way, and a print-in-place

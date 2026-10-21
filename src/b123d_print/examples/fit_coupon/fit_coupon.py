@@ -107,6 +107,13 @@ class Dims:
 
 VARIANTS = {"": {}}
 
+# Print intent (PRINT): fits are measured as printed, with nothing in the gaps.
+PRINT = {
+    "supports": "none",
+    "orientation": "locked",
+    "why": "a calibration coupon: it measures fits printed without supports, flat as modeled",
+}
+
 
 def _label(c: float, size: float):
     return Text(f"{round(c * 100):d}", size, align=(Align.CENTER, Align.MIN))

@@ -47,6 +47,9 @@ class Settings:
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
     tip_speed: float = 200.0  # mm/s, the slicer's fastest print speed: the tip-over check scales with it; 0 = off
+    supports: str = ""  # your default support style for the print sheet: none, auto, build_plate_only, tree; "" = suggest from the geometry
+    walls: int = 0  # your default wall count (perimeters) for the print sheet and estimates; 0 = the slicer default (2)
+    infill: float | None = None  # your default infill percent for the print sheet and estimates; none = 15
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
 
@@ -106,6 +109,11 @@ def _read(path: Path) -> dict:
     for k in ("printer", "material", "parts_dir", "style"):
         if k in flat:
             flat[k] = str(flat[k])
+    if flat.get("supports") or flat.get("walls") or "infill" in flat:  # the same vocabulary as a part's PRINT
+        from .intent import validate
+
+        given = {k: flat[k] for k in ("supports", "walls", "infill") if flat.get(k) not in (None, "", 0)}
+        flat.update({k: v for k, v in validate({**given, "why": "settings"}, str(path)).items() if k != "why"})
     if flat.get("style"):
         from .styles import normalize
 

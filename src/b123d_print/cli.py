@@ -108,7 +108,7 @@ def cmd_check(args) -> int:
                 n = {lvl: sum(f.level == lvl for f in findings) for lvl in (ck.OK, ck.WARN, ck.FAIL)}
                 print(f"{script.stem}{'[' + key + ']' if key else ''}: {n['ok']} ok, {n['warn']} warn, {n['fail']} fail")
                 for f in findings:
-                    if args.verbose or f.level != ck.OK:
+                    if args.verbose or f.level != ck.OK or f.data.get("accepted"):  # accepted: PRINT intent, shown
                         print("  " + f.line())
             if any(f.level == ck.FAIL for f in findings):
                 worst = 1
