@@ -10,7 +10,8 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 
 | Tool | What it does |
 | --- | --- |
-| `list_parts` | parts, bundled examples, settings in effect, printer, [design styles](design-review.md#custom-styles) and where each comes from, sandbox in use, version |
+| `read_guide(essentials?)` | the workflow and print rules, the same text as the `b123d-print://guide` resource ([`AGENTS.md`](../scripts/rules.md)), for clients that never load resources; its description tells the model to call it before the first part. `essentials=true` returns only the short checklist below |
+| `list_parts` | the rules checklist (below), parts, bundled examples, settings in effect, printer, [design styles](design-review.md#custom-styles) and where each comes from, sandbox in use, version |
 | `new_part(name, description?, example?, show_code?)` | scaffold from the template, or copy a bundled example; returns a short confirmation (`show_code=True` also returns the new file's code; the template itself is the `b123d-print://template` resource) |
 | `read_part(name)` | the script's current code |
 | `write_part(name, code)` | replace the script (syntax-checked before saving) |
@@ -39,6 +40,19 @@ holes) and py_gearworks (gears): see [Threads, fasteners and gears](threads-fast
 | `use_printer(name?, material?, search?)` | search printer profiles, or set the active printer and material ([printer profiles](printer-profiles.md)); over HTTP and SSH it is saved per workspace |
 | `save_setup(printer?, material?, formats?, style?, hole_comp?, hole_comp_h?, overwrite?)` | save the [first-run setup](../getting-started/quick-start.md#tell-it-your-printer) answers (the `setup_workspace` prompt asks for them): printer, material, export formats, default style and a measured hole compensation (with a printer: stored for it and the material). Saved where `use_printer` saves; a value already set is kept and reported as a conflict until `overwrite=true`. Lists the calibration coupons still to print |
 
+**The rules checklist.** Many clients never pass the `b123d-print://guide` resource or the
+server's instructions to the model, but every client passes tool results. So the results of
+`list_parts` (its `rules` field), `new_part` and a part's first `write_part` (once per part and
+server process, before the part was ever built) end with the rules a model most often skips:
+
+```text
+Rules (all of them: read_guide):
+1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation.
+2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
+3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL.
+4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network).
+```
+
 `variant` is a key from the script's `VARIANTS` (`standard` for the default); `build_part`,
 `render_preview` and `section` take one variant, `check` and `export` default to all of them.
 
@@ -48,12 +62,12 @@ only those are built. Every tool that builds the part reads the pieces from the
 them from the same script, Dims and settings; `fresh=true` builds them again.
 The image tools take `size="small"` for a ~800 px wide image (about a third of the bytes) and
 `inline=false` to get only the file, or over HTTP its download link, instead of the image itself.
-Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`, `params` and
+Every tool except `read_guide`, `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`, `params` and
 `upload_reference` runs in the
 [sandbox](sandbox.md): the part script, or for `compare` and `describe_model` the parsing of
 the model files (they may come from model-written scripts or from the internet). `compare` only takes files inside the workspace.
 
-Every tool except `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`,
+Every tool except `read_guide`, `list_parts`, `use_printer`, `save_setup`, `new_part`, `read_part`, `write_part`,
 `upload_reference` and `recipe` runs in the
 [sandbox](sandbox.md): the part script, or for `compare`, `describe_model` and `trace_outline`
 the parsing of the model and image files (they may come from model-written scripts or from the

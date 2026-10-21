@@ -1,0 +1,21 @@
+{
+ "stop": "done",
+ "final_text": "Sure, I can design that. What size should it be? Send me the details and I'll model it.",
+ "transcript": [
+  {
+   "t": 0,
+   "type": "tool",
+   "name": "list_parts",
+   "args": {},
+   "is_error": false,
+   "result": "",
+   "images": 0
+  },
+  {
+   "t": 0,
+   "type": "model",
+   "turn": 1,
+   "text": "Sure, I can design that. What size should it be? Send me the details and I'll model it."
+  }
+ ]
+}

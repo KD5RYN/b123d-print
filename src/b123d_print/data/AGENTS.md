@@ -9,7 +9,8 @@ actually printed; several rules exist because a print failed without them.
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
 `build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `list_edges`, `make_template`,
-`trace_outline`, `recipe`). Otherwise
+`trace_outline`, `recipe`). **`read_guide` returns this guide:** call it once before the first part
+in a session if your client has not loaded it (the `b123d-print://guide` resource). Otherwise
 use the CLI:
 
 - `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`

@@ -5,9 +5,14 @@ b123d-print MCP tools, already connected) and works until it is done or a limit 
 records what it spends in `RunState`, which the runner reads even after a timeout.
 
 Adapters: `fake` (deterministic, no model: a box of the reference's size, or a benchmark task's
-reference script; proves the pipeline)
-and `claude` (Anthropic API; model from B123D_EVAL_MODEL, key from ANTHROPIC_API_KEY or the
-SDK's other credential sources). Add another by subclassing Agent and registering it in AGENTS.
+reference script; proves the pipeline), `claude` (Anthropic API; model from B123D_EVAL_MODEL, key
+from ANTHROPIC_API_KEY or the SDK's other credential sources) and `ollama` (any OpenAI-compatible
+chat endpoint, by default a local Ollama: B123D_EVAL_BASE_URL, B123D_EVAL_MODEL). Add another by
+subclassing Agent and registering it in AGENTS.
+
+B123D_EVAL_INSTRUCTIONS says how much of the server's initialize instructions the model gets in
+its system prompt, to imitate clients: full (default), 512 (the first 512 characters, like Codex)
+or none (clients that drop them).
 """
 
 from __future__ import annotations
@@ -16,6 +21,8 @@ import base64
 import json
 import os
 import time
+
+import anyio
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,6 +36,7 @@ class Task:
     prompt: str
     images: list[Path]
     hints: dict = field(default_factory=dict)  # facts for the fake agent only (e.g. the reference bbox)
+    interactive: bool = False  # a dialog task: the user answers after the turn (no "work on your own")
 
 
 @dataclass
@@ -100,6 +108,34 @@ class ToolBox:
         return out
 
 
+INSTRUCTION_MODES = ("full", "512", "none")
+
+
+def instructions_mode() -> str:
+    mode = os.environ.get("B123D_EVAL_INSTRUCTIONS", "full")
+    if mode not in INSTRUCTION_MODES:
+        raise ValueError(f"B123D_EVAL_INSTRUCTIONS={mode!r}: use one of {', '.join(INSTRUCTION_MODES)}")
+    return mode
+
+
+def model_name(agent_name: str) -> str | None:
+    if agent_name == "claude":
+        return os.environ.get("B123D_EVAL_MODEL", DEFAULT_MODEL)
+    if agent_name == "ollama":
+        return os.environ.get("B123D_EVAL_MODEL", OLLAMA_MODEL)
+    return None
+
+
+def system_prompt(task: Task, tools: ToolBox) -> str:
+    """What every model agent is told, plus the server's instructions as B123D_EVAL_INSTRUCTIONS says."""
+    text = "You are a CAD designer working for a user through the b123d-print MCP tools."
+    if not task.interactive:
+        text += " Work on your own until the part is exported; the user is not available for questions."
+    mode = instructions_mode()
+    instr = "" if mode == "none" else tools.instructions[:512] if mode == "512" else tools.instructions
+    return text + ("\n\n" + instr if instr else "")
+
+
 class Agent:
     name = "base"
 
@@ -138,6 +174,13 @@ class FakeAgent(Agent):
     name = "fake"
 
     async def run(self, task, tools, limits, state):
+        if "reply" in task.hints:  # a dialog task: look around, then answer the way the reference does
+            state.turns += 1
+            await tools.call("list_parts", {})
+            state.final_text = task.hints["reply"]
+            state.log("model", turn=state.turns, text=state.final_text)
+            state.stop = "done"
+            return
         x, y, z = (round(float(v), 3) for v in task.hints.get("bbox_mm", (20, 20, 10)))
         code = task.hints.get("code") or FAKE_SCRIPT.format(x=x, y=y, z=z)  # a benchmark task: its reference script
         names = {t["name"] for t in await tools.list_tools()}
@@ -214,11 +257,7 @@ class ClaudeAgent(Agent):
         state.cost_usd += (i * pin + o * pout + r * pread + w * pwrite) / 1e6
 
     async def run(self, task, tools, limits, state):
-        system = (
-            "You are a CAD designer working for a user through the b123d-print MCP tools. "
-            "Work on your own until the part is exported; the user is not available for questions.\n\n"
-            + tools.instructions
-        )
+        system = system_prompt(task, tools)
         tool_defs = await tools.list_tools()
         tool_defs[-1] = {**tool_defs[-1], "cache_control": {"type": "ephemeral"}}
         content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
@@ -265,7 +304,92 @@ class ClaudeAgent(Agent):
                 return
 
 
-AGENTS: dict[str, type[Agent]] = {"fake": FakeAgent, "claude": ClaudeAgent}
+OLLAMA_URL = "http://127.0.0.1:11434/v1"
+OLLAMA_MODEL = "gemma4:31b-cloud"
+
+
+class OllamaAgent(Agent):
+    """An OpenAI-compatible chat completions endpoint (Ollama by default), manual tool loop over
+    the MCP tools: what a non-Claude client such as OpenCode or Qwen Code runs.
+
+    Env: B123D_EVAL_BASE_URL (default http://127.0.0.1:11434/v1), B123D_EVAL_MODEL (default
+    gemma4:31b-cloud), B123D_EVAL_API_KEY (default "ollama"), B123D_EVAL_PRICES (USD per MTok;
+    default free). Images from tool results go to the model in a user message after them."""
+
+    name = "ollama"
+
+    def __init__(self):
+        self.url = os.environ.get("B123D_EVAL_BASE_URL", OLLAMA_URL).rstrip("/") + "/chat/completions"
+        self.model = os.environ.get("B123D_EVAL_MODEL", OLLAMA_MODEL)
+        self.price = prices(self.model) if os.environ.get("B123D_EVAL_PRICES") else (0.0, 0.0, 0.0, 0.0)
+        self.key = os.environ.get("B123D_EVAL_API_KEY", "ollama")
+
+    def _post(self, payload: dict) -> dict:
+        """One chat completion (stdlib only: the eval adds no dependency for this agent)."""
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(self.url, json.dumps(payload).encode(), method="POST",
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"{self.url}: HTTP {e.code}: {e.read()[:300]!r}") from None
+
+    async def run(self, task, tools, limits, state):
+        tool_defs = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                       "parameters": t["input_schema"]}} for t in await tools.list_tools()]
+        content = [{"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.standard_b64encode(p.read_bytes()).decode()}}
+                   for p in task.images]
+        messages = [{"role": "system", "content": system_prompt(task, tools)},
+                    {"role": "user", "content": content + [{"type": "text", "text": task.prompt}] if content else task.prompt}]
+        while True:
+            if state.turns >= limits.max_turns:
+                state.stop = "max_turns"
+                return
+            if state.cost_usd >= limits.max_cost_usd:
+                state.stop = "cost_cap"
+                return
+            state.turns += 1
+            payload = {"model": self.model, "messages": messages, "tools": tool_defs}
+            body = await anyio.to_thread.run_sync(self._post, payload, abandon_on_cancel=True)
+            usage = body.get("usage") or {}
+            i, o = usage.get("prompt_tokens", 0) or 0, usage.get("completion_tokens", 0) or 0
+            state.input_tokens += i
+            state.output_tokens += o
+            state.cost_usd += (i * self.price[0] + o * self.price[1]) / 1e6
+            choice = body["choices"][0]
+            msg = choice["message"]
+            text, calls = msg.get("content") or "", msg.get("tool_calls") or []
+            state.log("model", turn=state.turns, stop_reason=choice.get("finish_reason"), text=text[:4000], usage=usage,
+                      cost_usd=round(state.cost_usd, 4))
+            if text:
+                state.final_text = text
+            messages.append({"role": "assistant", "content": text, **({"tool_calls": calls} if calls else {})})
+            if not calls:
+                state.stop = "done" if choice.get("finish_reason") in ("stop", None) else choice["finish_reason"]
+                return
+            images = []
+            for c in calls:
+                fn = c.get("function", {})
+                args = fn.get("arguments") or {}
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+                out = await tools.call(fn.get("name", ""), args if isinstance(args, dict) else {})
+                messages.append({"role": "tool", "tool_call_id": c.get("id", ""), "content": out.text or "(no output)"})
+                images += out.images
+            if images:
+                messages.append({"role": "user", "content": [{"type": "text", "text": "(images from the tool results above)"}]
+                                 + [{"type": "image_url", "image_url": {"url": "data:image/png;base64," + d}} for d in images]})
+            if state.stop == "max_tool_calls":
+                return
+
+
+AGENTS: dict[str, type[Agent]] = {"fake": FakeAgent, "claude": ClaudeAgent, "ollama": OllamaAgent}
 
 
 def make_agent(name: str) -> Agent:

@@ -1,0 +1,21 @@
+{
+ "stop": "done",
+ "final_text": "Here is what I'll use:\n- Walls 3 mm thick (from you)\n- Router width 120 mm, depth 30 mm (estimates)\n- Two M4 countersunk screws, 60 mm apart (estimate)\n\nI'll go ahead with these estimates and model the cradle now.",
+ "transcript": [
+  {
+   "t": 0,
+   "type": "tool",
+   "name": "list_parts",
+   "args": {},
+   "is_error": false,
+   "result": "",
+   "images": 0
+  },
+  {
+   "t": 0,
+   "type": "model",
+   "turn": 1,
+   "text": "Here is what I'll use:\n- Walls 3 mm thick (from you)\n- Router width 120 mm, depth 30 mm (estimates)\n- Two M4 countersunk screws, 60 mm apart (estimate)\n\nI'll go ahead with these estimates and model the cradle now."
+  }
+ ]
+}

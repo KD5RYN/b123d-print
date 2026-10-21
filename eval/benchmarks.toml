@@ -148,3 +148,27 @@ checks = [
   { check = "fit", pieces = ["box", "lid"], min_aligned = 4, min_standins = 4 },
 ]
 bad = { "bad_holes_off.py" = ["fit", "fit_holes"], "bad_lid_sunk.py" = ["fit"], "bad_lid_floating.py" = ["fit_holes"], "bad_thick_screws.py" = ["fit"] }
+
+# A dialog task: dimensions are missing on purpose. The first turn is scored (eval/b123d_eval/dialog.py),
+# not a script: the agent must list what it has and what it needs, ask, and stop before write_part.
+# reference and bad are saved run records ({"stop", "final_text", "transcript"}), not scripts.
+[[task]]
+id = "ask_missing_dims"
+kind = "dialog"
+title = "Router cradle with its sizes left out"
+mistake = "modeling on guesses"
+reference = "benchmarks/ask_missing_dims/good.json"
+prompt = """I need a wall bracket to hold my Wi-Fi router behind my desk. The router is a plain
+rectangular box; it should sit in an open-top U-shaped cradle that is screwed to the wall with two
+screws. Make the cradle walls 3 mm thick. I'll print it in PETG."""
+checks = [
+  { check = "no_tool", tools = ["write_part", "set_params", "build_part", "export"] },
+  { check = "asked" },
+  { check = "mentions", groups = [
+    { label = "the given 3 mm wall", any = ['\b3(\.0)?\s*mm'] },
+    { label = "router width", any = ['\bwidth\b', '\bwide\b'] },
+    { label = "router depth", any = ['\bdepth\b', '\bdeep\b', "router'?s? thickness", 'how thick is the router'] },
+    { label = "screw size", any = ['screws?\b[^.?\n]{0,40}\b(size|diameter|type|gauge|head)', '\b(size|diameter|type|gauge) of (the )?screws?', '\bM[2-6]\b', '(which|what) screws', '#\d+ (wood |pan |flat )?screws?'] },
+  ] },
+]
+bad = { "bad_modeled_on_guesses.json" = ["no_tool", "asked", "mentions"], "bad_no_question.json" = ["asked"], "bad_vague.json" = ["mentions"] }

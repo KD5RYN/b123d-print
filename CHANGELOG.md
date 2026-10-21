@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.9 — unreleased
+
+- **The workflow rules reach every client** (#110): non-Claude clients (OpenCode, Qwen Code,
+  Grok Build, Antigravity with Gemini) passed neither the `b123d-print://guide` resource nor the
+  server instructions to the model, so it modeled on guessed dimensions and left exports on the
+  server. Now: a `read_guide` tool returns the guide (`essentials=true`: a short checklist); the
+  results of `list_parts`, `new_part` and a part's first `write_part` end with that checklist
+  (confirm dimensions and wait, named `Dims` in mm, verify, bring the files home); the first 512
+  characters of the server instructions (all Codex keeps) state those rules and "call read_guide"
+  on their own; `new_part`, `write_part` and `export` descriptions name the rules they need
+  ([docs](https://kd5ryn.github.io/b123d-print/using/tools/)).
+- Eval: dialog tasks score an agent's first turn instead of a script; the first one,
+  `ask_missing_dims`, leaves the sizes out and passes only when the agent lists what it has and
+  needs, asks, and writes nothing. A new `ollama` agent runs any OpenAI-compatible endpoint (a
+  local Ollama by default), and `B123D_EVAL_INSTRUCTIONS=full|512|none` imitates clients that
+  keep all, the first 512 characters or none of the server instructions
+  ([docs](https://kd5ryn.github.io/b123d-print/contributing/evals/)).
+
 ## 0.3.8 — 2026-10-20
 
 **Upgrade shared servers.** Workspace isolation below closes two security advisories that are
