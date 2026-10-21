@@ -11,9 +11,10 @@ pytestmark = pytest.mark.skipif(shutil.which("sh") is None, reason="needs a POSI
 
 
 def scope(*files: str) -> str:
-    r = subprocess.run(["sh", str(ROOT / "tools" / "ci_scope.sh")], input="\n".join(files) + "\n",
-                       capture_output=True, text=True, check=True)
-    return r.stdout.strip()
+    # bytes, not text: on Windows text mode would turn \n into \r\n and every name would end in \r
+    r = subprocess.run(["sh", str(ROOT / "tools" / "ci_scope.sh")], input=("\n".join(files) + "\n").encode(),
+                       capture_output=True, check=True)
+    return r.stdout.decode().strip()
 
 
 def test_docs_and_housekeeping_take_the_quick_path():
