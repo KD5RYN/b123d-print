@@ -65,9 +65,11 @@ minutes on three operating systems, and each push to a pull request starts one (
 cancels the run still going).
 
 CI skips the long jobs for a pull request that touches only `docs/`, Markdown files at the root,
-`mkdocs.yml`, `server.json` or `plugin/`: a quick job runs `tests/test_docs.py`,
-`tests/test_config_and_cli.py` and the docs build, and the other jobs report with their steps
-skipped. `tools/ci_scope.sh` decides (`git diff --name-only main | sh tools/ci_scope.sh` shows
+`mkdocs.yml`, `server.json`, `plugin/`, or a housekeeping workflow that cannot affect a build or a
+release (`issue-labels.yml`, `orca-sync.yml`, `dependabot.yml`): a quick job runs
+`tests/test_docs.py`, `tests/test_config_and_cli.py`, the docs build and a parse of every
+workflow file, and the other jobs report with their steps skipped. `ci.yml`, `release.yml` and
+`docs.yml` always get the full run. `tools/ci_scope.sh` decides (`git diff --name-only main | sh tools/ci_scope.sh` shows
 what CI will do). Pushes to `main` always run everything.
 
 Tests do not assert wall-clock times: CI runners are shared and slow down without warning. Assert
