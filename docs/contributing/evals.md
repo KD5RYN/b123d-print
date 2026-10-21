@@ -49,6 +49,21 @@ ANTHROPIC_API_KEY=... uv run --group eval python eval/run.py run --agent claude 
 (default `high`). For a model without a built-in price, set `B123D_EVAL_PRICES=in,out,cache_read,cache_write`
 (USD per million tokens) so the cost cap works.
 
+With any OpenAI-compatible chat endpoint, by default a local [Ollama](https://ollama.com) (what
+OpenCode and Qwen Code use), the `ollama` agent runs the same tool loop with no extra package:
+
+```bash
+B123D_EVAL_MODEL=gemma4:31b-cloud uv run python eval/run.py run --suite bench --agent ollama --only ask_missing_dims
+```
+
+`B123D_EVAL_BASE_URL` (default `http://127.0.0.1:11434/v1`), `B123D_EVAL_MODEL` (default
+`gemma4:31b-cloud`) and `B123D_EVAL_API_KEY` pick the endpoint; it costs nothing unless
+`B123D_EVAL_PRICES` is set.
+
+Clients differ in what they pass on from the server: some give the model its initialize
+instructions, Codex only their first 512 characters, many none. `B123D_EVAL_INSTRUCTIONS=full`
+(default), `512` or `none` imitates each, for every agent; results record which was used.
+
 | Option | Default | |
 | --- | --- | --- |
 | `--only id,id` | all | items to run |
@@ -84,6 +99,7 @@ lists the tasks, written the way a user would write them (no images):
 | `mirrored_end_brackets` | mirrored pieces | `left` and `right` each match the reference without mirroring, and `right` is the mirror image of `left`, not a copy or a copy turned round |
 | `inch_cover_plate` | units | a plate drawn in inches is 76.2 x 50.8 x 6.35 mm with its holes at the converted positions (25.4 mm to the inch, not 25, not rounded) |
 | `box_lid_screws` | assembly placement | `check_fit` on `assembly(d)` finds no failure, the four box/lid hole pairs line up for an M3 screw, and four screw stand-ins are in it |
+| `ask_missing_dims` | modeling on guesses | a dialog task (below): a router cradle with only the wall thickness given; the agent's first turn names the given 3 mm wall, asks for the router's width and depth and the screw size, and ends asking, without calling `write_part`, `set_params`, `build_part` or `export` |
 
 Each task has a reference script and known bad scripts (the mistake made on purpose) in
 `eval/benchmarks/<id>/`. The scorers in `eval/b123d_eval/scoring.py` (`pieces`, `on_bed`, `size`,
@@ -123,6 +139,23 @@ turns, tool calls, cost) and below it every check's line, which says what it mea
 Per task the folder has the prompt, the transcript, the agent's script (`candidate.py`) and
 `checks.json`. A task passes only when every check passes. To tell two models apart, read which
 checks failed, not only the share.
+
+### Dialog tasks: ask before modeling
+
+A task with `kind = "dialog"` leaves dimensions out on purpose, and the prompt is only what a user
+would type (nothing about confirming or asking). The agent's first turn is scored, not a script,
+by the checks in `eval/b123d_eval/dialog.py`:
+
+| Check | Passes when |
+| --- | --- |
+| `no_tool` | none of the listed tools was called (`write_part`, `build_part`, ...); `list_parts`, `read_guide` and `new_part` are fine |
+| `asked` | the turn ended on its own (not at a limit) and its last message asks: a question, or a request such as "I need ..." or "please send ..." |
+| `mentions` | the agent's text names every group of things (each a list of case-insensitive regexes; one match is enough): what it was given and what it needs |
+
+The run ends when the agent ends its turn; with the user present (no "work on your own" in its
+system prompt), the right turn is a list of dimensions and a question. `reference` and `bad` are
+saved run records (`{"stop", "final_text", "transcript"}` JSON) instead of scripts; the self-test
+scores them the same way, and the `fake` agent replies with the reference's last message.
 
 To add a task: write the prompt as a user would, a reference script and at least one bad script
 per mistake the task is about, list the checks (and their parameters) and the checks each bad

@@ -1,6 +1,7 @@
 """Benchmark tasks (benchmarks.toml): the agent gets a written task (no images), designs and
 exports the part through the MCP server, and its script is scored with pass/fail checks
-(scoring.py) instead of a surface comparison.
+(scoring.py) instead of a surface comparison. Dialog tasks (kind = "dialog") leave dimensions
+out: the agent's first turn is scored instead (dialog.py), it must ask before it models.
 
     uv run python eval/run.py list --suite bench
     uv run python eval/run.py selftest                                     # references + known bad scripts, no model
@@ -22,7 +23,7 @@ from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 
-from . import scoring
+from . import dialog, scoring
 
 BENCH_PROMPT = """{prompt}
 
@@ -32,6 +33,11 @@ choose and say so in your report.
 Use the b123d-print tools: create it with new_part(name="{part}") as one part script with no extra
 variants, model it, verify it (build_part, render_preview, section, check{fit}), then export it
 with export(name="{part}", formats="step,stl"). Finish with a short report."""
+
+# a dialog task: the request as a user would type it, nothing about confirming or asking
+DIALOG_PROMPT = """{prompt}
+
+Use the b123d-print tools; call the part "{part}"."""
 
 
 def default_manifest() -> Path:
@@ -47,6 +53,7 @@ class BenchTask:
     checks: list[dict]
     mistake: str = ""
     bad: dict = field(default_factory=dict)  # file next to the reference -> checks it must fail
+    kind: str = "script"  # script: score the part script; dialog: score the first turn (reference and bad are run records)
     base: Path = Path(".")
 
     @property
@@ -58,7 +65,11 @@ class BenchTask:
 
     @property
     def needs_fit(self) -> bool:
-        return any(c["check"] in scoring.NEEDS_FIT for c in self.checks)
+        return self.kind == "script" and any(c["check"] in scoring.NEEDS_FIT for c in self.checks)
+
+    @property
+    def dialog(self) -> bool:
+        return self.kind == "dialog"
 
     # what the corpus list prints
     @property
@@ -79,9 +90,13 @@ def load_tasks(path: str | Path | None = None) -> list[BenchTask]:
         extra = set(d) - known
         if extra:
             raise ValueError(f"{path}: task {d.get('id')!r} has unknown keys {sorted(extra)}")
+        kind = d.get("kind", "script")
+        if kind not in ("script", "dialog"):
+            raise ValueError(f"{path}: task {d.get('id')!r}: unknown kind {kind!r}; have dialog, script")
+        known_checks = dialog.CHECKS if kind == "dialog" else scoring.CHECKS
         for c in d.get("checks", []):
-            if c.get("check") not in scoring.CHECKS:
-                raise ValueError(f"{path}: task {d.get('id')!r}: unknown check {c.get('check')!r}; have {sorted(scoring.CHECKS)}")
+            if c.get("check") not in known_checks:
+                raise ValueError(f"{path}: task {d.get('id')!r}: unknown check {c.get('check')!r}; have {sorted(known_checks)}")
         tasks.append(BenchTask(**d, base=path.parent))
     ids = [t.id for t in tasks]
     if len(ids) != len(set(ids)):
@@ -100,6 +115,8 @@ def select(tasks: list[BenchTask], only: str | None) -> list[BenchTask]:
 
 
 def prompt_for(task: BenchTask, part: str) -> str:
+    if task.dialog:
+        return DIALOG_PROMPT.format(prompt=task.prompt.strip(), part=part)
     return BENCH_PROMPT.format(prompt=task.prompt.strip(), part=part, fit=", check_fit" if task.needs_fit else "")
 
 
@@ -124,11 +141,26 @@ def score_script(task: BenchTask, script: Path, out: Path, run: scoring.JobRunne
     return {**scoring.summary(results), "checks": [r.as_dict() for r in results]}
 
 
+def score_dialog(task: BenchTask, run: dict) -> dict:
+    """Run a dialog task's checks on a run record (dialog.record(state), or a saved fixture)."""
+    results = dialog.run_checks(run, task.checks)
+    return {**scoring.summary(results), "checks": [r.as_dict() for r in results]}
+
+
 def selftest(tasks: list[BenchTask], out: Path) -> list[dict]:
     """Every reference must pass every check; every known bad script must fail exactly the checks
     the manifest lists for it (as a multiset of check names). [{task, script, ok, why, ...}]"""
     rows = []
     for t in tasks:
+        if t.dialog:  # reference and bad files are run records: no build
+            scored = [(t.reference_path, [])] + list(t.bad_paths().items())
+            for path, want in scored:
+                res = score_dialog(t, dialog.load(path))
+                got = sorted(r["check"] for r in res["checks"] if not r["ok"])
+                ok = got == sorted(want)
+                why = "" if ok else (f"reference fails {res['failures']}" if not want else f"failed {got}, expected {sorted(want)}")
+                rows.append({"task": t.id, "script": path.name, "expect": sorted(want), "ok": ok, "why": why, "result": res})
+            continue
         d = out / t.id
         ref = reference(t, d / "reference")
         res = score_script(t, t.reference_path, d / "good", ref=ref)
@@ -177,12 +209,25 @@ async def run_task(task: BenchTask, agent_name: str, endpoint, out: Path, limits
     part = task.id if not tag else f"{task.id}_{tag}"
     ws = endpoint.remote_workspace if endpoint.url else d / "workspace"
     ws.mkdir(parents=True, exist_ok=True)
-    code = task.reference_path.read_text(encoding="utf-8")
-    t = Task(task.id, part, prompt_for(task, part), [], hints={"code": code, "formats": "step,stl"})
+    if task.dialog:  # the fake agent replies with the reference's last message
+        hints = {"reply": dialog.load(task.reference_path)["final_text"]}
+    else:
+        hints = {"code": task.reference_path.read_text(encoding="utf-8"), "formats": "step,stl"}
+    t = Task(task.id, part, prompt_for(task, part), [], hints=hints, interactive=task.dialog)
     (d / "prompt.txt").write_text(t.prompt, encoding="utf-8")
     script = ws / "parts" / part / f"{part}.py"
-    await run_agent(t, agent_name, endpoint, ws, limits, d, rec)
+    state = await run_agent(t, agent_name, endpoint, ws, limits, d, rec)
     rec["seconds"] = round(time.time() - t0, 1)
+    if task.dialog and state.stop == "error":  # no answer to score: not a partial pass
+        rec.update(score=0.0, passed=False, result="agent error", checks=[], failures=["agent"])
+        return rec
+    if task.dialog:
+        res = score_dialog(task, dialog.record(state))
+        rec.update(result="scored", **res)
+        (d / "checks.json").write_text(json.dumps(res["checks"], indent=1, default=str), encoding="utf-8")
+        if state.final_text:
+            (d / "reply.md").write_text(state.final_text, encoding="utf-8")
+        return rec
     if not script.is_file():
         rec.update(score=0.0, passed=False, result="no script", checks=[], failures=["script"])
         return rec
@@ -218,14 +263,15 @@ async def run_bench(tasks: list[BenchTask], agent_name: str, endpoint, out: Path
 
 
 def _summary(results, agent_name, endpoint, limits, started, spent) -> dict:
-    import os
+    from .agents import instructions_mode, model_name
 
     scores = [r["score"] for r in results]
     return {
         "suite": "bench",
         "started": started.isoformat(timespec="seconds"),
         "agent": agent_name,
-        "model": os.environ.get("B123D_EVAL_MODEL", "claude-opus-5-5") if agent_name == "claude" else None,
+        "model": model_name(agent_name),
+        "instructions": instructions_mode(),
         "endpoint": endpoint.url or " ".join(endpoint.command or []),
         "limits": asdict(limits),
         "items": len(results),

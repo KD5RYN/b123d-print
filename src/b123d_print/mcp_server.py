@@ -36,16 +36,20 @@ from .partfiles import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
 
+# The first 512 characters stand on their own: some clients (Codex) keep no more than that.
 INSTRUCTIONS = """\
-Design 3D-printable parts as build123d Python scripts, then build, look at, check and export them.
+Design 3D-printable parts as build123d scripts. Before the first part, call read_guide (the full
+rules). Before modeling, list every dimension with its source and the ones missing, ask the user
+and WAIT for confirmation: never model on guesses. Dimensions: named UPPER_CASE Dims fields, mm;
+print orientation, bed at Z=0. Verify with render_preview, section and check before reporting. On
+a remote server a part is done only when download_part has brought its files to the user.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
 check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export (it returns a
 3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
-describe_model -> import_model in the script (prompt remix_part). Read the resource
-b123d-print://guide (or the prompt design_part_from_photos) for the rules: named UPPER_CASE dimensions in a Dims dataclass, mm,
-print orientation with the bed at Z=0, 0.2 mm mating clearance, HOLE_COMP from the user's config,
-list photo-read dimensions and wait for confirmation, verify with renders, sections and checks
-before reporting. render_preview and section return PNG images.
+describe_model -> import_model in the script (prompt remix_part). The rules (read_guide, the
+resource b123d-print://guide, or the prompt design_part_from_photos) also cover 0.2 mm mating
+clearance, HOLE_COMP from the user's config, holes, overhangs and strength. render_preview and
+section return PNG images.
 A failed result carries a DIAGNOSIS (cause, where, fixes): read it before changing the script;
 diagnose_failure looks deeper. Change a dimension with set_params (params lists them), not a
 rewrite. Check fits and walls with measure, not by eye.
@@ -68,6 +72,16 @@ comes inside the result; unzip it from where your client saved it (unzip -o <zip
 A part is not done until its files are on the user's machine: after export, call download_part
 (embed=True if your shell has no network) and unzip into the project folder, unless the user says to
 leave them on the server. Locally (stdio) the files are already in the project folder."""
+
+# The rules a model skips most, in every first result (list_parts, new_part, a part's first
+# write_part) and read_guide(essentials=True): tool results reach the model in every client,
+# resources and server instructions do not.
+ESSENTIALS = """\
+Rules (all of them: read_guide):
+1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation.
+2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
+3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL.
+4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network)."""
 
 REMOTE_DOC = """
     Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
@@ -420,12 +434,21 @@ def _show(image: str) -> str:
 
 
 @mcp.tool()
+def read_guide(essentials: bool = False) -> str:
+    """The workflow and print rules (the b123d-print://guide resource). Call it once before the
+    first part in a session: many clients never load that resource. essentials=True: only the
+    short checklist of the rules most often skipped."""
+    return ESSENTIALS if essentials else data("AGENTS.md")
+
+
+@mcp.tool()
 def list_parts() -> str:
     """List the part scripts in the workspace, with the settings in effect."""
     s = load_settings(_root())
     parts = [p.parent.name for p in find_parts(_root(), s.parts_dir)]
     return json.dumps(
         {
+            "rules": ESSENTIALS.splitlines(),
             "version": _pkg_version(),
             **({"workspace": _ws_name(), "files": "on the server: a temporary working copy; download_part(<name>) "
                                                     "brings a part home"} if _remote() else {"workspace": str(_root())}),
@@ -555,7 +578,8 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
     views, checks). name: lower_snake_case. example: copy a bundled example instead (see
     list_parts), e.g. 'hole_coupon' to calibrate hole compensation. Returns a short confirmation;
     the template is the b123d-print://template resource (or read_part), show_code=True returns
-    the new file's code here. Usually the next step is write_part with the whole script."""
+    the new file's code here. Usually the next step is write_part with the whole script.
+    If you haven't, call read_guide first; confirm the dimensions with the user before writing the script."""
     if not (_root() / "b123d-print.toml").exists():
         init_workspace(_root())
     try:
@@ -563,12 +587,24 @@ def new_part(name: str, description: str = "", example: str | None = None, show_
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
     rel = p.relative_to(_root()).as_posix()
+    _reminded(name)
     if show_code:
-        return f"Created {rel}. Edit it with write_part. Current code:\n\n{p.read_bytes().decode('utf-8')}"
+        return f"Created {rel}. Edit it with write_part.\n\n{ESSENTIALS}\n\nCurrent code:\n\n{p.read_bytes().decode('utf-8')}"
     src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
     return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
             "shows the current code. A single part returned by build() is named 'part' in checks "
-            f"(or '{name}'); return {{'name': part}} to name several.")
+            f"(or '{name}'); return {{'name': part}} to name several.\n\n{ESSENTIALS}")
+
+
+def _reminded(name: str) -> bool:
+    """True the first time this server process sees the part `name` in this workspace (new_part
+    or its first write_part): its result then carries ESSENTIALS. Later calls stay short."""
+    seen = STATE.setdefault("reminded", set())
+    key = (_ws_name(), name)
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
 
 
 @mcp.tool()
@@ -580,12 +616,15 @@ def read_part(name: str) -> str:
 @mcp.tool()
 def write_part(name: str, code: str) -> str:
     """Replace the whole part script with `code` (create the part with new_part first).
-    The script must define build(d) (+ Dims, VARIANTS); see b123d-print://guide. Then call build_part."""
+    The script must define build(d) (+ Dims, VARIANTS). If you haven't, call read_guide first;
+    confirm the dimensions with the user before writing the script. Then call build_part."""
     p = _script(name)
     err = _save_script(p, code)
     if err:
         return f"NOT SAVED: {err}"
-    return f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+    first = not (p.parent / "out").exists() and _reminded(name)  # the part's first save, never built
+    return (f"Saved {p.relative_to(_root()).as_posix()} ({len(code.splitlines())} lines). Next: build_part('{name}')."
+            + (f"\n\n{ESSENTIALS}" if first else ""))
 
 
 def _save_script(p: Path, code: str) -> str | None:
@@ -884,7 +923,8 @@ async def suggest_orientation(name: str, variant: str | None = None, piece: str 
 @_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
                  embed: bool = False, fresh: bool = False, view: str = "print") -> list:
-    """Export printable parts to parts/<name>/out/. Default: every part, all variants.
+    """Export printable parts to parts/<name>/out/. Default: every part, all variants. The
+    files must reach the user: on a remote server download_part brings them home.
     parts: comma-separated part names from build() to build and export only those; variant: one
     variant. Uses the pieces cached by an earlier build and leaves files already up to date as
     they are (templates too); fresh=True builds and writes everything again.

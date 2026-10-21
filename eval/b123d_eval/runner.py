@@ -177,11 +177,14 @@ async def run_eval(items: list[Item], agent_name: str, endpoint: Endpoint, out: 
 
 def _summary(results, agent_name, endpoint, limits, criteria, started, spent) -> dict:
     scores = [r["score"] for r in results]
-    model = os.environ.get("B123D_EVAL_MODEL", "claude-opus-5-5") if agent_name == "claude" else None
+    from .agents import instructions_mode, model_name
+
+    model = model_name(agent_name)
     return {
         "started": started.isoformat(timespec="seconds"),
         "agent": agent_name,
         "model": model,
+        "instructions": instructions_mode(),
         "endpoint": endpoint.url or " ".join(endpoint.command or []),
         "limits": asdict(limits),
         "criteria": asdict(criteria),

@@ -81,6 +81,12 @@ assistant works blind: ask it to render the part and describe what it sees, and 
 in `parts/<name>/out/` yourself. "Not documented" means the client's MCP docs don't say.
 **Prompts** (`design_review`, `new_part_workflow`, ...) are shortcuts; every tool works without them.
 
+**The rules.** The workflow rules (confirm dimensions before modeling, verify before reporting,
+bring the files home) are the `b123d-print://guide` resource and the server's instructions, and
+many clients pass neither to the model. If your client doesn't read MCP resources, tell it to
+call `read_guide`: the tool returns the same text. The first results (`list_parts`, `new_part`)
+also carry a short checklist of the rules most often skipped.
+
 ## Claude Desktop
 
 Settings → Developer → Edit Config (`claude_desktop_config.json`): the block in
