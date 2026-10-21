@@ -32,7 +32,7 @@ def test_formats(tmp_path, monkeypatch):
     from b123d_print.config import parse_formats
 
     assert parse_formats("3MF, .png") == ("3mf", "png")
-    assert parse_formats("all") == ("step", "stl", "3mf", "png", "glb", "print", "hardware")
+    assert parse_formats("all") == ("step", "stl", "3mf", "png", "glb", "print", "hardware", "bom", "bom_csv")
     with pytest.raises(ValueError):
         parse_formats("obj")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))

@@ -23,8 +23,19 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 WORKSPACE_FILE = "b123d-print.toml"
-FORMATS = ("step", "stl", "3mf", "png", "glb", "print", "hardware")  # every export format; `formats` picks a subset
-DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb, print or hardware)
+FORMATS = ("step", "stl", "3mf", "png", "glb", "print", "hardware", "bom", "bom_csv")  # every export format; `formats` picks a subset
+DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb, print, hardware, bom or bom_csv)
+SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb"}  # out/ files of a format, by suffix
+TAGGED = {"print": "_print.md", "hardware": "_hardware.json", "bom": "_bom.md", "bom_csv": "_bom.csv"}  # ... and by name end
+
+
+def out_file_wanted(filename: str, formats) -> bool:
+    """Is out/<filename> a file of one of `formats` (the download and pull filters)? The text
+    formats share suffixes (.md, .json), so they are told apart by the end of the name."""
+    name = filename.lower()
+    return any(name.endswith(TAGGED[f]) if f in TAGGED else name.endswith(SUFFIX[f]) for f in formats)
+
+
 IMAGE_SIZES = ("normal", "small")  # render size: "small" is about 800 px wide (cheaper to send to a model)
 
 
@@ -42,7 +53,7 @@ class Settings:
     max_triangles: int = 50_000  # import_model refuses meshes with more triangles (simplify them first)
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
-    formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps), print (the print sheet), hardware (declared BOM JSON)
+    formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps), print (the print sheet), hardware (declared BOM JSON), bom / bom_csv (the shopping list as Markdown / CSV)
     style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)

@@ -10,6 +10,8 @@
 | `.glb` | binary glTF: web pages, three.js, Blender, Windows 3D Viewer, AR; one named, colored node per piece, in meters (glTF's unit) and Y-up (glTF's axes); a tessellated mesh, not an exact solid. Not in the default set: ask for it with `formats="glb"` or `all` |
 | `_print.md` | the [print sheet](slicing.md#the-print-sheet): size, filament and time estimates, supports, tip-over, walls and infill, fits and hole compensation, assembly notes, for the slicer. Not in the default set: `formats="print"` or `all` |
 | `_hardware.json` | the declared whole-assembly [hardware BOM](../scripts/convention.md#declared-hardware): versioned JSON metadata, with variant and confirmation status; opt in with `formats="hardware"` or `all` |
+| `_bom.md` | the [shopping list](slicing.md#what-do-i-need-to-buy) of the declared hardware: one table (Qty, Item, Specification, Used for, Source/link, Status), identical items merged, items without a confirmed specification marked **check before ordering**, and a total. Reads as plain text and renders on GitHub and in editors. Opt in with `formats="bom"` or `all` |
+| `_bom.csv` | the same list as CSV for a spreadsheet (Excel, Google Sheets) or a shopping cart: UTF-8 with a byte-order mark, RFC 4180 quoting, and cells that start with `=`, `+`, `-` or `@` prefixed with `'` so a spreadsheet never runs them as formulas. Opt in with `formats="bom_csv"` or `all` |
 | `_view.glb`, `_view.html` | the [3D view](#3d-view-in-the-browser): `export` writes one per variant (`view=`) |
 
 !!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
@@ -20,11 +22,13 @@
 
 Pick them in your config (`formats = ["3mf", "png"]`, see [Settings](settings.md)), per run
 (`b123d-print build --formats step,3mf`), or with `formats=` on the MCP `export` tool. `all`
-means all seven (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`). Default: `step`, `stl`, `3mf` and `png`.
+means all nine (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`, `bom`, `bom_csv`). Default: `step`, `stl`, `3mf` and `png`.
 What to do with the files in the slicer: [From part to print](slicing.md).
 
-The `hardware` download/pull format filter selects only `*_hardware.json` BOMs; other JSON
-outputs, such as traced outlines, remain available in an unfiltered whole-part download.
+The download/pull format filter tells the text formats apart by name: `print` selects only
+`*_print.md`, `hardware` only `*_hardware.json`, `bom` only `*_bom.md` and `bom_csv` only
+`*_bom.csv`. Other outputs, such as traced outlines, remain available in an unfiltered whole-part
+download.
 
 Files go to `parts/<name>/out/`. A variant's files carry its key as a suffix, and section
 views carry the plane and position (`plate_2gang_to_1gang_xy2.45.png` is the `XY` section at

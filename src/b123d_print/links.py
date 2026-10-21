@@ -35,7 +35,7 @@ ROOT_WS = "_"  # stands for the shared root workspace (no valid workspace name s
 
 TYPES = {".3mf": "model/3mf", ".stl": "model/stl", ".step": "model/step", ".stp": "model/step",
          ".png": "image/png", ".json": "application/json", ".zip": "application/zip",
-         ".glb": "model/gltf-binary", ".md": "text/markdown; charset=utf-8"}
+         ".glb": "model/gltf-binary", ".md": "text/markdown; charset=utf-8", ".csv": "text/csv; charset=utf-8"}
 
 
 def derive_secret(token: str | None, explicit: str | None = None) -> bytes:

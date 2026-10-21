@@ -40,6 +40,7 @@ b123d-print check
 | `new <name> [-d/--description text] [--from <example>]` | scaffold `parts/<name>/<name>.py` from the template, or from a bundled example |
 | `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
 | `check [parts] [--variant v] [-v/--verbose] [--json]` | run the checks; exit code 1 on any failure; `-v` also lists passing checks |
+| `bom [parts] [--variant v] [--count N] [--csv]` | what to buy: the hardware the parts declare in `hardware(d)` as one Markdown table, identical items merged across parts and summed; `--count` multiplies the quantities, `--csv` prints CSV instead. Builds nothing |
 | `metrics [parts] [--variant v] [--style s] [--up +Y] [--json]` | the [design review](../using/design-review.md) numbers and the suggestions the part's style triggers (filament roughly ±20 %, time a rough estimate); never fails |
 | `orient [parts] [--variant v] [--piece name] [--load X] [--image] [--json]` | rank the ways to put each part on the bed: supports, contact, height, time, bridges, tip-over, the load against the layers; prints the `Rot(...)` to apply in `build(d)` (see [suggest_orientation](../using/tools.md#suggest_orientation)); `--image` renders the top choice to `out/<part>_orient.png`; never fails, changes nothing |
 | `fit [parts] [--variant v] [--hole-tol mm] [-v/--verbose] [--json]` | [fit between the pieces](../using/fit.md) of each part's `assembly(d)`: overlaps, gaps under the clearance, hole alignment across pieces; exit code 1 on any failure; `-v` also lists the pairs that fit |
@@ -73,7 +74,7 @@ b123d-print check
 Global options, before the command: `--root <folder>` (the workspace; default the nearest
 folder with a `b123d-print.toml`, else the current folder) and `--version`.
 
-`parts` is a list of part names or script paths; without it, `build`, `check`, `metrics` and `orient` take every part
+`parts` is a list of part names or script paths; without it, `build`, `check`, `bom`, `metrics` and `orient` take every part
 in the workspace. Each command's full `--help` output is in the [Reference](../reference.md#b123d-print).
 
 ## Agents and `AGENTS.md`
@@ -104,5 +105,6 @@ Everything the CLI and the server use is importable from `b123d_print`: `export`
 `hole_comp`, `clearance` and `printer`.
 
 The `--formats` choice `print,hardware` writes a print sheet and a versioned declared hardware
-BOM (`_hardware.json`); `all` includes both. Hardware quantities cover the entire selected
+BOM (`_hardware.json`); `bom` and `bom_csv` write the shopping list as `_bom.md` and `_bom.csv`;
+`all` includes them all. Hardware quantities cover the entire selected
 variant even with `--only` ([declaring hardware](../scripts/convention.md#declared-hardware)).

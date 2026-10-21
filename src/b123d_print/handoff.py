@@ -32,11 +32,12 @@ import time
 import zipfile
 from pathlib import Path
 
+from .config import out_file_wanted
+
 LAST_USE = ".b123d-print-last-use"
 SUBDIRS = ("out", "ref")
 MAX_BYTES = 1_000_000_000  # a zip / tar of one part; refs are capped at 50 MB each, so this is generous
 STORED = (".3mf", ".png", ".zip")  # already compressed
-SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb", "print": ".md", "hardware": ".json"}
 SWEEP_EVERY = 3600.0  # seconds between retention sweeps
 TRASH = ".trash-"
 WORKSPACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")  # an HTTP workspace name (?workspace=)  # a workspace being removed is renamed to workspaces/.trash-<name>-<random> first
@@ -114,7 +115,6 @@ def part_files(ws: Path, parts_dir: str, name: str, variant: str | None = None,
     script = folder / f"{name}.py"
     if not script.is_file() or script.is_symlink():
         raise HandoffError(f"no part {name!r}")
-    want_suffix = {SUFFIX[f] for f in formats} if formats else None
     keys = None
     if variant is not None:
         key = "" if variant in ("", "standard") else variant
@@ -123,9 +123,7 @@ def part_files(ws: Path, parts_dir: str, name: str, variant: str | None = None,
             raise HandoffError(f"no variant {variant!r}; the variants are {[k or 'standard' for k in keys]}")
     out = [(p.name, p) for p in _plain_files(folder)]
     for p in _plain_files(folder / "out"):
-        if want_suffix is not None and p.suffix.lower() not in want_suffix:
-            continue
-        if want_suffix is not None and p.suffix.lower() == ".json" and not p.name.lower().endswith("_hardware.json"):
+        if formats and not out_file_wanted(p.name, formats):
             continue
         if keys is not None and _variant_of(p.stem, name, keys) != key:
             continue

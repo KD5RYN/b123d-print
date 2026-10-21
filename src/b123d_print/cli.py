@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, setup, new, build, check, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
+"""`b123d-print` command line: init, setup, new, build, check, bom, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
 and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -488,6 +488,31 @@ def cmd_diagnose(args) -> int:
     return 1 if bad else 0
 
 
+def cmd_bom(args) -> int:
+    """The shopping list of the declared hardware (hardware(d)), merged across the parts given."""
+    from . import hardware
+    from .project import dims, load, variant_key, variants
+
+    entries = []
+    for script in _targets(args):
+        try:
+            mod = load(script)
+            keys = list(variants(mod))
+            key = variant_key(args.variant) if args.variant else keys[0]
+            if key not in keys:
+                raise KeyError(f"no variant {args.variant!r}; variants: {[k or 'standard' for k in keys]}")
+            items = hardware.declared(mod, dims(mod, key))
+        except Exception as e:  # noqa: BLE001 - one unreadable part is reported in the list, not a crash
+            if args.parts:
+                sys.exit(f"bom: {script.stem}: {e}")
+            entries.append({"part": script.stem, "error": str(e).strip('"')})
+            continue
+        entries.append({"part": script.stem, "variant": key or "standard", "variants": [k or "standard" for k in keys],
+                        "declared": items is not None, "items": [item.record() for item in items or []]})
+    sys.stdout.write(hardware.shopping_list(entries, args.count, "csv" if args.csv else "table"))
+    return 0
+
+
 def cmd_params(args) -> int:
     """The Dims fields of a part (read from the script, not run)."""
     from .params import read
@@ -954,6 +979,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant", help="default: the first variant")
     p.add_argument("--only", metavar="PIECES", help="comma-separated piece names: only those")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("bom", help="what to buy: the hardware the parts declare (hardware(d)) as one merged table, or CSV")
+    p.add_argument("parts", nargs="*", help="part names or script paths (default: all, merged into one list)")
+    p.add_argument("--variant")
+    p.add_argument("--count", type=int, default=1, help="how many assemblies: multiplies every quantity (default 1)")
+    p.add_argument("--csv", action="store_true", help="CSV instead of the Markdown table (for a spreadsheet or cart)")
     p = sub.add_parser("params", help="list a part's Dims fields (type, value, source comment) and variant overrides")
     p.add_argument("part", help="part name or script path")
     p.add_argument("--json", action="store_true")
@@ -1112,6 +1142,11 @@ def main(argv: list[str] | None = None) -> int:
             return {"metrics": cmd_metrics, "orient": cmd_orient, "styles": cmd_styles}[args.cmd](args)
         except ValueError as e:
             sys.exit(str(e))
+    if args.cmd == "bom":
+        try:
+            return cmd_bom(args)
+        except ValueError as e:
+            sys.exit(f"bom: {e}")
     if args.cmd in ("diagnose", "params", "set", "measure"):
         from .params import ParamError
         from .templates import TemplateError

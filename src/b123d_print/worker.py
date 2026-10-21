@@ -59,6 +59,7 @@ from b123d_print import measure  # noqa: E402  (measure)
 from b123d_print.project import Pieces  # noqa: E402
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 from b123d_print import fit  # noqa: E402  (fit between pieces)
+from b123d_print import hardware  # noqa: E402  (hardware_list: the declared bought parts)
 from b123d_print import trace as tr  # noqa: E402  (outline tracing)
 import scipy.interpolate  # noqa: E402,F401  (trace's spline fit, loaded before the guard)
 import contourpy  # noqa: E402,F401  (trace's contours)
@@ -351,6 +352,11 @@ def do(job: dict, warned: list | None = None) -> dict:
     if key is not None and key not in keys:
         raise KeyError(f"no variant {want!r}; variants: {[k or 'standard' for k in keys]}")
     op = job["op"]
+    if op == "hardware":  # the declared bought parts (hardware_list): hardware(d) only, nothing is built
+        k = key if key is not None else keys[0]
+        items = hardware.declared(mod, dims(mod, k))
+        return {"variant": k or "standard", "variants": [kk or "standard" for kk in keys], "declared": items is not None,
+                "items": [item.record() for item in items or []]}
     out = Path(job["out_dir"])
     settings = load_settings(script)
     # the build cache: only in a worker that records what the script reads (main), and only in

@@ -193,6 +193,11 @@ and an empty list, which does not assert that no hardware is needed. An explicit
 has `declared: true`. URLs and descriptions are escaped table data; they are never fetched or
 executed. Scripts retain the existing network restrictions.
 
+To order from it, the `bom` and `bom_csv` formats (`_bom.md`, `_bom.csv`) and the `hardware_list`
+tool (CLI `b123d-print bom`) turn the same entries into a shopping list: identical items (same
+description and specification) are merged with their quantities summed, and unconfirmed items say
+**check before ordering** ([what do I need to buy?](../using/slicing.md#what-do-i-need-to-buy)).
+
 ### Library and custom model stand-ins
 
 Reuse `bd_warehouse`'s metadata for its `Screw`, `Nut` (including `HeatSetNut`) and `Washer`
