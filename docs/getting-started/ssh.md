@@ -80,7 +80,7 @@ terminals and every kind of forwarding. `ssh-serve` then answers only four reque
 | The client runs | It gets |
 | --- | --- |
 | `ssh you@server` (what the MCP client does) | the MCP server, in that workspace |
-| `ssh you@server pull <part> --tree [--formats ...] [--variant ...]` | the whole part, script, `out/` and `ref/` (what `b123d-print pull` uses), read-only; without `--tree` only its `out/` files (what 0.3.0 clients ask for) |
+| `ssh you@server pull <part> --tree [--nested] [--formats ...] [--variant ...]` | the whole part, script, `out/` and `ref/` (what `b123d-print pull` uses), read-only; `--nested` keeps `out/`'s folders (`out/print/...`, what 0.3.11 clients ask for), without it the files come flat in `out/` (0.3.1 to 0.3.10 clients); without `--tree` only its `out/` files (what 0.3.0 clients ask for) |
 | `ssh you@server push <part> <file> [--overwrite]` | stores what it sends as `parts/<part>/ref/<file>`, a model to [remix](../using/remix.md) (what `b123d-print push` uses): STL, 3MF or STEP only, up to 50 MB, nowhere else |
 | `ssh you@server version` | the version, workspace and sandbox |
 
@@ -111,8 +111,11 @@ b123d-print pull bracket --from you@server
 ```
 
 Run it in the project folder: it writes the same layout a local install does,
-`parts/bracket/bracket.py`, `parts/bracket/out/...` and `parts/bracket/ref/...`. `--formats 3mf`
-and `--variant <key>` narrow the `out/` files. The key allows nothing but this, the MCP server,
+`parts/bracket/bracket.py`, `parts/bracket/out/...` (sorted into `print/`, `cad/`, `images/` and
+`docs/`) and `parts/bracket/ref/...`. `--formats 3mf` and `--variant <key>` narrow the `out/`
+files. A 0.3.11 server sends the folders only to a 0.3.11 or newer `pull`; an older client gets a
+flat `out/`. `pull` also sorts an older flat copy already in the project folder, and the flat
+files from a server older than 0.3.11. The key allows nothing but this, the MCP server,
 `push` and `version`: no shell, ssh session or scp, and the results tell the agent so.
 
 `pull` runs on the laptop (install b123d-print there too, or use

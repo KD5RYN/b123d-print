@@ -8,6 +8,7 @@ from build123d import Align, Box, Cylinder, Pos
 
 from b123d_print import checks as ck
 from b123d_print import templates as tp
+from b123d_print import outdir
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
 HOLES = [(20.0, 10.0, 3.4), (-20.0, 10.0, 3.4), (-20.0, -10.0, 4.4), (20.0, -10.0, 4.4)]  # x, y, d
@@ -197,9 +198,10 @@ def test_templates_hook_exports_with_every_variant(tmp_path):
         tag = "holder" + (f"_{key}" if key else "")
         assert set(s["templates"]) == {f"{tag}_template_face_bottom", f"{tag}_template_xy1"}
         assert s["templates"][f"{tag}_template_face_bottom"]["x"] == (40.0 if not key else 60.0)
-    names = sorted(p.name for p in (script.parent / "out").iterdir())
-    assert names == ["holder.stl", "holder_template_face_bottom.stl", "holder_template_xy1.stl",
-                     "holder_wide.stl", "holder_wide_template_face_bottom.stl", "holder_wide_template_xy1.stl"]
+    names = [rel for rel, _ in outdir.files(script.parent / "out")]
+    assert names == ["README.md", "print/holder.stl", "print/holder_wide.stl",
+                     "print/templates/holder_template_face_bottom.stl", "print/templates/holder_template_xy1.stl",
+                     "print/templates/holder_wide_template_face_bottom.stl", "print/templates/holder_wide_template_xy1.stl"]
 
 
 def test_cli_faces_and_template(tmp_path, capsys):
@@ -212,12 +214,12 @@ def test_cli_faces_and_template(tmp_path, capsys):
     assert main(["--root", str(tmp_path), "faces", "holder", "--highlight", "bottom"]) == 0
     out = capsys.readouterr().out
     assert "bottom normal (0.0, 0.0, -1.0)" in out and "holes: d 3.4 at (-14.0, 0.0, 0.0), d 3.4 at (14.0, 0.0, 0.0)" in out
-    assert (script.parent / "out" / "holder_face1.png").is_file()
+    assert (script.parent / "out" / "images" / "holder_face1.png").is_file()
     assert main(["--root", str(tmp_path), "template", "holder", "--crop", "14,0,2:10,10,10", "--formats", "3mf",
                  "--variant", "standard"]) == 0
     out = capsys.readouterr().out
     assert "holder_template_crop_14_0_2: 10.00 x 10.00 x 5.00 mm" in out
-    assert (script.parent / "out" / "holder_template_crop_14_0_2.3mf").is_file()
+    assert (script.parent / "out" / "print" / "templates" / "holder_template_crop_14_0_2.3mf").is_file()
     with pytest.raises(SystemExit, match="misses the part"):
         main(["--root", str(tmp_path), "template", "holder", "--slice", "XY:20"])
 

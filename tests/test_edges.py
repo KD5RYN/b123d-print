@@ -141,7 +141,7 @@ def test_cli_edges(plate, capsys):
     out = capsys.readouterr().out
     assert "plate part: 2 of 15 edges (14 convex, 1 seam)" in out
     assert "selector: part.edges().filter_by(GeomType.CIRCLE)" in out
-    assert (plate.parent / "out" / "plate_edges9-10.png").is_file()
+    assert (plate.parent / "out" / "images" / "plate_edges9-10.png").is_file()
     assert main(["--root", root, "edges", "plate", "--json", "--convexity", "seam"]) == 0
     assert json.loads(capsys.readouterr().out)["matched"] == 1
     with pytest.raises(SystemExit, match="ids are 1 to 15"):
@@ -161,7 +161,7 @@ def test_list_edges_tool_through_the_sandbox(plate, monkeypatch):
     assert "selector: part.edges().filter_by(Axis.X)" in head
     data = json.JSONDecoder().raw_decode("{" + rest)[0]
     assert data["face"] and len(data["edges"]) == 5 and data["selector"]["verified"]
-    assert (plate.parent / "out" / "plate_edges1-2-3-4.png").is_file()
+    assert (plate.parent / "out" / "images" / "plate_edges1-2-3-4.png").is_file()
     out = anyio.run(lambda: m.list_edges("plate", kind="curve"))
     assert out[0].startswith("ERROR: EdgeError: edge type 'curve'")
 

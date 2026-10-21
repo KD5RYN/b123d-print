@@ -119,7 +119,8 @@ prompt; `b123d-print setup` in a terminal): printer, material, export formats, s
 calibration coupons.
 
 **Then ask:** *"Design a 40 mm round spacer, 10 mm tall, with an M3 hole."* The files land in
-your parts folder under `parts/<name>/out/`, ready for your slicer. The first start downloads a
+your parts folder under `parts/<name>/out/`; the file for your slicer is in `out/print/`
+([what to save](https://kd5ryn.github.io/b123d-print/using/what-to-save/)). The first start downloads a
 few hundred MB and can take a few minutes ([Troubleshooting](https://kd5ryn.github.io/b123d-print/troubleshooting/)).
 The assistant checks its work by looking at its renders, so use a client that passes tool
 images to the model (Claude Desktop and Claude Code do).

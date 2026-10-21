@@ -104,10 +104,10 @@ make_template(name, kind, plane?, at?, face?, center?, size?, thickness?, label?
 - `kind="slice"`: `plane` (`XY`, `XZ`, `YZ`) and `at` (mm).
 - `kind="crop"`: `center` and `size`, each `[x, y, z]` or `"x,y,z"` in mm.
 
-`make_template` writes `parts/<name>/out/<name>[_<variant>][_<part>]_template_<id>.*` in the
-`formats` asked for (default: your `formats` setting), plus the template's render and the
-`_where` picture, and returns the size, label, notes, the check findings and, over HTTP, a
-[download link](../getting-started/http.md#get-the-files) for each file. On a remote server
+`make_template` writes `<name>[_<variant>][_<part>]_template_<id>.*` in the `formats` asked for
+(default: your `formats` setting): the 3MF and STL to `parts/<name>/out/print/templates/`, the
+STEP to `out/cad/`, the template's render and the `_where` picture to `out/images/`. It returns
+the size, label, notes, the check findings and, over HTTP, a [download link](../getting-started/http.md#get-the-files) for each file. On a remote server
 `download_part` brings them home with the rest of the part.
 
 ## From the command line

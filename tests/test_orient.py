@@ -205,7 +205,7 @@ def test_cli_orient(tmp_path, monkeypatch, capsys):
         "part = Cylinder(4, 30, align=BED) + Pos(0, 0, 30) * Cylinder(15, 6, align=BED)\n", encoding="utf-8")
     assert main(["orient", "mush", "--image"]) == 0
     out = capsys.readouterr().out
-    assert "Rot(180, 0, 0)" in out and (d / "out" / "mush_orient.png").is_file()
+    assert "Rot(180, 0, 0)" in out and (d / "out" / "images" / "mush_orient.png").is_file()
     assert main(["orient", "mush", "--json", "--load", "X"]) == 0
     import json
 

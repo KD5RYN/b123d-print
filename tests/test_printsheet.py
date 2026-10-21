@@ -59,7 +59,7 @@ def test_export_writes_the_sheet(tmp_path):
     script = _part(tmp_path)
     mod = project.load(script)
     s = project.export_variant(mod, script, "wide", formats=("print",))
-    sheet = tmp_path / "parts/duo/out/duo_wide_print.md"
+    sheet = tmp_path / "parts/duo/out/print/duo_wide_print.md"
     assert [str(sheet)] == s["files"]
     text = sheet.read_text(encoding="utf-8")
     assert text.startswith("# duo_wide: print sheet")
@@ -78,7 +78,7 @@ def test_sheet_says_how_much_holes_are_enlarged(tmp_path):
     script = _part(tmp_path)
     (tmp_path / "b123d-print.toml").write_text("[print]\nhole_comp = 0.3\n", encoding="utf-8")
     project.export_variant(project.load(script), script, "", formats=("print",))
-    text = (tmp_path / "parts/duo/out/duo_print.md").read_text(encoding="utf-8")
+    text = (tmp_path / "parts/duo/out/print/duo_print.md").read_text(encoding="utf-8")
     assert text.count("HOLE COMPENSATION BUILT IN: every hole is cut 0.3 mm larger than drawn") == 2  # banner + slicer list
     assert "X-Y hole compensation at 0" in text and "not on another printer" in text
 
@@ -87,9 +87,9 @@ def test_sheet_goes_home(tmp_path):
     script = _part(tmp_path)
     project.export_variant(project.load(script), script, "", formats=("print", "stl"))
     got = [rel for rel, _ in handoff.part_files(tmp_path, "parts", "duo", formats=["print"])]
-    assert "out/duo_print.md" in got and not any(r.endswith(".stl") for r in got)
+    assert "out/print/duo_print.md" in got and not any(r.endswith(".stl") for r in got)
     assert [rel for rel, _ in handoff.part_files(tmp_path, "parts", "duo", variant="standard")
-            if rel.endswith(".md")] == ["out/duo_print.md"]
+            if rel.endswith(".md")] == ["out/README.md", "out/print/duo_print.md"]
 
 
 def test_single_part_sheet_is_short(tmp_path):

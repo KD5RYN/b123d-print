@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.11 — unreleased
+
+- **`out/` sorted into folders, and a "What to save" page** (#124): every export used to write
+  everything into one flat `parts/<name>/out/` list. Now `out/print/` holds what you open in the
+  slicer (3MF, STL and the print sheet; fit-test templates in `out/print/templates/`),
+  `out/cad/` STEP and GLB, `out/images/` previews, sections, before/after and compare pictures,
+  and `out/docs/` the BOM, hardware JSON and the offline 3D view; `out/README.md` lists the
+  files to slice. Local, HTTP (`download_part`, signed links, the 3D view) and SSH (`b123d-print
+  pull`) all give the same tree, and the `formats` filter works as before. Old flat parts: the
+  next export (or any tool run on the part, or a `pull` into the folder) moves the old files
+  into their folders, so a part never has both layouts; downloading an old flat part still
+  works. A 0.3.1–0.3.10 client pulling over SSH from a 0.3.11 server still gets a flat `out/`;
+  upgrade it for the folders. Signed links and pulls only reach files in `out/` and these
+  folders, never through a symlink. New page: [What to save](https://kd5ryn.github.io/b123d-print/using/what-to-save/)
+  (only the script, `ref/` and `b123d-print.toml` need keeping; on a shared server, the copy
+  `download_part` brings home is your record).
+
 ## 0.3.10 — unreleased
 
 - **Calibration per printer on shared servers, and printer nicknames** (#121): on an HTTP or

@@ -79,8 +79,8 @@ def test_export_variant_subset_and_handoff(tmp_path):
     result = project.export_variant(mod, script, "wide", formats=("print", "hardware", "stl"), only="pin")
     assert set(result["parts"]) == {"pin"}
     out = script.parent / "out"
-    sheet = (out / "duo_wide_print.md").read_text(encoding="utf-8")
-    raw = (out / "duo_wide_hardware.json").read_text(encoding="utf-8")
+    sheet = (out / "print/duo_wide_print.md").read_text(encoding="utf-8")
+    raw = (out / "docs/duo_wide_hardware.json").read_text(encoding="utf-8")
     bom = json.loads(raw)
     assert bom["schema_version"] == 1 and bom["variant"] == "wide" and bom["scope"] == "whole_assembly"
     assert bom["declared"] is True
@@ -94,17 +94,17 @@ def test_export_variant_subset_and_handoff(tmp_path):
     assert hardware.json_text(hardware.declared(mod, project.dims(mod, "wide")), "wide") == raw
     # The default variant gets its own quantities and files.
     project.export_variant(mod, script, "", formats=("hardware",), only="pin")
-    assert json.loads((out / "duo_hardware.json").read_text())["items"][0]["quantity"] == 4
+    assert json.loads((out / "docs/duo_hardware.json").read_text())["items"][0]["quantity"] == 4
     for filename in ("duo_trace.json", "duo_wide_trace.json", "unrelated.json"):
-        (out / filename).write_text("{}", encoding="utf-8")
+        (out / "docs" / filename).write_text("{}", encoding="utf-8")
     files = dict(handoff.part_files(tmp_path, "parts", "duo", variant="wide", formats=["print", "hardware"]))
-    assert set(files) == {"duo.py", "out/duo_wide_print.md", "out/duo_wide_hardware.json"}
+    assert set(files) == {"duo.py", "out/README.md", "out/print/duo_wide_print.md", "out/docs/duo_wide_hardware.json"}
     files = dict(handoff.part_files(tmp_path, "parts", "duo", formats=["hardware"]))
-    assert set(files) == {"duo.py", "out/duo_hardware.json", "out/duo_wide_hardware.json"}
+    assert set(files) == {"duo.py", "out/README.md", "out/docs/duo_hardware.json", "out/docs/duo_wide_hardware.json"}
     files = dict(handoff.part_files(tmp_path, "parts", "duo", variant="standard", formats=["hardware"]))
-    assert set(files) == {"duo.py", "out/duo_hardware.json"}
+    assert set(files) == {"duo.py", "out/README.md", "out/docs/duo_hardware.json"}
     # Omitting the filter retains the existing whole-folder handoff behavior.
-    assert "out/unrelated.json" in dict(handoff.part_files(tmp_path, "parts", "duo"))
+    assert "out/docs/unrelated.json" in dict(handoff.part_files(tmp_path, "parts", "duo"))
 
 
 def test_data_stays_data_and_models_are_lazy():
@@ -162,7 +162,7 @@ def assembly(d):
     mod = project.load(script)
     result = project.export_variant(mod, script, "", formats=("hardware", "stl"), only="pin")
     assert set(result["parts"]) == {"pin"}
-    assert not list((script.parent / "out").glob("*sensor.stl"))
+    assert not list((script.parent / "out").rglob("*sensor.stl"))
     # BOM-only metadata did not import the model, but assembly uses the existing conversion.
     pc = project.Pieces(mod, project.dims(mod, ""))
     asm = pc.assembly()
@@ -174,8 +174,8 @@ def assembly(d):
     checked = project.check_share(mod, "", load_settings(script))
     assert any(f["check"] == "import" and f["target"] == "sensor.stl" for f in checked["pre"])
     files = dict(handoff.part_files(tmp_path, "parts", "duo", formats=["hardware"]))
-    assert set(files) == {"duo.py", "out/duo_hardware.json", "ref/sensor.stl"}
-    entry = json.loads(files["out/duo_hardware.json"].read_text())["items"][0]
+    assert set(files) == {"duo.py", "out/README.md", "out/docs/duo_hardware.json", "ref/sensor.stl"}
+    entry = json.loads(files["out/docs/duo_hardware.json"].read_text())["items"][0]
     assert entry["source"] == "ref/sensor.stl" and entry["units"] == "inch"
 
 
@@ -222,9 +222,9 @@ def test_legacy_and_optional_format(tmp_path):
     result = project.export_variant(project.load(script), script, "", formats=("print", "hardware"), only="pin")
     assert "hardware" not in DEFAULT_FORMATS and "hardware" in parse_formats("all")
     assert len(result["files"]) == 2
-    sheet = (script.parent / "out/duo_print.md").read_text(encoding="utf-8")
+    sheet = (script.parent / "out/print/duo_print.md").read_text(encoding="utf-8")
     assert "Declared hardware" not in sheet
-    bom = json.loads((script.parent / "out/duo_hardware.json").read_text())
+    bom = json.loads((script.parent / "out/docs/duo_hardware.json").read_text())
     assert bom["items"] == [] and bom["declared"] is False
 
 
@@ -249,7 +249,7 @@ def hardware(d):
                              tmp_path, script.parent / "out", timeout=120)
     assert result["ok"], result
     assert {Path(p).name for p in result["variants"][0]["files"]} == {"plate_print.md", "plate_hardware.json"}
-    assert json.loads((script.parent / "out/plate_hardware.json").read_text())["items"][0]["needs_confirmation"] is True
+    assert json.loads((script.parent / "out/docs/plate_hardware.json").read_text())["items"][0]["needs_confirmation"] is True
 
 
 def test_cache_tracks_declaration_and_variant_dims(tmp_path):
@@ -267,10 +267,10 @@ def test_cache_tracks_declaration_and_variant_dims(tmp_path):
     script.write_text((SCRIPT + HOOK).replace('int(d.W / 10)', 'int(d.W / 10) + 1'), encoding="utf-8")
     after = times(export()["files"])
     assert all(after[name] != before[name] for name in before)
-    assert json.loads((script.parent / "out/duo_hardware.json").read_text())["items"][0]["quantity"] == 5
+    assert json.loads((script.parent / "out/docs/duo_hardware.json").read_text())["items"][0]["quantity"] == 5
     # Changing a dimension used only by hardware still invalidates both artifacts.
     code = script.read_text().replace('W: float = 40.0', 'W: float = 80.00')  # avoid same-size .pyc reuse
     script.write_text(code, encoding="utf-8")
     final = times(export()["files"])
     assert all(final[name] != after[name] for name in final)
-    assert json.loads((script.parent / "out/duo_hardware.json").read_text())["items"][0]["quantity"] == 9
+    assert json.loads((script.parent / "out/docs/duo_hardware.json").read_text())["items"][0]["quantity"] == 9

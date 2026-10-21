@@ -28,11 +28,26 @@ What to do with the files in the slicer: [From part to print](slicing.md).
 The download/pull format filter tells the text formats apart by name: `print` selects only
 `*_print.md`, `hardware` only `*_hardware.json`, `bom` only `*_bom.md` and `bom_csv` only
 `*_bom.csv`. Other outputs, such as traced outlines, remain available in an unfiltered whole-part
-download.
+download. `out/README.md` always comes along.
 
-Files go to `parts/<name>/out/`. A variant's files carry its key as a suffix, and section
-views carry the plane and position (`plate_2gang_to_1gang_xy2.45.png` is the `XY` section at
-Z = 2.45).
+## Where each file goes
+
+Files go to `parts/<name>/out/`, sorted into folders by file name:
+
+| Folder | Files |
+| --- | --- |
+| `out/print/` | `.3mf`, `.stl`, `_print.md`: what you open in the slicer |
+| `out/print/templates/` | `.3mf` and `.stl` of [fit-test templates](templates.md) |
+| `out/cad/` | `.step`, `.glb` (including `_view.glb`) |
+| `out/images/` | `.png`: previews, section views, before/after, compare, orientation, trace and highlight pictures |
+| `out/docs/` | `_bom.md`, `_bom.csv`, `_hardware.json`, `_view.html`, trace outlines (`_outline.json`, `_outline.py`) |
+| `out/README.md` | a short index: what is where, which file to slice |
+
+A template's STEP goes to `cad/` and its PNGs to `images/`, like any other. A variant's files
+carry its key as a suffix, and section views carry the plane and position
+(`images/plate_2gang_to_1gang_xy2.45.png` is the `XY` section at Z = 2.45). Parts exported before
+0.3.11 had every file directly in `out/`; the next export (or any tool run on the part) moves
+them into their folders. Which of these files to keep: [What to save](what-to-save.md).
 
 ## 3D view in the browser
 
@@ -41,12 +56,12 @@ view per variant (its `view=` parameter: `print`, the default, shows the printab
 bed as they print, side by side; `assembly` shows `assembly(d)` with its stand-ins; `none` makes
 none):
 
-- `parts/<name>/out/<name>[_<variant>]_view.glb` (or `_assembly_view.glb`): the model, one
+- `parts/<name>/out/cad/<name>[_<variant>]_view.glb` (or `_assembly_view.glb`): the model, one
   node per piece, each in its own color;
 - **over HTTP**, a signed view link: `https://<server>/view/<workspace>/<expires>.<signature>/<name>/<name>_view`.
   It opens the viewer page and needs no token; it expires with the download links
   (`--link-ttl`). `download_part` lists the view links again;
-- **locally** (stdio), `parts/<name>/out/<name>_view.html`: one self-contained file, viewer and
+- **locally** (stdio), `parts/<name>/out/docs/<name>_view.html`: one self-contained file, viewer and
   model inline. It opens from `file://`, works offline and loads nothing from the network, so you
   can mail it or keep it with the part. `b123d-print view <name>` writes the same file from the
   command line (`--assembly`, `--variant`, `--parts`, `--open` to open the browser too);

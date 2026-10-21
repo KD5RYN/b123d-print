@@ -56,6 +56,7 @@ from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
 from b123d_print import joints  # noqa: E402,F401  (split parts, joint helpers)
 from b123d_print import viewer  # noqa: E402  (the 3D view's GLB)
 from b123d_print import measure  # noqa: E402  (measure)
+from b123d_print import outdir  # noqa: E402  (out/'s folders)
 from b123d_print.project import Pieces  # noqa: E402
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 from b123d_print import fit  # noqa: E402  (fit between pieces)
@@ -294,9 +295,14 @@ def do_compare(job: dict) -> dict:
     r = cmp.compare(job["reference"], job["candidate"], criteria=crit)
     res = {"text": r.text(), **{k: v for k, v in r.as_dict().items() if k in ("metrics", "checks", "alignment", "score", "passed")}}
     if job.get("image"):
-        res["image"] = str(cmp.render_comparison(job["reference"], job["candidate"], r, Path(job["out_dir"]) / job["image"],
+        res["image"] = str(cmp.render_comparison(job["reference"], job["candidate"], r, _image(job["out_dir"], job["image"]),
                                                  size=job.get("size", "normal")))
     return res
+
+
+def _image(out_dir: str, name: str) -> Path:
+    """Where a picture goes: images/ when out_dir is a part's out/ folder, else out_dir itself."""
+    return outdir.path(out_dir, name) if Path(out_dir).name == "out" else Path(out_dir) / name
 
 
 def do_describe(job: dict) -> dict:
@@ -306,7 +312,7 @@ def do_describe(job: dict) -> dict:
     if job.get("image"):
         out = Path(job["out_dir"])
         stem = Path(job["file"]).stem
-        res["image"] = str(render(part, out / f"{stem}_original{'_small' if job.get('size') == 'small' else ''}.png",
+        res["image"] = str(render(part, outdir.path(out, f"{stem}_original{'_small' if job.get('size') == 'small' else ''}.png"),
                                   f"original: {Path(job['file']).name}", size=job.get("size", "normal")))
     return res
 
@@ -329,7 +335,7 @@ def do_trace(job: dict) -> dict:
                    threshold=a.get("threshold"), invert=a.get("invert"), clean=a.get("clean"),
                    min_hole=a.get("min_hole", 1.0), pick=a.get("pick"))
     stem = Path(job["file"]).stem
-    tr.write(res, job["out_dir"], stem, title=Path(job["file"]).name)
+    tr.write(res, job["out_dir"], stem, title=Path(job["file"]).name, sort=True)
     return {"text": tr.text(res), "trace": res.as_dict(), "snippet": tr.snippet(res)}
 
 
@@ -364,6 +370,8 @@ def do(job: dict, warned: list | None = None) -> dict:
     cache = None
     if READS.installed and job.get("workspace") and _norm(out) == _norm(script.parent / "out"):
         cache = CacheConfig(Path(job["workspace"]), READS, fresh=bool(job.get("fresh")))
+    if _norm(out) == _norm(script.parent / "out"):
+        outdir.tidy(out)  # files of the flat layout before 0.3.11 into their folders: never both layouts
     only = job.get("parts") or None
 
     if op == "build":
@@ -396,7 +404,7 @@ def do(job: dict, warned: list | None = None) -> dict:
         sel, layout = _preview_parts(pc, which)
         name = f"{tag}_{(which or 'all').replace(',', '+')}_preview{small}.png"
         title = tag + (f" ({which})" if which else "") + (f", {layout}" if layout != "single" else "")
-        f = render(sel if len(sel) > 1 else sel[0][0], out / name, title, size=size)
+        f = render(sel if len(sel) > 1 else sel[0][0], outdir.path(out, name), title, size=size)
         # report the printable parts as built (print orientation), not moved copies or stand-ins
         reports = {lbl: report(p) for p, _, lbl in _parts_for(pc, None if layout == "assembly" else which)}
         return {"image": str(f), "variant": k or "standard", "parts": reports, "layout": layout,
@@ -404,7 +412,7 @@ def do(job: dict, warned: list | None = None) -> dict:
     if op == "section":
         sel = _parts_for(pc, job.get("parts") or ("assembly" if hasattr(mod, "assembly") else None))
         plane, at = job["plane"].upper(), float(job["at"])
-        f = section_view(sel, plane, at, out / f"{tag}_{plane.lower()}{round(at, 3):g}{small}.png", tag, size=size)
+        f = section_view(sel, plane, at, outdir.path(out, f"{tag}_{plane.lower()}{round(at, 3):g}{small}.png"), tag, size=size)
         return {"image": str(f), "variant": k or "standard", "plane": plane, "at": at, "timing": pc.timing()}
     if op == "check" and job.get("share"):  # one of several workers sharing a check run (mcp_server.check)
         share = tuple(job["share"])
@@ -441,7 +449,7 @@ def do(job: dict, warned: list | None = None) -> dict:
             n, top = next(iter(best.items()))
             rows = ranked[n]["candidates"]
             title = f"{tag}{'_' + n if n != 'part' else ''}: {orient._fmt_rot(rows[0]['rot'])}, {rows[0]['down']} side on the bed"
-            res["image"] = str(render(top, out / f"{tag}{'_' + n if n != 'part' else ''}_orient{small}.png", title, size=size))
+            res["image"] = str(render(top, outdir.path(out, f"{tag}{'_' + n if n != 'part' else ''}_orient{small}.png"), title, size=size))
         return res
     if op == "before_after":
         parts, orig, _ = built(mod, d, pc)
@@ -456,7 +464,7 @@ def do(job: dict, warned: list | None = None) -> dict:
         res = {"variant": k or "standard", "part": pname, **tp.list_faces(part)}
         if job.get("highlight") is not None:
             face, fid = tp.find_face(part, job["highlight"])
-            img = out / f"{tag}{'_' + pname if pname != 'part' else ''}_face{fid}{small}.png"
+            img = outdir.path(out, f"{tag}{'_' + pname if pname != 'part' else ''}_face{fid}{small}.png")
             res["image"] = str(tp.highlight(part, [face], img, f"{tag}: face {fid} (red)", size=size))
             res["highlight"] = fid
         return res
@@ -469,7 +477,7 @@ def do(job: dict, warned: list | None = None) -> dict:
                                job.get("radius", 1.0), job.get("limit", ed.LIMIT))}
         if job.get("highlight") is not None:
             chosen, ids = ed.find_edges(part, job["highlight"])
-            img = out / f"{tag}{'_' + pname if pname != 'part' else ''}_edges{'-'.join(map(str, ids[:6]))}{small}.png"
+            img = outdir.path(out, f"{tag}{'_' + pname if pname != 'part' else ''}_edges{'-'.join(map(str, ids[:6]))}{small}.png")
             res["image"] = str(ed.highlight(part, chosen, img, f"{tag}: edges {ed.id_text(ids)} (red)", size=size))
             res["selector"] = ed.selector(part, ids)
         return res

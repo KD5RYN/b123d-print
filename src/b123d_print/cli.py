@@ -10,6 +10,7 @@ import sys
 from importlib.resources import files
 from pathlib import Path
 
+from . import outdir
 from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -241,8 +242,7 @@ def cmd_orient(args) -> int:
             for n, r in ranked.items():
                 tag = out_name(script.stem, key, "" if n == "part" else n)
                 if args.image:
-                    img = script.parent / "out" / f"{tag}_orient.png"
-                    img.parent.mkdir(exist_ok=True)
+                    img = outdir.path(script.parent / "out", f"{tag}_orient.png")
                     rows = r["candidates"]
                     r["image"] = str(render(best[n], img, f"{tag}: {orient._fmt_rot(rows[0]['rot'])}, {rows[0]['down']} "
                                                           "side on the bed"))
@@ -333,9 +333,7 @@ def cmd_faces(args) -> int:
             print("  curved: " + ", ".join(f"{n} {k}" for k, n in res["curved"].items()))
     if args.highlight is not None:
         face, fid = tp.find_face(part, args.highlight)
-        out = script.parent / "out"
-        out.mkdir(exist_ok=True)
-        img = tp.highlight(part, [face], out / f"{script.stem}{'_' + key if key else ''}_face{fid}.png",
+        img = tp.highlight(part, [face], outdir.path(script.parent / "out", f"{script.stem}{'_' + key if key else ''}_face{fid}.png"),
                            f"{script.stem}: face {fid} (red)")
         print(f"-> {img}")
     return 0
@@ -372,9 +370,7 @@ def cmd_edges(args) -> int:
             print(f"  ({res['note']})")
     if sel:
         chosen, ids = ed.find_edges(part, args.highlight)
-        out = script.parent / "out"
-        out.mkdir(exist_ok=True)
-        img = ed.highlight(part, chosen, out / f"{script.stem}{'_' + key if key else ''}_edges{'-'.join(map(str, ids[:6]))}.png",
+        img = ed.highlight(part, chosen, outdir.path(script.parent / "out", f"{script.stem}{'_' + key if key else ''}_edges{'-'.join(map(str, ids[:6]))}.png"),
                            f"{script.stem}: edges {ed.id_text(ids)} (red)")
         if not args.json:
             print(f"selector: {sel['expr']}" + (f"\n  {sel['import']}" if sel.get("import") else "")
@@ -928,7 +924,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant")
     p.add_argument("--piece", help="only this printable part of a script that builds several")
     p.add_argument("--load", help="the bending or tension direction as build(d) returns the part: X, 'along Y', XZ, 1,0,1")
-    p.add_argument("--image", action="store_true", help="also render the top choice to out/<part>_orient.png")
+    p.add_argument("--image", action="store_true", help="also render the top choice to out/images/<part>_orient.png")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("fit", help="fit between the pieces of assembly(d): overlaps, gaps under the clearance, hole alignment")
     p.add_argument("parts", nargs="*", help="part names or script paths (default: all with an assembly)")
@@ -1025,7 +1021,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--frame", default="auto", choices=("auto", "print", "assembly"),
                    help="print (as build() returns it) or assembly (as assembly(d) places it); default auto")
     p.add_argument("--variant", help="default: the first variant")
-    p.add_argument("--image", action="store_true", help="also draw the part with what was measured in red (out/)")
+    p.add_argument("--image", action="store_true", help="also draw the part with what was measured in red (out/images/)")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("styles", help="list the design styles (yours and the built-in ones), or show one")
     p.add_argument("name", nargs="?", help="a style to show, with based_on applied")

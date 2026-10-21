@@ -222,7 +222,7 @@ partial specification (for example, a known M3 thread with unknown length/head).
 retain the partial text and mark it for confirmation. Keep assembly instructions in
 `PRINT_NOTES`.
 
-The table (`print` format) and optional `<name>[_<variant>]_hardware.json` (`hardware` format)
+The table (`print` format) and optional `out/docs/<name>[_<variant>]_hardware.json` (`hardware` format)
 use the same entries sorted by ID. Quantities always cover the **whole selected variant's
 assembly**, even when exporting one printable piece with `parts=` / `--only`. They never scale
 by piece selection. `all` includes both formats; neither changes the default export formats.
@@ -231,7 +231,7 @@ and an empty list, which does not assert that no hardware is needed. An explicit
 has `declared: true`. URLs and descriptions are escaped table data; they are never fetched or
 executed. Scripts retain the existing network restrictions.
 
-To order from it, the `bom` and `bom_csv` formats (`_bom.md`, `_bom.csv`) and the `hardware_list`
+To order from it, the `bom` and `bom_csv` formats (`out/docs/<name>_bom.md`, `_bom.csv`) and the `hardware_list`
 tool (CLI `b123d-print bom`) turn the same entries into a shopping list: identical items (same
 description and specification) are merged with their quantities summed, and unconfirmed items say
 **check before ordering** ([what do I need to buy?](../using/slicing.md#what-do-i-need-to-buy)).

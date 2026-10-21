@@ -279,17 +279,23 @@ def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf"
 
 
 def export(part: Part, script_file: str, name: str | None = None, sections: tuple[float, ...] = (), formats=None) -> dict:
-    """Write out/<name>.{step,stl,3mf,png} next to the script (plus <name>_z<Z>.png per section height)
-    and print the bounding box. `name` defaults to the script's folder name."""
+    """Write <name>.{step,stl,3mf,png} into the script's out/ folders (print/, cad/, images/; see
+    outdir.py), plus images/<name>_z<Z>.png per section height, and print the bounding box. `name`
+    defaults to the script's folder name."""
+    from . import outdir
+    from .config import load_settings
+
     here = Path(script_file).resolve().parent
     name = name or here.name
     out = here / "out"
-    from .config import load_settings
-
-    export_files(part, out, name, formats or load_settings(script_file).formats)
+    outdir.tidy(out)
+    for fmt in formats or load_settings(script_file).formats:
+        if fmt in ("step", "stl", "3mf", "png", "glb"):
+            export_files(part, outdir.path(out, f"{name}.{fmt}").parent, name, [fmt])
     for z in sections:
-        section(part, z, out / f"{name}_z{round(z, 3):g}.png", name)
+        section(part, z, outdir.path(out, f"{name}_z{round(z, 3):g}.png"), name)
+    outdir.readme(out, name)
     d = report(part)
     print(f"{name}: {d['x']:.2f} x {d['y']:.2f} x {d['z']:.2f} mm, volume {d['volume']:.1f} mm^3, valid={d['valid']}")
-    print(f"  -> {out}/{name}.*")
+    print(f"  -> {out}/ (print/{name}.3mf for the slicer; see out/README.md)")
     return d

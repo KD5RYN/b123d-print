@@ -1,7 +1,7 @@
 """View a part in 3D in the browser: a GLB of its pieces and a small three.js page that shows it.
 
-    out/<name>[_<variant>]_view.glb           print layout: the printable parts on the bed, side by side
-    out/<name>[_<variant>]_assembly_view.glb  assembly layout: assembly(d), stand-ins included
+    out/cad/<name>[_<variant>]_view.glb           print layout: the printable parts on the bed, side by side
+    out/cad/<name>[_<variant>]_assembly_view.glb  assembly layout: assembly(d), stand-ins included
 
 One node per piece, named after it, each in its own color (render.PALETTE). glTF is in meters
 and Y-up; the page shows mm and the CAD axes (Z up, the bed at Z = 0).
@@ -13,7 +13,7 @@ package, no token: they hold nothing of anyone's). The page is the same static f
 part: nothing from the request or the model is written into it, so nothing can be injected.
 
 Locally (`b123d-print view`, or export over stdio) the page is one self-contained HTML file next
-to the GLB (offline_html): viewer and model inline, a CSP that allows exactly those inline
+in out/docs/ (offline_html): viewer and model inline, a CSP that allows exactly those inline
 scripts (by hash) and no network at all, so it works from file:// without a server.
 
 The viewer library is three.js (MIT), vendored as data/viewer/three.bundle.min.js by
@@ -118,8 +118,10 @@ def view_items(pieces, layout: str = "print", parts=None) -> list:
 
 
 def write_view(pieces, tag: str, out: Path, layout: str = "print", parts=None) -> Path:
-    """out/<tag>_view.glb (or <tag>_assembly_view.glb) for one variant's pieces."""
-    return write_glb(view_items(pieces, layout, parts), out / f"{stem(tag, layout)}.glb")
+    """out/cad/<tag>_view.glb (or <tag>_assembly_view.glb) for one variant's pieces."""
+    from . import outdir
+
+    return write_glb(view_items(pieces, layout, parts), outdir.path(out, f"{stem(tag, layout)}.glb"))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -190,8 +192,12 @@ def offline_html(glb: bytes, title: str) -> str:
 
 
 def write_offline(glb_path: Path, title: str | None = None) -> Path:
-    """<stem>.html next to <stem>.glb (the offline page); returns its path."""
-    out = glb_path.with_suffix(".html")
+    """The offline page <stem>.html: in out/docs/ for a GLB in a part's out/cad/ (outdir.py),
+    else next to the GLB; returns its path."""
+    from . import outdir
+
+    top = outdir.out_of(glb_path)
+    out = outdir.path(top, glb_path.stem + ".html") if top is not None else glb_path.with_suffix(".html")
     name = title or glb_path.stem.removesuffix("_view")
     out.write_text(offline_html(glb_path.read_bytes(), name), encoding="utf-8", newline="\n")
     return out

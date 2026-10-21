@@ -312,20 +312,28 @@ and **PNG** previews plus the section views. The user picks: the `formats` setti
 config, or `formats="3mf,png"` on one export. If the user has not said what they need and the
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
-The **print sheet** (`formats="print"`, off by default) writes `out/<name>_print.md` for the
+`export` sorts `parts/<name>/out/` by purpose: `print/` (3MF, STL and the print sheet: what the
+user opens in the slicer; fit-test templates in `print/templates/`), `cad/` (STEP, GLB), `images/`
+(previews, sections, before/after, compare) and `docs/` (BOM, hardware JSON, the 3D view HTML),
+plus a short `out/README.md` index. Point the user at `out/print/` for the slicer. Only the
+script, `ref/` and `b123d-print.toml` need keeping: one export makes `out/` again.
+The **print sheet** (`formats="print"`, off by default) writes `out/print/<name>_print.md` for the
 slicer: sizes, filament and time estimates, supports, tip-over, walls and infill, fits and hole
 compensation. Offer it when the user prints the part themselves; put assembly order, glue and
 inserts in a `PRINT_NOTES` field so the sheet carries them.
 After an export, **offer the 3D view** so the user can turn the part in a browser before printing:
-the view link `export` returns over HTTP (no token, it expires), or locally the `_view.html` it
-names (opens offline); `view="assembly"` shows the assembly.
+the view link `export` returns over HTTP (no token, it expires), or locally the
+`out/docs/<name>_view.html` it names (opens offline); `view="assembly"` shows the assembly.
 
 ## Remote server: bring the part home (required last step)
 
 Locally (stdio) everything is already in the project folder:
 
     parts/<name>/<name>.py      the script (the parametric source)
-    parts/<name>/out/...        exports, renders, section views
+    parts/<name>/out/print/...  3MF, STL, print sheet: what goes to the slicer
+    parts/<name>/out/cad/...    STEP, GLB
+    parts/<name>/out/images/... renders, section views
+    parts/<name>/out/docs/...   BOM, hardware JSON, 3D view HTML
     parts/<name>/ref/...        reference models (remixes)
 
 Over **HTTP or SSH** that same layout lives on the server, and the server is a workbench, not
@@ -346,7 +354,7 @@ ends with this as its **NEXT STEP**. Before reporting, always:
    call `download_part("<name>", embed=True)`: the zip (up to 8 MB) comes inside the result, and
    your client saves it to a file; run `unzip -o <saved zip> -d <project folder>` (one command,
    no `&&` or `|`).
-2. Check the files exist on the user's machine (e.g. list `parts/<name>/out/`).
+2. Check the files exist on the user's machine (e.g. list `parts/<name>/out/print/`).
 3. Then report, saying where the files are.
 
 If the client cannot run commands, give the user the link (or the command) and say the part is

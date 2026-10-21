@@ -173,4 +173,4 @@ def checks(d):
     assert [f.level for f in found] == [FAIL]
     images = [Path(p) for p in found[0].data["images"]]
     assert [p.name for p in images] == ["lidbox_motion_lid.png", "lidbox_motion_lid_section.png"]
-    assert all(p.is_file() and p.parent == script.parent / "out" for p in images)
+    assert all(p.is_file() and p.parent == script.parent / "out" / "images" for p in images)

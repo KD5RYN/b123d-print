@@ -129,7 +129,7 @@ about 0.01 mm of travel or, with no collision, the smallest clearance is closed 
 The finding's data holds the numbers (`min_clearance`, `min_at`, `min_pair`, `first_contact`,
 `volume`, `worst_at`, the sampled `curve`) and, under `images`, a render of the worst pose (the
 piece see-through where it started, the interference in red) and a section through the worst
-point, across the motion, in the part's `out/` folder.
+point, across the motion, in the part's `out/images/` folder.
 
 ![The flip_hinge example folded to 220 degrees: leaf B's tip in leaf A](../images/flip_hinge_motion_220.png)
 

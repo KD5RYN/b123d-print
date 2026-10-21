@@ -43,9 +43,11 @@ def test_formats(tmp_path, monkeypatch):
     monkeypatch.chdir(ws)
     assert main(["new", "blk"]) == 0
     assert main(["build", "blk"]) == 0
-    assert sorted(p.suffix for p in (ws / "parts/blk/out").iterdir()) == [".3mf"]
+    from b123d_print import outdir
+
+    assert [rel for rel, _ in outdir.files(ws / "parts/blk/out")] == ["README.md", "print/blk.3mf"]
     assert main(["build", "blk", "--formats", "step,png"]) == 0
-    assert {p.suffix for p in (ws / "parts/blk/out").iterdir()} >= {".step", ".png"}
+    assert {rel for rel, _ in outdir.files(ws / "parts/blk/out")} >= {"cad/blk.step", "images/blk.png"}
 
 
 def test_init_new_build_check(tmp_path, monkeypatch):
@@ -58,7 +60,7 @@ def test_init_new_build_check(tmp_path, monkeypatch):
     assert main(["new", "coupon", "--from", "hole_coupon"]) == 0
     assert main(["check"]) == 0
     assert main(["build", "bracket"]) == 0
-    assert (ws / "parts/bracket/out/bracket.stl").exists()
+    assert (ws / "parts/bracket/out/print/bracket.stl").exists() and (ws / "parts/bracket/out/README.md").exists()
 
 
 def test_agents_md_in_sync():

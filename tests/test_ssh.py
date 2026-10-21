@@ -210,8 +210,8 @@ def test_pull_cli(ws, tmp_path, monkeypatch):
     dest = tmp_path / "got"
     files = ssh.pull("box", "me@cad", dest, "3mf,stl", ssh=FAKE_SSH)
     assert sorted(p.relative_to(dest).as_posix() for p in files) == [
-        "parts/box/box.py", "parts/box/out/box.3mf", "parts/box/out/box.stl"]  # the local layout
-    assert (dest / "parts/box/out/box.3mf").read_bytes() == b"3mf-bytes"
+        "parts/box/box.py", "parts/box/out/print/box.3mf", "parts/box/out/print/box.stl"]  # the local layout, sorted
+    assert (dest / "parts/box/out/print/box.3mf").read_bytes() == b"3mf-bytes"
     with pytest.raises(RuntimeError, match="no part"):
         ssh.pull("nosuch", "me@cad", dest, ssh=FAKE_SSH)
     with pytest.raises(RuntimeError, match="bad part name"):
@@ -219,7 +219,8 @@ def test_pull_cli(ws, tmp_path, monkeypatch):
     r = subprocess.run([sys.executable, "-m", "b123d_print.cli", "pull", "box", "--from", "me@cad", "--formats", "png",
                         "-o", str(tmp_path / "cli"), "--ssh", FAKE_SSH], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert [p.name for p in (tmp_path / "cli/parts/box/out").iterdir()] == ["box.png"]
+    assert [p.relative_to(tmp_path / "cli/parts/box/out").as_posix()
+            for p in (tmp_path / "cli/parts/box/out").rglob("*") if p.is_file()] == ["images/box.png"]
 
 
 def test_shell_metacharacters_never_reach_a_shell(ws, tmp_path, monkeypatch):

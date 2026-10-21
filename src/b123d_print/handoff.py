@@ -4,7 +4,8 @@ A remote server (HTTP or SSH) is a workbench, not storage: the client takes the 
 in the same layout a local (stdio) install writes into the project folder:
 
     parts/<name>/<name>.py        the script (and any other plain file next to it)
-    parts/<name>/out/...          exports, renders, sections (all, or filtered by variant / format)
+    parts/<name>/out/...          exports, renders, sections (all, or filtered by variant / format),
+                                  in out/print/, out/cad/, out/images/, out/docs/ (outdir.py)
     parts/<name>/ref/...          reference models for a remix
 
 Over HTTP `download_part` returns one signed link to a zip of that (links.sign_zip); over SSH
@@ -32,10 +33,10 @@ import time
 import zipfile
 from pathlib import Path
 
+from . import outdir
 from .config import out_file_wanted
 
 LAST_USE = ".b123d-print-last-use"
-SUBDIRS = ("out", "ref")
 MAX_BYTES = 1_000_000_000  # a zip / tar of one part; refs are capped at 50 MB each, so this is generous
 STORED = (".3mf", ".png", ".zip")  # already compressed
 SWEEP_EVERY = 3600.0  # seconds between retention sweeps
@@ -96,7 +97,8 @@ def _plain_files(folder: Path) -> list[Path]:
 def part_files(ws: Path, parts_dir: str, name: str, variant: str | None = None,
                formats: list[str] | tuple[str, ...] | None = None) -> list[tuple[str, Path]]:
     """(path relative to the part folder, file) for everything that goes home: the part folder's
-    own files (the script), out/ (filtered by variant and formats) and ref/. Raises HandoffError."""
+    own files (the script), out/ and its folders (filtered by variant and formats; out/README.md
+    always, and old flat out/<file>s still) and ref/. Raises HandoffError."""
     from .links import LinkError, check_path
 
     try:
@@ -122,12 +124,13 @@ def part_files(ws: Path, parts_dir: str, name: str, variant: str | None = None,
         if key not in keys:
             raise HandoffError(f"no variant {variant!r}; the variants are {[k or 'standard' for k in keys]}")
     out = [(p.name, p) for p in _plain_files(folder)]
-    for p in _plain_files(folder / "out"):
-        if formats and not out_file_wanted(p.name, formats):
-            continue
-        if keys is not None and _variant_of(p.stem, name, keys) != key:
-            continue
-        out.append((f"out/{p.name}", p))
+    for rel, p in outdir.files(folder / "out"):
+        if rel != outdir.README:
+            if formats and not out_file_wanted(p.name, formats):
+                continue
+            if keys is not None and _variant_of(p.stem, name, keys) != key:
+                continue
+        out.append((f"out/{rel}", p))
     out += [(f"ref/{p.name}", p) for p in _plain_files(folder / "ref")]
     if sum(p.stat().st_size for _, p in out) > MAX_BYTES:
         raise HandoffError(f"part {name!r} is over {MAX_BYTES // 1_000_000} MB: narrow it with variant= or formats=")
@@ -151,9 +154,13 @@ def zip_bytes(files: list[tuple[str, Path]], prefix: str) -> bytes:
 
 
 def safe_rel(rel: str) -> bool:
-    """A relative path a client may write inside the part folder: <file>, out/<file> or ref/<file>."""
+    """A relative path a client may write inside the part folder: <file>, ref/<file>, out/<file> or
+    out/<folder>/<file> for a folder of outdir.FOLDERS (out/print/templates/<file> too)."""
     parts = rel.split("/")
-    if "\\" in rel or "\0" in rel or len(parts) > 2 or (len(parts) == 2 and parts[0] not in SUBDIRS):
+    if "\\" in rel or "\0" in rel:
+        return False
+    if len(parts) > 1 and not (parts[0] == "ref" and len(parts) == 2
+                               or parts[0] == "out" and "/".join(parts[1:-1]) in ("", *outdir.FOLDERS)):
         return False
     return all(s and s not in (".", "..") and not s.startswith(".") and ":" not in s for s in parts)
 

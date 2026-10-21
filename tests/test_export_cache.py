@@ -71,8 +71,8 @@ def test_second_export_writes_nothing(tmp_path, made):
     from PIL import Image
 
     out = script.parent / "out"
-    assert Image.open(out / "trim_b_template_xy2_where.png").width < 1000
-    assert Image.open(out / "trim_a.png").width > 1500
+    assert Image.open(out / "images/trim_b_template_xy2_where.png").width < 1000
+    assert Image.open(out / "images/trim_a.png").width > 1500
 
 
 def test_changed_piece_edited_and_removed_files(tmp_path, made):
@@ -89,17 +89,17 @@ def test_changed_piece_edited_and_removed_files(tmp_path, made):
     assert not any(n.startswith(("trim_a.", "trim_b.", "trim_b_template")) for n in changed)
     assert len(made) == 1  # b did not change: its template is read back
     # a file edited or removed after the export is written again
-    (out / "trim_a.stl").write_bytes(b"solid broken\n")
-    (out / "trim_b.3mf").unlink()
+    (out / "print/trim_a.stl").write_bytes(b"solid broken\n")
+    (out / "print/trim_b.3mf").unlink()
     third, _ = export(script)
-    assert (out / "trim_b.3mf").is_file() and (out / "trim_a.stl").stat().st_size > 100
+    assert (out / "print/trim_b.3mf").is_file() and (out / "print/trim_a.stl").stat().st_size > 100
     assert len(third["files"]) == len(first["files"])
     # a corrupt template entry: made again
     (entry,) = (out / ".cache").glob("template-*")
     (entry / "part.brep").write_text("broken", encoding="utf-8")
-    (out / "trim_b_template_xy2.stl").unlink()
+    (out / "print/templates/trim_b_template_xy2.stl").unlink()
     export(script)
-    assert len(made) == 2 and (out / "trim_b_template_xy2.stl").stat().st_size > 100
+    assert len(made) == 2 and (out / "print/templates/trim_b_template_xy2.stl").stat().st_size > 100
 
 
 def test_fresh_no_cache_and_formats(tmp_path, made):

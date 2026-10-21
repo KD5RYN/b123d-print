@@ -48,6 +48,7 @@ from .config import Settings, hole_comp_source, load_settings, parse_formats, sa
 from .motion import _Swept
 from .motion import image_path as motion_image
 from .partfiles import find_parts, resolve_part, timing_lines  # noqa: F401  (light: the MCP server imports them from there)
+from . import outdir
 from .render import export_files, render, report, section_view
 
 
@@ -413,7 +414,7 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                     else:
                         if isinstance(spec, _Swept) and spec.image is None and getattr(mod, "__file__", None):
                             script = Path(mod.__file__)  # a motion draws its worst pose next to the exports
-                            spec = replace(spec, image=str(motion_image(script.parent / "out", out_name(script.stem, key, ""), spec)))
+                            spec = replace(spec, image=str(motion_image(script.parent / "out" / outdir.IMAGES, out_name(script.stem, key, ""), spec)))
                         found = found_cache.get(spec) if found_cache is not None else None
                         if found is None:
                             found = spec.run(lookup, asm, settings)
@@ -1305,14 +1306,17 @@ class Outputs:
 EXPORT_ORDER = ("step", "stl", "3mf", "png", "glb")  # export_files' order
 
 
-def export_part(p, out: Path, name: str, formats, outputs: Outputs | None) -> list[Path]:
-    """export_files, skipping the files `outputs` says are current (each format on its own)."""
-    if outputs is None:
-        return export_files(p, out, name, formats)
+def export_part(p, out: Path, name: str, formats, outputs: Outputs | None, template: bool = False) -> list[Path]:
+    """export_files into out/'s folders (outdir.folder: print/, cad/, images/; a template's print
+    files in print/templates/), skipping the files `outputs` says are current (each format on its own)."""
     files = []
     for fmt in (f for f in EXPORT_ORDER if f in formats):
-        files.append(outputs.write(out / f"{name}.{fmt}", outputs.key("part", name, fmt, p),
-                                   lambda fmt=fmt: export_files(p, out, name, [fmt])[0]))
+        f = outdir.path(out, f"{name}.{fmt}", template)
+
+        def write(fmt=fmt, f=f):
+            return export_files(p, f.parent, name, [fmt])[0]
+
+        files.append(outputs.write(f, outputs.key("part", name, fmt, p), write) if outputs is not None else write())
     return files
 
 
@@ -1448,6 +1452,7 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     formats = formats or settings.formats
     out = out or script.parent / "out"
     out.mkdir(parents=True, exist_ok=True)
+    outdir.tidy(out)  # files of the flat layout before 0.3.11 into their folders: never both layouts
     d = dims(mod, key)
     pc = make_pieces(mod, key, d, settings, cache)
     outputs = Outputs(pc.cache) if pc.cache is not None else None
@@ -1476,27 +1481,28 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         title = out_name(script.stem, key, "")
         text = printsheet.sheet(mod, d, parts, settings, title, hardware_items=hardware_items,
                                 variant=key, hardware_resolved=True)
-        f = _export_text(out / f"{out_name(script.stem, key, 'print')}.md", text, outputs)
+        f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'print')}.md"), text, outputs)
         summary["files"].append(str(f))
     if "hardware" in formats:
         text = hardware.json_text(hardware_items, key)
-        f = _export_text(out / f"{out_name(script.stem, key, 'hardware')}.json", text, outputs)
+        f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'hardware')}.json"), text, outputs)
         summary["files"].append(str(f))
     if "bom" in formats:
         import datetime
 
         text = hardware.bom_file_markdown(hardware_items, script.stem, key, datetime.date.today().isoformat())
-        f = _export_text(out / f"{out_name(script.stem, key, 'bom')}.md", text, outputs)
+        f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'bom')}.md"), text, outputs)
         summary["files"].append(str(f))
     if "bom_csv" in formats:
-        f = _export_text(out / f"{out_name(script.stem, key, 'bom')}.csv", hardware.bom_file_csv(hardware_items), outputs,
+        f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'bom')}.csv"), hardware.bom_file_csv(hardware_items), outputs,
                          newline="")
         summary["files"].append(str(f))
     summary["timing"] = pc.timing()
     if "png" not in formats:
+        outdir.readme(out, script.stem)
         return summary
     if asm:
-        f, title = out / f"{out_name(script.stem, key, 'assembly')}.png", f"{out_name(script.stem, key, '')} assembly"
+        f, title = outdir.path(out, f"{out_name(script.stem, key, 'assembly')}.png"), f"{out_name(script.stem, key, '')} assembly"
         f = (outputs.write(f, outputs.key("assembly", title, asm), lambda: render(asm, f, title)) if outputs is not None
              else render(asm, f, title))
         summary["files"].append(str(f))
@@ -1513,13 +1519,14 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         else:
             sel = asm or [(p, None, n or "part") for n, p in parts.items()]
         title = out_name(script.stem, key, "")
-        f, caption = out / f"{title}_{v.plane.lower()}{round(v.at, 3):g}.png", f"{title}{', ' + v.title if v.title else ''}"
+        f, caption = outdir.path(out, f"{title}_{v.plane.lower()}{round(v.at, 3):g}.png"), f"{title}{', ' + v.title if v.title else ''}"
 
         def draw(sel=sel, v=v, f=f, caption=caption):
             return section_view(sel, v.plane, v.at, f, caption)
 
         f = outputs.write(f, outputs.key("section", v.plane, v.at, caption, sel), draw) if outputs is not None else draw()
         summary["files"].append(str(f))
+    outdir.readme(out, script.stem)
     return summary
 
 
@@ -1557,11 +1564,11 @@ def write_template(script: Path, key: str, parts: dict, spec, out: Path, formats
         if tc is not None:
             tc.save(entry, tid, made)
     name = out_name(script.stem, key, f"template_{tid}" if pname == "part" else f"{pname}_template_{tid}")
-    files = [str(f) for f in export_part(made.part, out, name, [f for f in formats if f != "png"], outputs)]
+    files = [str(f) for f in export_part(made.part, out, name, [f for f in formats if f != "png"], outputs, template=True)]
     if "png" in formats:
-        shots = [(out / f"{name}.png", f"{name} (laid flat for printing)",
+        shots = [(outdir.path(out, f"{name}.png"), f"{name} (laid flat for printing)",
                   lambda f, t: render(made.part, f, t, size=size), made.part),
-                 (out / f"{name}_where.png", f"{name}: where it comes from (red) on {out_name(script.stem, key, '') or pname}",
+                 (outdir.path(out, f"{name}_where.png"), f"{name}: where it comes from (red) on {out_name(script.stem, key, '') or pname}",
                   lambda f, t: tp.highlight(part, [made.where], f, t, size=size), (part, made.where))]
         for f, title, draw, shapes in shots:
             if outputs is not None:
@@ -1595,10 +1602,10 @@ def before_after(orig: Part, parts: dict, out: Path, stem: str, size: str = "nor
     remix_part = next(iter(parts.values())) if len(parts) == 1 else Part(Compound(
         [s for p in parts.values() for s in p.solids()]).wrapped)
     small = "_small" if size == "small" else ""
-    a = render(side_by_side([(orig, "original"), (remix_part, "remix")]), out / f"{stem}_before_after{small}.png",
+    a = render(side_by_side([(orig, "original"), (remix_part, "remix")]), outdir.path(out, f"{stem}_before_after{small}.png"),
                f"{stem}: original (left) and remix (right)", size=size)
     r = cmp.compare(orig, remix_part)
-    b = cmp.render_comparison(orig, remix_part, r, out / f"{stem}_vs_original{small}.png",
+    b = cmp.render_comparison(orig, remix_part, r, outdir.path(out, f"{stem}_vs_original{small}.png"),
                               f"{stem}: original, red where the remix differs (score {r.score:.1f})", size=size)
     return {"files": [str(a), str(b)], "score": r.score, "text": r.text(), "metrics": r.metrics}
 
@@ -1629,7 +1636,7 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
                   f"{r['x']:.2f} x {r['y']:.2f} x {r['z']:.2f} mm, volume {r['volume']:.1f} mm^3, valid={r['valid']}")
         for line in timing_lines(s["timing"]):
             print("  " + line)
-        print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
+        print(f"  -> {len(s['files'])} files in {script.parent / 'out'} (slicer files in print/; see out/README.md)")
         if settings.hole_comp or settings.hole_comp_h:
             from .setup import hole_note
 

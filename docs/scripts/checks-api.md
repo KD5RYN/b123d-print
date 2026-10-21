@@ -220,7 +220,7 @@ Motion("lid", axis_point=(0, d.BOX_L / 2, d.BOX_H), axis_dir=(-1, 0, 0), start_d
 | `max_evals` | `96` | at most this many poses are measured |
 | `tol` | `0.01` | mm³ of interference that counts |
 | `label` | `""` | shown in the result and the picture's file name |
-| `image` | `None` | where the worst pose is drawn; `check` fills it in (`out/<script>[_<variant>]_motion_<part>[_<label>].png`, plus `..._section.png`); `""` for none |
+| `image` | `None` | where the worst pose is drawn; `check` fills it in (`out/images/<script>[_<variant>]_motion_<part>[_<label>].png`, plus `..._section.png`); `""` for none |
 
 ## `Slide`
 

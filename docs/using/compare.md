@@ -5,11 +5,11 @@ you modeled before, or the output of another tool. It works with STL, 3MF and ST
 side, and the two may be modeled in different orientations.
 
 ```bash
-b123d-print compare reference.stl parts/bracket/out/bracket.3mf --image deviation.png
+b123d-print compare reference.stl parts/bracket/out/print/bracket.3mf --image deviation.png
 ```
 
 From an MCP client, the `compare` tool does the same with files inside the workspace (paths
-relative to it, e.g. `refs/bracket.stl` and `parts/bracket/out/bracket.3mf`).
+relative to it, e.g. `refs/bracket.stl` and `parts/bracket/out/print/bracket.3mf`).
 
 ## What it does
 
@@ -67,7 +67,7 @@ or more. Grey shows candidate material where the reference has none.
 ```python
 from b123d_print.compare import Criteria, compare
 
-r = compare("reference.stl", "parts/bracket/out/bracket.3mf", criteria=Criteria(hausdorff_mm=2))
+r = compare("reference.stl", "parts/bracket/out/print/bracket.3mf", criteria=Criteria(hausdorff_mm=2))
 print(r.text())
 r.score, r.passed, r.metrics["hausdorff_mm"], r.failures()
 ```

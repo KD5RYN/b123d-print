@@ -541,11 +541,15 @@ def overlay(res: Trace, path: str | Path, title: str = "") -> Path:
     return path
 
 
-def write(res: Trace, out_dir: str | Path, stem: str, title: str = "") -> Trace:
-    """<stem>_outline.json, <stem>_outline.py and <stem>_trace.png in out_dir."""
+def write(res: Trace, out_dir: str | Path, stem: str, title: str = "", sort: bool = False) -> Trace:
+    """<stem>_outline.json, <stem>_outline.py and <stem>_trace.png in out_dir; sort=True (a part's
+    out/ folder): the outline files in docs/, the picture in images/ (outdir.py)."""
+    from . import outdir
+
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    js, py, png = out / f"{stem}_outline.json", out / f"{stem}_outline.py", out / f"{stem}_trace.png"
+    js, py, png = (outdir.path(out, n) if sort else out / n for n in (f"{stem}_outline.json", f"{stem}_outline.py",
+                                                                       f"{stem}_trace.png"))
     res.image = str(overlay(res, png, title))
     py.write_text(snippet(res), encoding="utf-8")
     res.files = {"json": str(js), "py": str(py), "png": str(png)}
