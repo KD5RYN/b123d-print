@@ -92,6 +92,12 @@ separate from inferred screw-hole advice. `all` includes both, defaults stay unc
 `print,hardware` when filtering a download or pull; source and `ref/` come home too. Descriptions
 and source URLs are data, never fetched or executed. A missing hook preserves the legacy sheet.
 
+**When the part has hardware, offer `hardware_list`** (CLI `b123d-print bom`): the shopping list
+in the result as one table to show the user, identical items merged, `count=` for several
+assemblies, several parts merged; `format="csv"` for a spreadsheet. The `bom` / `bom_csv` export
+formats write it as `_bom.md` / `_bom.csv`. Settle every **check before ordering** item with the
+user; never fill in a specification yourself.
+
 ## Big and multi-piece projects
 
 A part that takes long to build makes every step slow. The time limit is 240 s per call.

@@ -162,4 +162,170 @@ def markdown(items: list[Hardware] | None, variant: str) -> list[str]:
         values = [item.id, item.description, specification, str(item.quantity),
                   item.location, item.note, item.source_url, " / ".join(x for x in (item.source, item.units) if x)]
         lines.append("| " + " | ".join(_cell(v) for v in values) + " |")
-    return lines
+    return lines + ["", "Full list to order from: the `bom` (or `bom_csv`) export format, or the hardware_list tool "
+                        "(CLI `b123d-print bom`)."]
+
+
+# The shopping list: bom.md, bom.csv and hardware_list. One table, identical items merged.
+
+BOM_COLUMNS = ("Qty", "Item", "Specification", "Used for", "Source/link", "Status")
+CONFIRMED, CHECK = "confirmed", "check before ordering"
+FORMULA_START = ("=", "+", "-", "@", "＠", "\t", "\r")  # spreadsheet formula triggers (CSV injection)
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def bom_rows(groups, count: int = 1) -> list[dict]:
+    """Merge the declared items of one or more parts into shopping-list rows.
+
+    groups: [(part label, [Hardware or record dict, ...]), ...]; the label is "" for a single
+    part. Items with the same description and specification (case and spacing aside) are one
+    row with the quantities summed, times `count`. An item without a specification is never
+    merged with another: nothing says the two are the same thing. Rows are sorted by item.
+    """
+    if type(count) is not int or count < 1:
+        raise ValueError("count must be a positive whole number")
+    rows: dict[tuple, dict] = {}
+    for label, items in groups:
+        for item in items or []:
+            r = item.record() if isinstance(item, Hardware) else dict(item)
+            spec = r.get("specification", "")
+            key = (_norm(r["description"]), _norm(spec)) if spec else ("", label, r["id"])
+            row = rows.setdefault(key, {"qty": 0, "item": r["description"], "specification": spec,
+                                        "used_for": [], "links": [], "notes": [], "check": False})
+            row["qty"] += r["quantity"] * count
+            row["check"] |= bool(r.get("needs_confirmation")) or not spec
+            use = ": ".join(x for x in (label, r.get("location", "")) if x)
+            link = r.get("source_url") or r.get("source") or ""
+            for field, value in (("used_for", use), ("links", link), ("notes", r.get("note", ""))):
+                if value and value not in row[field]:
+                    row[field].append(value)
+    out = []
+    for row in sorted(rows.values(), key=lambda r: (_norm(r["item"]), _norm(r["specification"]))):
+        spec = row["specification"] or "not specified"
+        out.append({"qty": row["qty"], "item": row["item"],
+                    "specification": "; ".join([spec, *row["notes"]]),
+                    "used_for": "; ".join(row["used_for"]), "link": " ".join(row["links"]),
+                    "status": CHECK if row["check"] else CONFIRMED})
+    return out
+
+
+def bom_total(rows: list[dict]) -> str:
+    n = sum(r["qty"] for r in rows)
+    check = sum(r["status"] == CHECK for r in rows)
+    text = f"Total: {n} item{'s' * (n != 1)} on {len(rows)} line{'s' * (len(rows) != 1)}"
+    return text + (f", {check} to check before ordering." if check else ", all confirmed.")
+
+
+def _md(value: str) -> str:
+    """One table cell, readable as plain text: Markdown and HTML characters backslash-escaped
+    (data from the script cannot make links, HTML or extra cells), line breaks as spaces."""
+    value = re.sub(r"([\\`*\[\]<>|&~$])", r"\\\1", " ".join(value.split()))
+    return re.sub(r"(?<!\w)_|_(?!\w)", r"\\_", value)  # snake_case stays readable: _ inside a word is no emphasis
+
+
+def _md_link(value: str) -> str:
+    # A plain web address becomes an autolink (<https://...> reads fine as text); anything else is text.
+    return " ".join(f"<{v}>" if re.fullmatch(r"https?://[^\s<>|\\`]+", v) else _md(v) for v in value.split())
+
+
+def bom_markdown(rows: list[dict], title: str, intro: list[str] = (),
+                 empty: str = "No bought hardware is declared.") -> str:
+    """The shopping list as Markdown: a title, a line or two of context, one table padded into
+    columns (it reads as plain text too) and a total line."""
+    lines = [f"# {_md(title)}", ""]
+    for paragraph in intro:
+        lines += [paragraph, ""]
+    if not rows:
+        return "\n".join(lines + [empty]) + "\n"
+    cells = [list(BOM_COLUMNS)]
+    for r in rows:
+        status = CONFIRMED if r["status"] == CONFIRMED else f"**{CHECK}**"
+        cells.append([str(r["qty"]), _md(r["item"]), _md(r["specification"]), _md(r["used_for"]),
+                      _md_link(r["link"]), status])
+    width = [max(3, *(len(c[i]) for c in cells)) for i in range(len(BOM_COLUMNS))]
+
+    def line(c):
+        return "| " + " | ".join(v.rjust(w) if i == 0 else v.ljust(w) for i, (v, w) in enumerate(zip(c, width))) + " |"
+
+    rule = "| " + " | ".join(("-" * (w - 1) + ":") if i == 0 else "-" * w for i, w in enumerate(width)) + " |"
+    lines += [line(cells[0]), rule, *(line(c) for c in cells[1:]), "", bom_total(rows)]
+    return "\n".join(lines) + "\n"
+
+
+def _csv_cell(value) -> str | int:
+    if isinstance(value, int):
+        return value
+    value = " ".join(str(value).split())
+    return "'" + value if value.startswith(FORMULA_START) else value
+
+
+def bom_csv(rows: list[dict]) -> str:
+    """The same columns as CSV (RFC 4180: CRLF, quoted where needed). A cell starting with =, +,
+    -, @ is prefixed with ' so a spreadsheet shows it as text instead of running it."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\r\n")
+    w.writerow(BOM_COLUMNS)
+    for r in rows:
+        w.writerow([_csv_cell(r[k]) for k in ("qty", "item", "specification", "used_for", "link", "status")])
+    return buf.getvalue()
+
+
+def bom_file_markdown(items: list[Hardware] | None, part: str, variant: str, date: str) -> str:
+    """<name>[_<variant>]_bom.md: the shopping list for one variant's whole assembly."""
+    title = f"Hardware for {part}" + (f" ({variant})" if variant else "")
+    intro = [f"Variant: {_md(variant or 'standard')} · exported {date} by b123d-print. Quantities are for one "
+             "whole assembly. Items marked **check before ordering** have no confirmed specification yet."]
+    if items is None:
+        return bom_markdown([], title, intro, "The script declares no hardware: it has no `hardware(d)`.")
+    return bom_markdown(bom_rows([("", items)]), title, intro)
+
+
+def bom_file_csv(items: list[Hardware] | None) -> str:
+    """<name>[_<variant>]_bom.csv, UTF-8 with a byte-order mark so Excel reads it as UTF-8."""
+    return "﻿" + bom_csv(bom_rows([("", items or [])]))
+
+
+def shopping_list(entries: list[dict], count: int = 1, fmt: str = "table") -> str:
+    """hardware_list and `b123d-print bom`: the merged list of one or more parts as Markdown
+    (fmt="table") or CSV (fmt="csv").
+
+    entries: one per part, {"part", "variant", "variants", "declared", "items": [record, ...]}
+    (the worker's hardware op plus the part name), or {"part", "error"} for a part that could
+    not be read. Several parts are merged, with the part named in Used for.
+    """
+    if fmt not in ("table", "csv"):
+        raise ValueError(f"format {fmt!r}: use 'table' or 'csv'")
+    ok = [e for e in entries if "error" not in e]
+    many = len(entries) > 1
+
+    def label(e):
+        return e["part"] + (f" ({e['variant']})" if e["variant"] != "standard" else "") if many else ""
+
+    rows = bom_rows([(label(e), e["items"]) for e in ok], count)
+    if fmt == "csv":
+        return bom_csv(rows)
+    names = [e["part"] + (f" ({e['variant']})" if e.get("variant", "standard") != "standard" else "") for e in ok]
+    title = "Hardware for " + (", ".join(names) if names else "no parts")
+    intro = []
+    if count > 1:
+        intro.append(f"Quantities for **{count}** of each assembly.")
+    elif ok:
+        intro.append("Quantities for one whole assembly" + (" of each part." if many else "."))
+    for e in ok:
+        others = [v for v in e["variants"] if v != e["variant"]]
+        if others:
+            intro.append(f"{_md(e['part'])} also has variant(s) {', '.join(_md(v) for v in others)}: this list is for "
+                         f"{_md(e['variant'])} (pass variant= or part:variant for another).")
+    none = [e["part"] for e in ok if not e["declared"]]
+    if none:
+        intro.append(f"No `hardware(d)` declared in: {', '.join(_md(n) for n in none)}.")
+    for e in entries:
+        if "error" in e:
+            intro.append(f"Could not read {_md(e['part'])}: {_md(e['error'])}")
+    return bom_markdown(rows, title, intro)

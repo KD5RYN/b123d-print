@@ -34,12 +34,11 @@ import sys
 import tarfile
 from pathlib import Path
 
-from .config import FORMATS, load_settings, parse_formats
+from .config import FORMATS, load_settings, out_file_wanted, parse_formats
 
 KEY_RE = re.compile(r"^(?P<type>(?:ssh|ecdsa|sk)-[\w@.-]+)\s+(?P<blob>[A-Za-z0-9+/]+={0,3})(?:\s+(?P<comment>.*))?$")
 WORKSPACE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 PART_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")  # = cli.NAME_RE
-SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb", "print": ".md", "hardware": ".json"}
 MARK = "ssh-serve"  # how setup-ssh recognizes its own lines
 
 
@@ -128,12 +127,9 @@ def out_files(workspace: Path, part: str, formats=FORMATS) -> list[Path]:
     out = workspace / parts_dir / part / "out"
     if not out.is_dir() or out.is_symlink():
         return []
-    want = {SUFFIX[f] for f in formats}
     found = []
     for p in sorted(out.iterdir()):
-        if p.suffix.lower() not in want:
-            continue
-        if p.suffix.lower() == ".json" and not p.name.lower().endswith("_hardware.json"):
+        if not out_file_wanted(p.name, formats):
             continue
         try:
             found.append(servable(workspace, parts_dir, f"{parts_dir}/{part}/out/{p.name}"))

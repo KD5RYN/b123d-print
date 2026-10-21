@@ -933,7 +933,9 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     and 3D apps), print (the print sheet, <name>[_<variant>]_print.md: size, filament and time
     estimates, supports, tip-over, walls and infill, fits and hole compensation, PRINT_NOTES, for
     the slicer, including declared hardware), hardware (versioned whole-assembly BOM JSON,
-    <name>[_<variant>]_hardware.json), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
+    <name>[_<variant>]_hardware.json), bom and bom_csv (the shopping list of that hardware as a
+    Markdown table, <name>[_<variant>]_bom.md, and as CSV, _bom.csv; hardware_list returns it in
+    the result), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
     png). Ask the user which they want if unclear.
     view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
     parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
@@ -1274,7 +1276,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
     files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
-    = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print, hardware); the script and ref/ always come.
+    = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print, hardware, bom, bom_csv); the script and ref/ always come.
     Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
     embed=True also puts the zip (up to 8 MB) into the result (over HTTP and SSH), for clients
     whose shell has no network (Antigravity/agy) or that can neither fetch URLs nor read
@@ -1542,6 +1544,57 @@ async def check_fit(name: str, variant: str | None = None, hole_tol: float | Non
         return _error_text(res)
     head = "PASSED" if res["passed"] else "FAILED"
     return _scrub(head + "\n" + "\n\n".join(v["text"] for v in res["variants"]))
+
+
+@mcp.tool()
+async def hardware_list(name: str = "", variant: str | None = None, count: int = 1, parts: str | None = None,
+                        format: str = "table") -> str:
+    """What to buy: the bought hardware the script declares in hardware(d) (screws, inserts,
+    magnets, bearings), as one Markdown table to show the user: Qty | Item | Specification |
+    Used for | Source/link | Status ("check before ordering" where the specification is not
+    confirmed: ask the user, never guess it). Identical items are merged and summed. Offer it
+    when a part declares hardware. name: one part; parts: comma-separated part names to merge
+    into one list (each may be part:variant); neither: every part in the workspace. variant: the
+    variant (default: the standard one). count: how many assemblies ("for 4 brackets"), which
+    multiplies every quantity. format: 'table' (Markdown) or 'csv' (for a spreadsheet or cart).
+    Reads only hardware(d): builds nothing. The `bom` and `bom_csv` export formats write the
+    same list next to the exports. Changes nothing."""
+    if format not in ("table", "csv"):
+        raise ToolError(f"format {format!r}: use 'table' or 'csv'")
+    if type(count) is not int or not 1 <= count <= 100_000:
+        raise ToolError("count must be a whole number from 1 to 100000")
+    wanted = [x.strip() for x in ([name] if name else []) + (parts.split(",") if parts else []) if x.strip()]
+    every = not wanted
+    if every:
+        wanted = [p.parent.name for p in find_parts(_root(), load_settings(_root()).parts_dir)]
+        if not wanted:
+            raise ToolError("no parts in the workspace yet (use new_part)")
+    picks = []
+    for w in dict.fromkeys(wanted):
+        part, _, v = w.partition(":")
+        _script(part)  # a bad or unknown name is the caller's mistake: say so before running anything
+        picks.append((part, v or variant))
+    results: dict[int, dict] = {}
+
+    async def one(i: int, part: str, v: str | None) -> None:
+        res = await _job(part, "hardware", variant=v)
+        if res.get("ok"):
+            results[i] = {"part": part, **{k: res[k] for k in ("variant", "variants", "declared", "items")}}
+        else:
+            results[i] = {"part": part, "error": str(res.get("error")), "res": res}
+
+    async with anyio.create_task_group() as tg:
+        for i, (part, v) in enumerate(picks):
+            tg.start_soon(one, i, part, v)
+    entries = [results[i] for i in range(len(picks))]
+    failed = [e for e in entries if "error" in e]
+    if failed and (not every or len(failed) == len(entries)):  # a part asked for by name must be read
+        return _error_text(failed[0]["res"])
+    for e in failed:
+        e.pop("res")
+    from .hardware import shopping_list
+
+    return _scrub(shopping_list(entries, count, "csv" if format == "csv" else "table"))
 
 
 def _numbers(v, n: int, what: str) -> list[float] | None:
@@ -1887,7 +1940,8 @@ and keep my answers; skip a question I have already answered.
 3. Material: pla, petg, asa, abs, tpu or one of my own (it sets notes and, for some, the clearance).
 4. Formats: what my slicer and other CAD want: 3mf for Bambu Studio, OrcaSlicer and PrusaSlicer,
    step to edit the part in other CAD (Onshape, Fusion, FreeCAD), stl for anything else, png
-   previews, print for a print sheet, hardware for declared BOM JSON. Default: step,stl,3mf,png.
+   previews, print for a print sheet, hardware for declared BOM JSON, bom / bom_csv for the
+   shopping list. Default: step,stl,3mf,png.
 5. Default style for parts that set none: functional (default), modern/minimal, least_cost,
    rugged/outdoor, soft/handheld or structural/load-bearing.
 6. Hole compensation: ask whether I have measured it with the hole coupon. Only a measured value

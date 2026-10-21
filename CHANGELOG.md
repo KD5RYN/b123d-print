@@ -15,6 +15,20 @@
   accepted (OK, with the why) instead of warning; a FAIL is never turned into a pass.
   `suggest_orientation` notes a locked orientation. The hole, fit and overhang/bridge coupons
   declare it ([docs](https://kd5ryn.github.io/b123d-print/scripts/convention/#print-intent)).
+- **A hardware list to order from** (#116): the bought parts a script declares in `hardware(d)`
+  now come out as one readable table, Qty | Item | Specification | Used for | Source/link |
+  Status. Identical items are merged and summed, items without a confirmed specification say
+  **check before ordering**, and a total line ends it. The new `hardware_list` tool returns it
+  in the result, for the assistant to show in chat. `count=` multiplies it ("for 4 brackets"),
+  several parts (or the whole workspace) merge into one list, and `format="csv"` returns CSV.
+  It runs sandboxed and builds nothing. CLI: `b123d-print bom [parts] [--count N] [--csv]`. Two
+  opt-in export formats write the same list: `bom` (`<name>[_<variant>]_bom.md`, readable as
+  plain text and on GitHub) and `bom_csv` (`_bom.csv`, UTF-8, RFC 4180, guarded against
+  spreadsheet formula injection). Both are included in `all` and in the download/pull filters.
+  The print sheet's hardware table points to the list
+  ([docs](https://kd5ryn.github.io/b123d-print/using/slicing/#what-do-i-need-to-buy)).
+- The download/pull format filters now tell the text formats apart by name: `print` brings only
+  `*_print.md`, so it no longer brings the `_bom.md` too.
 
 ## 0.3.9 — 2026-10-21
 

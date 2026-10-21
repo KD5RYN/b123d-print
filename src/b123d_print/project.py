@@ -1437,7 +1437,8 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     """Export every printable part in `formats` (default: the `formats` setting), plus the
     assembly render and section views when png is among them, and the print sheet
     (<name>[_<variant>]_print.md, printsheet.py) when print is, and whole-assembly BOM JSON
-    (<name>[_<variant>]_hardware.json) when hardware is. Returns a summary, with the timing
+    (<name>[_<variant>]_hardware.json) when hardware is, the shopping list as Markdown
+    (<name>[_<variant>]_bom.md) and CSV (_bom.csv) when bom and bom_csv are. Returns a summary, with the timing
     report (Pieces.timing) under "timing".
     only: just these pieces (comma-separated or a list): no assembly render, and only the views
     and templates of those pieces. cache: build through the build cache (the worker)."""
@@ -1450,7 +1451,7 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     outputs = Outputs(pc.cache) if pc.cache is not None else None
     from . import hardware
 
-    hardware_items = hardware.declared(mod, d) if {"print", "hardware"}.intersection(formats) else None
+    hardware_items = hardware.declared(mod, d) if {"print", "hardware", "bom", "bom_csv"}.intersection(formats) else None
     parts, orig, _ = built(mod, d, pc, only)
     names = {n or "part" for n in parts}
     asm = None if only or "png" not in formats else pc.assembly()  # only the renders use it
@@ -1478,6 +1479,16 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     if "hardware" in formats:
         text = hardware.json_text(hardware_items, key)
         f = _export_text(out / f"{out_name(script.stem, key, 'hardware')}.json", text, outputs)
+        summary["files"].append(str(f))
+    if "bom" in formats:
+        import datetime
+
+        text = hardware.bom_file_markdown(hardware_items, script.stem, key, datetime.date.today().isoformat())
+        f = _export_text(out / f"{out_name(script.stem, key, 'bom')}.md", text, outputs)
+        summary["files"].append(str(f))
+    if "bom_csv" in formats:
+        f = _export_text(out / f"{out_name(script.stem, key, 'bom')}.csv", hardware.bom_file_csv(hardware_items), outputs,
+                         newline="")
         summary["files"].append(str(f))
     summary["timing"] = pc.timing()
     if "png" not in formats:
@@ -1510,10 +1521,11 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     return summary
 
 
-def _export_text(path: Path, text: str, outputs: Outputs | None) -> Path:
-    """Cache by final text: declaration, dimensions, notes and settings cannot leave stale BOMs."""
+def _export_text(path: Path, text: str, outputs: Outputs | None, newline: str | None = None) -> Path:
+    """Cache by final text: declaration, dimensions, notes and settings cannot leave stale BOMs.
+    newline="": write the line ends as they are (CSV's CRLF)."""
     def write():
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline=newline)
         return path
 
     return outputs.write(path, outputs.key("text", text), write) if outputs is not None else write()
@@ -1599,7 +1611,7 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=f"Build {script.stem}")
     ap.add_argument("--variant", choices=[v or "standard" for v in variants(mod)], help="default: all")
     ap.add_argument("--no-check", action="store_true")
-    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png,glb,print,hardware or all (default: the formats setting)")
+    ap.add_argument("--formats", help="comma-separated: step,stl,3mf,png,glb,print,hardware,bom,bom_csv or all (default: the formats setting)")
     ap.add_argument("--only", metavar="PIECES", help="comma-separated piece names from build(): build and export only "
                                                       "those (lazy pieces: the others are never built)")
     args = ap.parse_args(argv)

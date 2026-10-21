@@ -133,3 +133,25 @@ Add `hardware` to the formats (`formats="3mf,print,hardware"`) for the matching
 `download_part` and SSH `pull` (include both `print,hardware` when filtering formats).
 See [declared hardware](../scripts/convention.md#declared-hardware) for the hook, custom imported
 stand-ins and JSON format. A script with no hook keeps its existing print sheet.
+
+## What do I need to buy?
+
+Ask the assistant "what do I need to buy for this?" (or "for 4 of them"). The `hardware_list`
+tool returns the declared hardware as one table in the chat. From the command line, run
+`b123d-print bom <part>`, adding `--count 4` for four assemblies and `--csv` for a spreadsheet:
+
+```text
+| Qty | Item      | Specification                       | Used for    | Source/link                    | Status                    |
+| --: | --------- | ----------------------------------- | ----------- | ------------------------------ | ------------------------- |
+|   2 | Insert    | not specified; Confirm manufacturer |             |                                | **check before ordering** |
+|   4 | Lid screw | M3 x 10 mm ISO 4762                 | lid corners | <https://example.invalid/spec> | confirmed                 |
+
+Total: 6 items on 2 lines, 1 to check before ordering.
+```
+
+The list merges identical items (same description and specification) and sums their
+quantities. Several parts, or no part name at all (every part in the workspace), make one list
+for the whole project. **Check before ordering** marks an item whose specification the script
+has not confirmed: settle it before you buy. To keep the list with the part, add `bom` (Markdown)
+or `bom_csv` (for Excel, Google Sheets or a shopping cart) to the export formats. It covers only
+what the script declares in `hardware(d)`, never screws guessed from holes.
