@@ -28,6 +28,11 @@ part folder may exist before the part does: upload first, then `new_part`.
 | [Over SSH](../getting-started/ssh.md) | `b123d-print push bracket.stl --part bracket --to me@cad`, on your machine, with the same key as the MCP connection |
 | [Over HTTP](../getting-started/http.md) | the `upload_reference` tool returns a signed upload link; run `curl -fT bracket.stl '<link>'` on your machine (no token needed; it expires and writes only that one file) |
 
+An assistant that can run commands on your machine (Claude Code, Antigravity, Cursor and similar)
+does each of these itself: it copies the file, runs the `curl` or the `push`. Only an app that
+cannot touch your files leaves the step to you, and then it says exactly what to run or where to
+copy the file.
+
 Every way refuses names with folders in them, hidden names, other suffixes than `.stl`, `.3mf`,
 `.step` and `.stp`, content that is not what the suffix says, symlinks, files over 50 MB, and
 replacing an existing file unless asked to (`--overwrite`, `overwrite=true`).
