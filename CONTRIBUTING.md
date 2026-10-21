@@ -26,6 +26,7 @@ uv run mkdocs serve        # the docs site at http://127.0.0.1:8000, rebuilt as 
 - An issue labeled `in progress` is taken; ask on it before doing the same work.
 - An issue labeled `blocked` waits on other work; its comment says what. Please hold off on a
   pull request for it until the label is gone.
+- Both labels come off on their own when the issue closes (`.github/workflows/issue-labels.yml`).
 - Want somewhere to start? Look for `good first issue` and `help wanted`.
 
 **Pull requests.**
