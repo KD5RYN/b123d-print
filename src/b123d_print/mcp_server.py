@@ -903,7 +903,7 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     if res["passed"] and _remote():
         lines.append(f"\nNot on your machine yet: download_part('{name}') brings the part home when it is done. "
                      + _home_note(name))
-    elif res["passed"]:
+    elif res["passed"] and not _remote():  # never git on a shared server: its history is on the user's machine
         from .versions import offer
 
         if note := offer(_root(), name):

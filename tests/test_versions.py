@@ -329,3 +329,29 @@ def test_resume_note_for_a_missing_part_on_a_server(ws, monkeypatch):
     with pytest.raises(ToolError) as e:
         m.read_part("gone")
     assert "write_part('gone'" in str(e.value) and "upload_reference" in str(e.value)
+
+
+@pytest.mark.parametrize("remote", [False, True])
+def test_check_offers_a_save_only_locally(ws, monkeypatch, remote):
+    """A passing check offers "Save this version?" locally; on a shared server no git runs at all."""
+    import anyio
+
+    from b123d_print import mcp_server as m
+
+    async def passed(name, variant, fresh=False):
+        return {"ok": True, "passed": True, "variants": {"": []}}
+
+    monkeypatch.setitem(m.STATE, "root", ws)
+    monkeypatch.setattr(m, "_check", passed)
+    ran = []
+    real_run = v.run
+    monkeypatch.setattr(v, "run", lambda *a, **k: ran.append(a) or real_run(*a, **k))
+    if remote:
+        monkeypatch.setitem(m.STATE, "transport", "http")
+        monkeypatch.setattr(v, "offer", lambda *a: pytest.fail("offer() ran on a shared server"))
+    out = anyio.run(m.check, "shelf_bracket")
+    assert out.startswith("PASSED")
+    if remote:
+        assert ran == [] and "Save this version" not in out
+    else:
+        assert ran and "Save this version of shelf_bracket?" in out
