@@ -57,6 +57,10 @@ Qwen Code (~/.qwen/settings.json or the project's .qwen/settings.json):
   {"mcpServers": {"b123d-print": {"httpUrl": "https://cad.example.com/mcp",
     "headers": {"Authorization": "Bearer <token>"}, "timeout": 300000}}}
 
+pi (pi coding agent; token from an environment variable, export B123D_TOKEN=<token>):
+  pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; read the b123d-print guide first"
+  then set "timeout": 300 on it in ~/.pi/agent/mcp.json (the default is 60 s)
+
 Grok Build (xAI grok CLI):
   grok mcp add --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer <token>"
 
@@ -70,7 +74,7 @@ Revoke it with: b123d-print-mcp token revoke claude-laptop
 ```
 
 Run the `claude mcp add` line in the project folder where you use Claude Code, or paste the block
-for your client (OpenCode, Qwen Code, Antigravity, Codex and Grok each get their own format), and the tool
+for your client (OpenCode, Qwen Code, pi, Antigravity, Codex and Grok each get their own format), and the tool
 is connected. Other clients: [Connect your MCP client](mcp-clients.md).
 
 - **Its workspace is its name.** The tool's parts land in `parts/workspaces/claude-laptop/`, and
