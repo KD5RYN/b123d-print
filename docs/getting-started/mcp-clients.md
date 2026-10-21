@@ -68,6 +68,7 @@ b123d-print with it yet: tell us how it went in an
 | [VS Code](#vs-code-copilot-agent-mode) | yes | see its docs | not documented | not documented | untested |
 | [Codex CLI](#codex-cli) | yes | yes (`bearer_token_env_var`) | not documented | not documented | **yes** (stdio, HTTP) |
 | [Grok Build CLI](#grok) (xAI) | yes | yes (`--header`) | not documented | not documented | **yes** (HTTP) |
+| [OpenCode](#opencode) | yes (`"type": "local"`) | yes (`"type": "remote"`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
 | [Windsurf](#windsurf) | yes | yes (`headers`) | not documented | yes | untested |
 | [Zed](#zed) | yes | yes (`headers`) | not documented | yes | untested |
 | [LM Studio](#lm-studio) | yes | yes (`headers`) | not documented | not documented | untested |
@@ -319,6 +320,65 @@ Two different tools are called "grok CLI":
 Both read MCP servers from other tools' configs (Grok Build reads `~/.claude.json`,
 `.cursor/mcp.json` and `.mcp.json`), so a token you gave Claude Code at its user scope reaches
 Grok too: see [one token per tool](http.md#connect-a-new-ai).
+
+## OpenCode
+
+[OpenCode](https://opencode.ai) has its own config format: the servers go under **`"mcp"`**
+(not `"mcpServers"`), and a remote server is **`"type": "remote"`** (not `"http"`)
+([OpenCode MCP](https://opencode.ai/docs/mcp-servers/)). Put it in `opencode.json` in the
+project folder, or in `~/.config/opencode/opencode.json`. Tested against a shared server over
+HTTP, with the Ollama model `gemma4:31b-cloud`.
+
+A shared server:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "b123d-print": {
+      "type": "remote",
+      "url": "https://cad.example.com/mcp?workspace=you-opencode",
+      "enabled": true,
+      "oauth": false,
+      "timeout": 30000,
+      "headers": {
+        "Authorization": "Bearer {env:B123D_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+- **`{env:B123D_TOKEN}`** reads the environment variable *named* `B123D_TOKEN`: run
+  `export B123D_TOKEN='<token>'` in the terminal you start `opencode` from. Or write the token
+  itself, `"Bearer <token>"`, with no `{env:}`, and keep the file private. Putting the token
+  *inside* `{env:...}` sends an empty header: the server answers 401 and logs `(bad token)`.
+- **`"oauth": false`**: b123d-print uses a fixed token; without it OpenCode may start an OAuth
+  login when it sees a 401.
+- **`"timeout"`** is how long OpenCode waits for the tool list (default 5 s).
+- `?workspace=` must be one the token may use, or the server answers 403. A token with a single
+  workspace needs none.
+
+`token add` on the server prints this block filled in ([Tokens](http.md#tokens)). Check with
+`opencode mcp list`, or `opencode mcp debug b123d-print` when it fails.
+
+On your own machine:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "b123d-print": {
+      "type": "local",
+      "command": ["uvx", "--from", "b123d-print", "b123d-print-mcp", "--workspace", "/Users/you/parts"],
+      "enabled": true,
+      "timeout": 120000
+    }
+  }
+}
+```
+
+The first start downloads the packages, hence the long `timeout`.
 
 ## Windsurf
 

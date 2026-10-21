@@ -38,15 +38,36 @@ Claude Code, in the project folder (--scope project keeps the token out of ~/.cl
 which other agent tools import):
   claude mcp add --scope project --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer <token>"
 
+OpenCode (opencode.json; its own format: "mcp" and "type": "remote"):
+  {"$schema": "https://opencode.ai/config.json", "mcp": {"b123d-print": {"type": "remote",
+    "url": "https://cad.example.com/mcp", "enabled": true, "oauth": false, "timeout": 30000,
+    "headers": {"Authorization": "Bearer <token>"}}}}
+
+Antigravity (agy, IDE; ~/.gemini/config/mcp_config.json or the project's .agents/plugins/):
+  {"mcpServers": {"b123d-print": {"serverUrl": "https://cad.example.com/mcp",
+    "headers": {"Authorization": "Bearer <token>"}}}}
+
+Codex (~/.codex/config.toml; the token from an environment variable, export B123D_TOKEN=<token>):
+  [mcp_servers.b123d-print]
+  url = "https://cad.example.com/mcp"
+  bearer_token_env_var = "B123D_TOKEN"
+  tool_timeout_sec = 300
+
+Grok Build (xAI grok CLI):
+  grok mcp add --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer <token>"
+
 Other clients (Cursor, VS Code, ...; key names vary):
   {"mcpServers": {"b123d-print": {"type": "http", "url": "https://cad.example.com/mcp",
     "headers": {"Authorization": "Bearer <token>"}}}}
 
+More: https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/
+
 Revoke it with: b123d-print-mcp token revoke claude-laptop
 ```
 
-Run the `claude mcp add` line in the project folder where you use Claude Code, or paste the JSON
-into another client, and the tool is connected.
+Run the `claude mcp add` line in the project folder where you use Claude Code, or paste the block
+for your client (OpenCode, Antigravity, Codex and Grok each get their own format), and the tool
+is connected. Other clients: [Connect your MCP client](mcp-clients.md).
 
 - **Its workspace is its name.** The tool's parts land in `parts/workspaces/claude-laptop/`, and
   the URL needs no `?workspace=`. For a tool that needs several, such as an eval runner, pass

@@ -1,5 +1,6 @@
 """Named tokens: the file, workspace patterns, default workspace, hot reload, the CLI."""
 
+import json
 import os
 import subprocess
 import sys
@@ -96,6 +97,15 @@ def test_cli_default_workspace_and_client_config(tmp_path):
     assert "URL     https://cad.example.com/mcp\n" in r.stderr
     assert f'claude mcp add --scope project --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer {tok}"' in r.stderr
     assert '"url": "https://cad.example.com/mcp"' in r.stderr and "token revoke claude-laptop" in r.stderr
+    # ready-to-paste blocks for each tested client, each valid in its own format
+    err = r.stderr
+    assert '"mcp": {"b123d-print": {"type": "remote"' in err and '"oauth": false' in err  # OpenCode's own format
+    oc = err.split("OpenCode (")[1].split("\n\n")[0].split("\n", 1)[1]
+    assert json.loads(oc)["mcp"]["b123d-print"]["headers"]["Authorization"] == f"Bearer {tok}"
+    ag = err.split("Antigravity (")[1].split("\n\n")[0].split("\n", 1)[1]
+    assert json.loads(ag)["mcpServers"]["b123d-print"]["serverUrl"] == "https://cad.example.com/mcp"
+    assert 'bearer_token_env_var = "B123D_TOKEN"' in err and "tool_timeout_sec = 300" in err  # Codex: no token in the file
+    assert f'grok mcp add --transport http b123d-print "https://cad.example.com/mcp" --header "Authorization: Bearer {tok}"' in err
     r = cli(tmp_path, "add", "eval", "--workspace", "eval-*")
     assert "https://<your-server>/mcp?workspace=eval-1" in r.stderr and "--url" in r.stderr
     assert cli(tmp_path, "add", "has.dot").returncode == 2  # a token name is also its default workspace name
