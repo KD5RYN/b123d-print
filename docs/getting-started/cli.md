@@ -35,7 +35,7 @@ b123d-print check
 
 | Command | Does |
 | --- | --- |
-| `init [dir] [--update-agents]` | create a workspace: `b123d-print.toml`, `AGENTS.md`, `parts/`; `--update-agents` replaces `AGENTS.md` with this version's text |
+| `init [dir] [--update-agents] [--git \| --no-git]` | create a workspace: `b123d-print.toml`, `AGENTS.md`, `parts/`; `--update-agents` replaces `AGENTS.md` with this version's text. In a terminal it asks whether to keep a [version history](../using/what-to-save.md#versions) (git, on this machine only); `--git` starts one without asking, `--no-git` never asks. Nothing is done without a yes |
 | `setup [--printer p] [--material m] [--formats f] [--style s] [--hole-comp mm] [--hole-comp-h mm] [--workspace] [--overwrite] [--no-input]` | first-run setup: asks for the printer (search words, then pick one), material, export formats, default style and, opt-in, a measured hole compensation to build into the files, and writes them to your user config (`--workspace`: this workspace's `b123d-print.toml`; a measured hole compensation with a printer goes to its calibration). A value already set is kept unless you say yes or pass `--overwrite`. `--no-input` (the default when stdin is not a terminal) writes only the flags given, for scripts. Ends with the calibration coupons to print next |
 | `new <name> [-d/--description text] [--from <example>]` | scaffold `parts/<name>/<name>.py` from the template, or from a bundled example |
 | `build [parts] [--variant v] [--formats f] [--only pieces]` | export + section views, report sizes and each piece's faces and build time; `--formats` overrides the `formats` setting; `--only a,b` builds and exports only those pieces of `build()` ([lazy pieces](../scripts/convention.md#big-and-multi-piece-projects)) |
@@ -66,6 +66,9 @@ b123d-print check
 | `ssh-serve --workspace <folder> [--dest user@host] [--timeout s] [--check-timeout s]` | the forced command in that line: runs the MCP server, `pull`, `push` or `version` as `$SSH_ORIGINAL_COMMAND` asks, refuses anything else; not for running by hand |
 | `pull <part> --from user@host [--formats f] [--variant v] [-o/--out folder] [--ssh cmd]` | on the client: copy a part from an SSH server into `parts/<part>/` of the project folder (`-o`, default the current one): the script, `out/` (narrowed by `--formats` / `--variant`) and `ref/`, the same layout as a local install, `out/` sorted into its folders (an older flat local copy too) (`--ssh` passes ssh options, e.g. `'ssh -i key -p 2222'`) |
 | `push <file> --part <name> --to user@host [--name n] [--overwrite] [--ssh cmd]` | on the client: copy a model to [remix](../using/remix.md) (STL, 3MF or STEP, up to 50 MB) to an SSH server, into `parts/<name>/ref/` |
+| `save [message] [--part name]` | save a [version](../using/what-to-save.md#versions) of every part (or one): the script, `ref/`, `MEASURE.md`, the `.py` files beside the script and `b123d-print.toml`, never `out/`; prints the `Dims` values that changed. Needs a version history (`init --git`) |
+| `versions [part] [--limit n]` | the saved versions, newest first: date, id, message and the values that changed; with a part, numbered for `restore`, plus what is not saved yet |
+| `restore <part> <version>` | bring a part back to a saved version (a number from `versions <part>`, or a commit id) and save that as a new version: nothing is lost, files added later are kept; refused while the part has unsaved changes |
 | `config` | the settings in effect, and which config files were found |
 | `list` | parts in the workspace |
 | `examples` | the bundled example parts |

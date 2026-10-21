@@ -361,6 +361,30 @@ If the client cannot run commands, give the user the link (or the command) and s
 not on their machine yet. `variant=` and `formats=` narrow the `out/` files; per-file links from
 `export` and the `b123d-print://files/` resources still work for single files.
 
+## Versions and resuming a project
+
+The project folder can keep a **version history** (git on the user's machine, made simple):
+`save_version`, `list_versions`, `restore_version` (CLI `b123d-print save`, `versions`,
+`restore`). A save takes each part's script, `ref/`, `MEASURE.md` and the `.py` files beside the
+script, plus `b123d-print.toml`; never `out/`.
+
+- **Offer, never decide:** after a change that built and passed its checks, ask "Save this
+  version? (shelf_bracket: arm 115 → 130 mm)" and call `save_version` only on a yes. Before a
+  restore, ask too. Nothing is saved automatically.
+- **No history yet** (the tools say so): offer once to start one; on a yes,
+  `save_version(..., start=True)` (CLI `b123d-print init --git`). It writes a `.gitignore` that
+  keeps out `out/`, downloaded zips, tokens and client configs.
+- `restore_version(part, <number from list_versions>)` saves the old files as a **new** version:
+  nothing is lost, and it is refused while the part has unsaved changes (offer to save first).
+  Then `build_part` and `check`.
+- **Shared server (HTTP/SSH):** the history stays on the user's machine, never on the server;
+  the tools return the commands for the user's project folder. Bring the part home first.
+- **Resume a project:** when a part the user has at home is missing on the server (unused
+  workspaces are removed after some days), put it back from their copy: `new_part(name)`,
+  `write_part(name, <their parts/<name>/<name>.py, whole>)`, then `upload_reference` for each
+  file in its `ref/` (over SSH the `b123d-print push` command it gives); settings they had in
+  `b123d-print.toml` go back with `save_setup`. Never re-create a script from memory.
+
 ## Printer profile (optional)
 
 By default b123d-print is in generic mode. When `list_parts` shows no printer (generic mode), offer

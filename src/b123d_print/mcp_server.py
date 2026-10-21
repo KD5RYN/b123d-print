@@ -71,7 +71,11 @@ sandboxed (Antigravity/agy, web and mobile clients), call download_part(name, em
 comes inside the result; unzip it from where your client saved it (unzip -o <zip> -d <project folder>).
 A part is not done until its files are on the user's machine: after export, call download_part
 (embed=True if your shell has no network) and unzip into the project folder, unless the user says to
-leave them on the server. Locally (stdio) the files are already in the project folder."""
+leave them on the server. Locally (stdio) the files are already in the project folder.
+Version history: after a change that built and passed check, offer "Save this version?"; call
+save_version only on the user's yes (list_versions, restore_version go back). On a shared server
+the history stays on the user's machine: these tools return the commands for it, and a part
+missing on the server is resumed from the user's copy (new_part, write_part, upload_reference)."""
 
 # The rules a model skips most, in every first result (list_parts, new_part, a part's first
 # write_part) and read_guide(essentials=True): tool results reach the model in every client,
@@ -81,7 +85,8 @@ Rules (all of them: read_guide):
 1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation. For a hole, say whether its size is the printed hole or what goes in it (then + clearance per side); holes are drawn true to size, plus hole_comp only if the user opted in.
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
 3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
-4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network)."""
+4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network).
+5. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own."""
 
 REMOTE_DOC = """
     Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
@@ -182,6 +187,15 @@ def _root() -> Path:
     return ws
 
 
+def _resume_note(name: str) -> str:
+    """Remote: how to put a part back from the user's project folder (the server removes unused workspaces)."""
+    if not _remote():
+        return ""
+    return (f". If the user has it in their project folder (a shared server removes workspaces left unused), "
+            f"resume it: new_part('{name}'), write_part('{name}', <their parts/{name}/{name}.py, whole>), then "
+            f"upload_reference('{name}', <file>) for each file in its ref/ (read_guide: Resume a project)")
+
+
 def _limiter() -> anyio.CapacityLimiter:
     # at most max_builds worker processes at once, across all clients; the rest wait their turn
     if STATE["limiter"] is None:
@@ -199,7 +213,7 @@ def _script(name: str) -> Path:
     p = _parts_dir() / name / f"{name}.py"
     if not p.is_file():
         have = [s.parent.name for s in find_parts(_root(), load_settings(_root()).parts_dir)]
-        raise ToolError(f"no part {name!r}. Parts: {have or 'none yet (use new_part)'}")
+        raise ToolError(f"no part {name!r}. Parts: {have or 'none yet (use new_part)'}" + _resume_note(name))
     return p
 
 
@@ -451,7 +465,10 @@ def list_parts() -> str:
             "rules": ESSENTIALS.splitlines(),
             "version": _pkg_version(),
             **({"workspace": _ws_name(), "files": "on the server: a temporary working copy; download_part(<name>) "
-                                                    "brings a part home"} if _remote() else {"workspace": str(_root())}),
+                                                    "brings a part home",
+                "resume": "a part the user has at home but not here (unused workspaces are removed): new_part, "
+                          "write_part with their local script, upload_reference for each ref/ file"}
+               if _remote() else {"workspace": str(_root())}),
             "parts_dir": s.parts_dir,
             "parts": parts,
             "out": f"{s.parts_dir}/<name>/out/: print/ (3MF, STL, print sheet: for the slicer; templates in "
@@ -886,6 +903,11 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     if res["passed"] and _remote():
         lines.append(f"\nNot on your machine yet: download_part('{name}') brings the part home when it is done. "
                      + _home_note(name))
+    elif res["passed"] and not _remote():  # never git on a shared server: its history is on the user's machine
+        from .versions import offer
+
+        if note := offer(_root(), name):
+            lines.append(f"\n{note}")
     return _scrub("\n".join(lines))
 
 
@@ -1331,7 +1353,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
                 f"{_root() / parts_dir / name}. Nothing to download.\n{listing}"]
     if STATE["ssh_dest"]:
         out = [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
-               f"before reporting.\n{listing}\n\n{_home_note(name)}"]
+               f"before reporting.\n{listing}\n\n{_home_note(name)}{_save_home(name)}"]
         return _embed_zip(out, files, total, prefix, f"b123d-print://download/{_ws_name()}/{name}", name) if embed else out
     query = links.zip_query(variant, formats)
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
@@ -1347,13 +1369,18 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
             f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n"
             + (f"3D view in a browser (no token, same expiry; offer it to the user):\n" + "\n".join(views) + "\n"
                if views else "")
-            + "\n" + _home_note(name))
+            + "\n" + _home_note(name) + _save_home(name))
     from mcp_types import ResourceLink
 
     uri = f"b123d-print://download/{_ws_name()}/{name}"
     out: list = [text, ResourceLink(uri=uri, name=f"{name}.zip", mime_type="application/zip",
                                     description=f"the whole part as a zip (unfiltered); download: {url}")]
     return _embed_zip(out, files, total, prefix, uri, name) if embed else out
+
+
+def _save_home(name: str) -> str:
+    return (f"\nOnce it is home, if the project folder keeps a version history (git), offer the user to save this "
+            f"version there: save_version('<what changed>', part='{name}') gives the commands.")
 
 
 def _embed_zip(out: list, files, total: int, prefix: str, uri: str, name: str) -> list:
@@ -1426,6 +1453,58 @@ async def compare(reference: str, candidate: str, thresholds: str = "", image: b
     m = re.match(rf"^{re.escape(load_settings(_root()).parts_dir)}/([a-z][a-z0-9_]*)/", cand.relative_to(_root().resolve()).as_posix()
                  if cand.is_relative_to(_root().resolve()) else "")
     return _with_note(_with_image(text, res["image"], inline), m.group(1) if m else None)
+
+
+# ---------------------------------------------------------------------------------------------
+# Version history (#125): git on the user's machine; a shared server only gives the commands
+
+
+def _versions(action: str, call, part: str | None = None, message: str = "", version: str = "") -> str:
+    from . import versions
+
+    try:
+        if _remote():  # the history lives with the user, never in a server workspace: no git runs here
+            return versions.client_commands(action, load_settings(_root()).parts_dir, part, message, version)
+        return call(versions)
+    except versions.VersionError as e:
+        raise ToolError(str(e)) from None
+
+
+@mcp.tool()
+def save_version(message: str, part: str | None = None, start: bool = False) -> str:
+    """Save a version of the project in its version history (git, on the user's machine): each
+    part's script, its ref/ folder, MEASURE.md and the .py files beside it, and b123d-print.toml;
+    never out/. Only when the user said yes: after a change that built and passed its checks,
+    OFFER "Save this version? (<part>: <what changed>)", never save on your own. message: what
+    changed, in the user's words ("arm 115 -> 130 mm"); part: only that part (default: all).
+    The result says what was saved and the changed Dims values. start=True first makes the
+    project folder a git repository with a .gitignore: only after the user agreed to keep a
+    version history. On a shared (HTTP/SSH) server it runs nothing and returns the commands for
+    the user's own project folder."""
+    out = _versions("save", lambda v: (v.start(_root()) + "\n" if start else "") + v.save(_root(), message, part),
+                    part, message)
+    if start and _remote():
+        out = "First start the history in the project folder: `b123d-print init --git` (or `git init`).\n" + out
+    return out
+
+
+@mcp.tool()
+def list_versions(part: str | None = None) -> str:
+    """The saved versions, newest first: date, id, message and the Dims values that changed.
+    With part: numbered versions of that part (for restore_version), and what is not saved yet.
+    On a shared (HTTP/SSH) server: the command for the user's own project folder."""
+    return _versions("list", lambda v: v.history(_root(), part), part)
+
+
+@mcp.tool()
+def restore_version(part: str, version: str) -> str:
+    """Bring a part (script, ref/, MEASURE.md) back to a saved version: a number from
+    list_versions(part), or a commit id. It is saved as a NEW version, so nothing is lost: no
+    reset, no deleted history, files added later are kept. Refused while the part has changes
+    not saved yet (offer save_version first). Ask the user before restoring; then build_part and
+    check. On a shared (HTTP/SSH) server: the commands for the user's project folder (version =
+    the commit id), then write_part to put the restored script back on the server."""
+    return _versions("restore", lambda v: v.restore(_root(), part, version), part, version=version)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2012,7 +2091,11 @@ and keep my answers; skip a question I have already answered.
    workspace on the server, per printer; coupons are brought home like any part (download_part).
    If save_setup says measured values are set for every printer, ask me, then
    save_setup(move_flat=True) moves them under the active printer.
-10. Report what is set, where it is saved, what calibration is still to do, and save_setup's
+10. Version history: ask whether to keep versions of my parts so I can go back to one later
+   (it makes the project folder a git repository on my machine; out/, downloaded zips and tokens
+   stay out; nothing is sent anywhere). Only on a yes: save_version('First version', start=True)
+   locally; on a remote server, `b123d-print init --git` in my project folder on my machine.
+11. Report what is set, where it is saved, what calibration is still to do, and save_setup's
    'slicer' line (where holes are corrected)."""
 
 
