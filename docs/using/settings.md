@@ -10,13 +10,19 @@ Settings come from four layers; later ones win:
 
 `b123d-print config` shows the settings in effect and which files were found; over MCP,
 `list_parts` does. Printer-specific values (`hole_comp`, `printer`, `material`) belong in the
-user config; the workspace config is for values that belong to the project.
+user config, or measured per printer in `calibration.toml` or a workspace's `[calibration]`
+tables (below); the workspace config is for values that belong to the project.
+
+!!! warning "Hole compensation"
+    Holes are drawn true to size; hole shrinkage is set in your slicer (X-Y hole
+    compensation, from the [hole coupon](hole-compensation.md)). Turning on `hole_comp` bakes
+    the correction into the files for one printer, with the slicer's hole compensation then at 0.
 
 ```toml
 # ~/.config/b123d-print/config.toml
 [print]
-hole_comp = 0.4      # mm added to hole diameters when cutting
-hole_comp_h = 0.5    # the same for horizontal holes (default: hole_comp)
+hole_comp = 0        # opt-in: mm built into hole diameters (0: the slicer corrects holes)
+hole_comp_h = 0      # the same for horizontal holes (default: hole_comp)
 clearance = 0.2      # per side, sliding fit (the default)
 press_fit = 0.05     # per side, pressed together
 free_fit = 0.3       # per side, turns or moves freely
@@ -39,7 +45,7 @@ An unknown key is an error, so typos don't pass silently.
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `hole_comp` | `0.0` | mm added to hole diameters when cutting; see [Hole compensation](hole-compensation.md) |
+| `hole_comp` | `0.0` | opt-in: mm built into every hole diameter when cutting, for one printer (then the slicer's X-Y hole compensation stays 0). By default holes are true to size and the slicer corrects them; see [Hole compensation](hole-compensation.md) |
 | `hole_comp_h` | same as `hole_comp` | the same for horizontal holes (axis in XY): `hole_comp(__file__, horizontal=True)` |
 | `clearance` | `0.2` | mm per side between mating parts that slide, the default fit; part scripts read it with `clearance(__file__)` |
 | `press_fit` | `0.05` | mm per side for parts pressed together |
@@ -71,6 +77,30 @@ values you measured for that printer + material (`hole_comp`, `hole_comp_h`, the
 `max_overhang`, `max_bridge`; stored with `b123d-print printer calibrate`) replace the user
 config's, unless the workspace config or the environment sets them; a material's `clearance`
 replaces the default the same way.
+
+## Calibration and printer nicknames
+
+Two more tables can go in the user config or the workspace config:
+
+```toml
+[printers]                      # nicknames, for two printers of the same model
+p2s-garage = "bambu_lab_p2s"
+
+[calibration."p2s-garage/pla"]  # workspace config only: measured values per printer + material
+hole_comp = 0.3
+```
+
+`printer` may then be a nickname: the profile behind it gives the bed and nozzle, and the
+measured values are looked up under the nickname. The measured values for the active printer
+come from, later wins:
+
+1. `~/.config/b123d-print/calibration.toml` (`b123d-print printer calibrate`);
+2. the workspace config's `[calibration."<printer>/<material>"]` tables (`printer calibrate
+   --workspace`, or `save_setup` on a shared server).
+
+In both, a key missing for the material falls back to `"<printer>/any"`. A flat value under
+`[print]` in the workspace config, or an environment variable, still wins over both. See
+[Printer profiles](printer-profiles.md#two-printers-of-the-same-model).
 
 ## Environment variables
 

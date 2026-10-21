@@ -40,6 +40,11 @@ bridges, bed edges, tip-over). So:
 
 Most parts print with your usual profile. What to check:
 
+!!! warning "Hole compensation"
+    Holes are drawn true to size; hole shrinkage is set in your slicer (X-Y hole
+    compensation, from the [hole coupon](hole-compensation.md)). Turning on `hole_comp` bakes
+    the correction into the files for one printer, with the slicer's hole compensation then at 0.
+
 - **Material.** The fits (`clearance`, `press_fit`, `free_fit`) and hole compensation are tuned
   for your printer and material ([Settings](settings.md), [calibration](hole-compensation.md)).
   Printing in another material changes them: PETG fits a little tighter than PLA, and ABS, ASA
@@ -53,10 +58,15 @@ Most parts print with your usual profile. What to check:
   (PrusaSlicer). For a few bosses only, use a modifier instead of more walls everywhere:
   PrusaSlicer right-click → **Add modifier** or **Height range modifier**; OrcaSlicer and Bambu
   Studio have the same right-click modifiers.
-- **Hole compensation: once, not twice.** b123d-print adds your `hole_comp` to the holes in the
-  CAD. Leave the slicer's own hole correction off (OrcaSlicer: **X-Y hole compensation** on the
-  Precision page, Cura: **Hole Horizontal Expansion**); PrusaSlicer has only a general **XY Size
-  Compensation**, which also shrinks or grows the outside: leave it at 0.
+- **Hole compensation: in the slicer.** Holes are modeled true to size. Set the slicer's hole
+  correction from the [hole coupon](hole-compensation.md), half the diameter error, per side
+  (OrcaSlicer and Bambu Studio: **X-Y hole compensation** on the Precision page; Cura: **Hole
+  Horizontal Expansion**). If you opted in to `hole_comp`, the files have it built in: keep the
+  slicer's at 0 (the print sheet says so). PrusaSlicer has only a general **XY Size
+  Compensation**, which also shrinks or grows the outside: leave it at 0, unless it is your
+  shrinkage correction from an XYZ cube. Shrinkage belongs in the slicer, per filament; the CAD
+  stays nominal. Calibrate the cube first, then the coupons, and redo the coupons when either
+  changes ([calibration order](hole-compensation.md#calibration-order-and-shrinkage)).
 - **Elephant's foot.** Keep the slicer's **Elephant foot compensation** on (OrcaSlicer:
   Precision; PrusaSlicer: Print settings → Advanced). The CAD stays at nominal size; the bed
   edges get a chamfer rather than a fillet so they print cleanly.

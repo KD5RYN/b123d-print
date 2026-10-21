@@ -146,7 +146,9 @@ default half the CPU cores) holds across all of them together, through lock file
 
 Settings come from the server's user config (`~/.config/b123d-print/config.toml`) and each
 workspace's `b123d-print.toml`. Over SSH, `use_printer` saves the printer and material in the
-workspace's `b123d-print.toml`, so one machine never changes another's printer.
+workspace's `b123d-print.toml`, so one machine never changes another's printer; `save_setup`
+keeps measured values there per printer + material
+([Calibration on a shared server](../using/printer-profiles.md#calibration-on-a-shared-server)).
 
 ## If it does not work
 

@@ -31,7 +31,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import handoff, jobqueue, links, sandbox, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
-from .config import WORKSPACE_FILE, formats_configured, load_settings, parse_formats, safe_console, user_config_path
+from .config import WORKSPACE_FILE, formats_configured, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 from .partfiles import find_parts, timing_lines
 
 MAX_SCRIPT_BYTES = 256_000
@@ -78,9 +78,9 @@ leave them on the server. Locally (stdio) the files are already in the project f
 # resources and server instructions do not.
 ESSENTIALS = """\
 Rules (all of them: read_guide):
-1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation.
+1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation. For a hole, say whether its size is the printed hole or what goes in it (then + clearance per side); holes are drawn true to size, plus hole_comp only if the user opted in.
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
-3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL.
+3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
 4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network)."""
 
 REMOTE_DOC = """
@@ -486,20 +486,26 @@ def _printer_summary(s) -> dict:
     if not s.printer:
         return {"mode": "generic", "note": "no printer profile: no build-volume check, generic limits. Offer the user "
                                            "setup (the setup_workspace prompt: printer, material, formats, style, calibration)"}
-    out = {"mode": "printer", **load_printer(s.printer).as_dict()}
+    from .profiles import calibrated
+
+    out = {"mode": "printer", **({"nickname": s.nickname} if s.nickname else {}), **load_printer(s.printer).as_dict()}
     if s.material:
         out["material"] = load_material(s.material).as_dict()
+    out["calibration"] = {"for": f"{s.calibration_key}/{s.material or 'any'}",
+                          "measured": calibrated(s.calibration_key, s.material, s.root)}
     return out
 
 
 @mcp.tool()
-def use_printer(name: str = "", material: str = "", search: str = "") -> str:
+def use_printer(name: str = "", material: str = "", search: str = "", nickname: str = "") -> str:
     """Optional printer profile (default is generic mode). search: find printer names
     ("bambu a1", "prusa mk4"). name: make it active (saved in the user's config, or over HTTP and
-    SSH in this workspace's b123d-print.toml; "generic" clears it). material: pla, petg, asa, abs, tpu or
-    the user's own. Only change the printer when the user asks for it."""
-    from .config import set_user_setting as _set
-    from .profiles import load_material, load_printer, search as find
+    SSH in this workspace's b123d-print.toml; "generic" clears it); a nickname given before works
+    too. nickname: only for two printers of the same model, e.g. name='bambu_lab_p2s_0_4_nozzle',
+    nickname='p2s-garage': each nickname keeps its own calibration. material: pla, petg, asa, abs,
+    tpu or the user's own. Only change the printer when the user asks for it."""
+    from .config import printer_nicknames, set_user_setting as _set
+    from .profiles import load_material, load_printer, save_nickname, search as find
 
     path = None
     if STATE["transport"] == "http" or STATE["ssh_dest"]:  # shared server: never change other clients' printer
@@ -517,8 +523,11 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
             set_user_setting("printer", None)
             set_user_setting("material", None)
             return "Generic mode: no printer profile."
+        if nickname:
+            save_nickname(nickname, name or load_settings(_root()).printer, path)
+            name = nickname
         if name:
-            load_printer(name)
+            load_printer(printer_nicknames(_root()).get(name, name))
             set_user_setting("printer", name)
         if material:
             load_material(material)
@@ -530,12 +539,17 @@ def use_printer(name: str = "", material: str = "", search: str = "") -> str:
 
 @mcp.tool()
 def save_setup(printer: str = "", material: str = "", formats: str = "", style: str = "", hole_comp: float | None = None,
-               hole_comp_h: float | None = None, overwrite: bool = False) -> str:
+               hole_comp_h: float | None = None, calibration: dict[str, float] | None = None, overwrite: bool = False,
+               move_flat: bool = False) -> str:
     """Save the user's first-run answers (the setup_workspace prompt): printer (a name from
-    use_printer's search), material, formats ("3mf,png"), default style, and a MEASURED hole_comp /
-    hole_comp_h (with a printer: stored for it and the material). Written where use_printer writes.
-    A value already set there is kept and listed as a conflict: ask the user, then call again with
-    overwrite=True. Empty arguments change nothing."""
+    use_printer's search, or a nickname), material, formats ("3mf,png"), default style;
+    hole_comp=0 records that the slicer corrects holes (the default way); a nonzero, MEASURED
+    hole_comp / hole_comp_h is an opt-in that builds the correction into every file;
+    calibration: other coupon results, e.g. {"clearance": 0.18, "max_bridge": 15}. With a printer, measured values are stored for it and the material. Written
+    where use_printer writes. A value already set there is kept and listed as a conflict: ask the
+    user, then call again with overwrite=True. Empty arguments change nothing. move_flat=True
+    (after asking the user) moves measured values set for every printer of a workspace under the
+    active printer."""
     from . import setup as st
 
     path = user_config_path()
@@ -543,7 +557,7 @@ def save_setup(printer: str = "", material: str = "", formats: str = "", style: 
         init_workspace(_root())
         path = _root() / WORKSPACE_FILE
     answers = {"printer": printer, "material": material, "formats": formats, "style": style,
-               "hole_comp": hole_comp, "hole_comp_h": hole_comp_h}
+               "hole_comp": hole_comp, "hole_comp_h": hole_comp_h, **(calibration or {})}
     try:
         changes = st.plan(answers, path, overwrite)
     except (KeyError, ValueError) as e:
@@ -551,15 +565,25 @@ def save_setup(printer: str = "", material: str = "", formats: str = "", style: 
     written = st.apply(changes, overwrite)
     conflicts = [c for c in changes if c.conflict and c not in written]
     s = load_settings(_root())
+    moved = st.move_flat(path, s.calibration_key) if move_flat and s.printer and path != user_config_path() else {}
+    flat = st.flat_calibration(path) if s.printer and path != user_config_path() else {}
+    s = load_settings(_root()) if moved else s
+    nexts = [*(["these are already set: ask the user, then save_setup(..., overwrite=True) to replace them"] if conflicts else []),
+             *([f"{', '.join(sorted(flat))} are set for every printer in this workspace, so they override what is "
+                f"measured for {s.calibration_key} and stay when the printer changes: ask the user, then "
+                "save_setup(move_flat=True) moves them under this printer"] if flat else [])]
     return json.dumps({
-        "written": [{"key": c.key, "value": c.new, "was": c.old, "file": _scrub(str(c.where))} for c in written],
+        "written": [{"key": c.key, "value": c.new, "was": c.old, "file": _scrub(str(c.where)),
+                     **({"for": c.scope} if c.scope else {})} for c in written],
         "unchanged": [c.key for c in changes if c.same],
         "conflicts": [{"key": c.key, "now": c.old, "answer": c.new} for c in conflicts],
-        **({"next": "these are already set: ask the user, then save_setup(..., overwrite=True) to replace them"} if conflicts else {}),
+        **({"moved": {"values": moved, "to": f"{s.calibration_key}/any"}} if moved else {}),
+        **({"next": " ".join(nexts)} if nexts else {}),
         "printer": _printer_summary(s),
         "settings": {"formats": list(s.formats), "style": s.style or "functional", "hole_comp": s.hole_comp,
                      "hole_comp_h": s.hole_comp_h, "clearance": s.clearance},
-        "calibration": st.next_steps(s.hole_comp != 0),
+        "slicer": st.hole_note(s),
+        "calibration": st.next_steps(hole_comp_source(_root()) is not None),
     }, indent=1)
 
 
@@ -961,6 +985,9 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     files = [Path(f) for v in res["variants"] for f in v["files"]]
     total = sum(f.stat().st_size for f in files)
     out.append(f"Exported {len(files)} file(s), {_human_size(total)} in all.")
+    baked = _baked_note(load_settings(_root()))
+    if baked:
+        out.append(baked)
     if not formats and not formats_configured(_root()):
         out.append("These are the default formats (STEP, STL, 3MF and PNG). Narrow them: 3MF for Bambu/Orca/Prusa "
                    "slicers, STEP to edit in other CAD; pass formats= (e.g. formats='3mf') or set `formats` in the config.")
@@ -994,6 +1021,13 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         out.append("\n" + _home_note(name))
         out.append("\n" + _next_step(name))
     return ["\n".join(out), *extra]
+
+
+def _baked_note(s) -> str:
+    """The loud line for an export with an opt-in hole_comp built into the files ("" without one)."""
+    from .setup import hole_note
+
+    return hole_note(s) if s.hole_comp or s.hole_comp_h else ""
 
 
 def _view_link(part: str, glb: Path) -> tuple[str, int]:
@@ -1767,7 +1801,9 @@ def design_part_from_photos(description: str = "") -> str:
 
 Work in these steps:
 1. From my photos and text, LIST EVERY DIMENSION you read, the feature it belongs to and its
-   source (typed by me / read from a photo / estimate). List features you can see that have no
+   source (typed by me / read from a photo / estimate). For each hole, say whether its size is
+   the printed hole or the size of what goes in it (a 4 mm dowel: + clearance per side; holes
+   are drawn true to size, plus HOLE_COMP only if I opted in). List features you can see that have no
    dimension. Flag any conflict between a photo and a typed number (typed wins). Ask about
    anything missing or ambiguous: ask for my units, the datum I measured from and how accurate
    each value is; for a large or curved part propose a table of offsets (stations at a fixed
@@ -1784,8 +1820,8 @@ Work in these steps:
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.
 4. Remote server (HTTP or SSH) only, required: {_remote_step()}
-5. Report: overall X x Y x Z, key feature sizes, validity, clearances (per side or total) and
-   hole compensation applied, check results and warnings, print orientation, supports needed,
+5. Report: overall X x Y x Z, key feature sizes (holes with their cut size: "hole for a 4 mm
+   dowel (cut 4.30: clearance 0.15 per side)"), validity, clearances (per side or total) and hole compensation applied, check results and warnings, print orientation, supports needed,
    and where the files are on my machine. If the part mates with something or has a hole
    pattern, offer a fit-test template first (a thin print cut from the part: make_template;
    confirm the face or region with me using list_faces' highlight or the template's _where
@@ -1944,39 +1980,65 @@ and keep my answers; skip a question I have already answered.
    shopping list. Default: step,stl,3mf,png.
 5. Default style for parts that set none: functional (default), modern/minimal, least_cost,
    rugged/outdoor, soft/handheld or structural/load-bearing.
-6. Hole compensation: ask whether I have measured it with the hole coupon. Only a measured value
-   counts: never guess or copy one.
+6. Holes: parts are modeled true to size and the SLICER corrects holes. Ask whether my slicer
+   has X-Y hole compensation, X-Y contour compensation or elephant-foot compensation set, and
+   whether I have measured the hole coupon. Its result goes into the slicer's X-Y hole
+   compensation (OrcaSlicer/Bambu Studio: Precision; Cura: Hole Horizontal Expansion): half the
+   diameter error, per side; tell me the number. Then save_setup(hole_comp=0) records that the
+   slicer does it. hole_comp in b123d-print is an opt-in (default 0) that builds the correction
+   into the files, for one printer only, with the slicer's at 0: only if I ask for it, and only a
+   measured value. Shrinkage and overall size (an XYZ cube: filament shrinkage %, X-Y contour or
+   size compensation) also belong in the slicer, per filament; there is no scale setting here.
+   Elephant-foot compensation stays on as usual.
+   Two printers of the same model: use_printer(name=..., nickname='p2s-garage') gives each its own
+   calibration.
 7. save_setup with my answers. If it reports conflicts (values already set), show them and ask
    before calling it again with overwrite=True.
-8. Offer the calibration coupons, in this order, one at a time: hole_coupon (hole compensation:
-   the calibrate_hole_comp prompt walks through it), fit_coupon (the fits), overhang_bridge_coupon
-   (the overhang angle and bridge length). For each: new_part('<name>', example='<name>'), export
-   it, say how to measure it, and store the result (save_setup for hole_comp, or the
-   `b123d-print printer calibrate <key> <value>` command save_setup lists).
-9. Remote server (HTTP or SSH) only: the settings are saved in this workspace on the server;
-   coupons are brought home like any part (download_part).
-10. Report what is set, where it is saved, and what calibration is still to do."""
+8. Calibration order: first the slicer's own dimensional calibration (an XYZ cube, for shrinkage
+   and overall size) if I do one, then offer the coupons one at a time: hole_coupon (the slicer's
+   hole compensation: the calibrate_hole_comp prompt walks through it), fit_coupon (clearance,
+   press_fit, free_fit, pip_clearance; printed with the same slicer settings as real parts, so
+   the fits include the slicer's correction), overhang_bridge_coupon (the overhang angle and
+   bridge length). The coupons measure whatever the slicer does at the time: redo them when I
+   change the slicer's compensation or the filament. For each: new_part('<name>', example='<name>'), export
+   it, say how to measure it, and store the result with save_setup
+   (calibration={'clearance': ..., 'max_bridge': ...}); it is kept for the active printer +
+   material. Locally `b123d-print printer calibrate <key> <value>` does the same.
+9. Remote server (HTTP or SSH) only: the settings and measured values are saved in this
+   workspace on the server, per printer; coupons are brought home like any part (download_part).
+   If save_setup says measured values are set for every printer, ask me, then
+   save_setup(move_flat=True) moves them under the active printer.
+10. Report what is set, where it is saved, what calibration is still to do, and save_setup's
+   'slicer' line (where holes are corrected)."""
 
 
 @mcp.prompt()
 def calibrate_hole_comp() -> str:
     """Walk through measuring HOLE_COMP with the calibration coupon."""
-    return """Help me calibrate hole compensation for my printer.
+    return """Help me calibrate hole compensation for my printer. Parts are modeled true to size;
+the slicer corrects the holes.
 1. If the workspace has no 'hole_coupon' part, create it with
    new_part('hole_coupon', example='hole_coupon') (vertical holes 2-8 mm in the plate, horizontal
    round and teardrop holes 3-8 mm in the tab, all cut at NOMINAL size, labeled), then export it
    and tell me where the file is.
-2. Ask me to print it with my usual material and settings and to measure every vertical hole
+2. Ask whether my slicer has X-Y hole compensation, X-Y contour compensation or elephant-foot
+   compensation set. Tell me to print the coupon with X-Y hole compensation at 0, or the
+   measurement includes the slicer's old correction. Shrinkage and contour compensation from an
+   XYZ cube come first and stay as set (elephant-foot compensation too); redo the coupon when
+   they or the filament change.
+3. Ask me to print it with my usual material and settings and to measure every vertical hole
    and every teardrop (the upper row of the tab).
-3. Compute HOLE_COMP = average(nominal - measured) over the vertical holes I use, and
-   HOLE_COMP_H the same over the teardrops; point out if the error grows with size. Tell me to
-   store them with `b123d-print printer calibrate hole_comp <value>` (and hole_comp_h) when a
-   printer profile is set, else in ~/.config/b123d-print/config.toml:
-       [print]
-       hole_comp = <value>
-       hole_comp_h = <value>
-   Do not hard-code them in part scripts. The fit_coupon and overhang_bridge_coupon examples
-   measure the fits and the overhang and bridge limits the same way."""
+4. Diameter error = average(nominal - measured) over the vertical holes I use; point out if it
+   grows with size. Tell me the slicer value: half of it, per side, in X-Y hole compensation
+   (OrcaSlicer/Bambu Studio: Precision; Cura: Hole Horizontal Expansion), e.g. holes 0.3 mm
+   small -> 0.15. Then save_setup(hole_comp=0) records that the slicer does it (locally
+   `b123d-print printer calibrate hole_comp 0`). Fits stay in the model; print the fit_coupon
+   with these same slicer settings.
+5. Only if I ask to build the correction into the files instead (opt-in, e.g. to correct
+   horizontal holes, which the slicer cannot treat apart): save_setup(hole_comp=<diameter
+   error>, hole_comp_h=<the teardrops' error>), and the slicer's X-Y hole compensation stays 0.
+   Say that every exported file then has it built in and is for this printer only. Never
+   hard-code it in part scripts."""
 
 
 # ---------------------------------------------------------------------------------------------

@@ -1415,8 +1415,9 @@ def import_finding(info) -> ck.Finding:
 
 
 def setup_findings(mod: ModuleType, findings: list[ck.Finding]) -> list[ck.Finding]:
-    """Reminders about settings the part depends on but nobody has set: hole_comp is 0 until it
-    is measured, so a part with holes gets them at nominal size, which prints small (BP-H1)."""
+    """Reminders about settings the part depends on but nobody has set: holes are modeled true to
+    size and print small unless the slicer's X-Y hole compensation corrects them (BP-H1); set
+    hole_comp (0 once the slicer is set, or an opt-in value) and the reminder stops."""
     return setup_findings_for(findings, hole_comp_source(getattr(mod, "__file__", None)) is not None)
 
 
@@ -1425,10 +1426,11 @@ def setup_findings_for(findings: list[ck.Finding], hole_comp_set: bool) -> list[
     if not n or hole_comp_set:
         return []
     return [ck.Finding(ck.WARN, "hole_comp", "settings",
-                       f"this part has {n} round hole(s) and hole_comp has never been set (user config, workspace, "
-                       "calibration or environment), so they are cut at nominal size and print small. Print the "
-                       "hole_coupon example (`b123d-print new coupon --from hole_coupon`), then store the result with "
-                       "`b123d-print printer hole-comp <value>` or `hole_comp = <value>` in your user config",
+                       f"this part has {n} round hole(s), modeled true to size: set your slicer's X-Y hole "
+                       "compensation for them (once per printer and material: print the hole_coupon example, "
+                       "`b123d-print new coupon --from hole_coupon`, and enter half the diameter error). Then "
+                       "`b123d-print printer calibrate hole_comp 0` (or save_setup(hole_comp=0)) records it and "
+                       "this reminder stops",
                        {"holes": n})]
 
 
@@ -1628,6 +1630,10 @@ def run(script_file: str, argv: list[str] | None = None) -> None:
         for line in timing_lines(s["timing"]):
             print("  " + line)
         print(f"  -> {len(s['files'])} files in {script.parent / 'out'}")
+        if settings.hole_comp or settings.hole_comp_h:
+            from .setup import hole_note
+
+            print("  " + hole_note(settings))
         if args.only and not args.no_check:
             print("  checks skipped with --only: they need every piece (run without --only, or b123d-print check)")
         if not args.no_check and not args.only:

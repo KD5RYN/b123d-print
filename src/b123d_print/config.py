@@ -8,7 +8,11 @@ Lookup order, later wins:
                        _ENV), B123D_PRINT_FORMATS (e.g. "step,3mf")
 
 Clearances are per side. With a printer profile set, values measured with the calibration
-coupons (calibration.toml, per printer + material) replace the defaults.
+coupons replace the defaults: per printer + material, in calibration.toml next to the user
+config, and in the workspace config's [calibration."<printer>/<material>"] tables (shared
+servers keep them there; they win over calibration.toml key by key). A flat workspace value
+still beats both. A printer can have a nickname ([printers] p2s_garage = "<profile>"), so two of
+the same model keep their own calibration: calibration is keyed by the nickname.
 
 Hole compensation is a property of *your* printer + material, so it normally lives in the user
 config. It defaults to 0: measure it with examples/hole_coupon before trusting any value.
@@ -63,6 +67,12 @@ class Settings:
     infill: float | None = None  # your default infill percent for the print sheet and estimates; none = 15
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
+    nickname: str = ""  # the printer's nickname when `printer` was set to one ([printers] table); printer is then its profile
+
+    @property
+    def calibration_key(self) -> str:
+        """The name calibration is stored under: the nickname, else the printer profile."""
+        return self.nickname or self.printer
 
 
 _ENV = {
@@ -78,8 +88,9 @@ _ENV = {
     "max_triangles": "B123D_PRINT_MAX_TRIANGLES",
 }
 NUMBERS = (*_ENV, "filament_price", "print_flow", "tip_speed")  # the numeric settings
-# measured per printer + material (calibration.toml): a calibration for the active printer beats
-# the same key in the user config, but not the workspace config or the environment
+# measured per printer + material (calibration.toml, or the workspace's [calibration] tables): a
+# calibration for the active printer beats the same key in the user config, but not a flat
+# workspace value or the environment
 CALIBRATED = ("hole_comp", "hole_comp_h", "clearance", "press_fit", "free_fit", "pip_clearance", "max_overhang", "max_bridge")
 
 
@@ -105,7 +116,7 @@ def _read(path: Path) -> dict:
     flat = {}
     for section in ("print", "workspace"):
         flat.update(raw.get(section, {}))
-    names = {f.name for f in fields(Settings)} - {"root"}
+    names = {f.name for f in fields(Settings)} - {"root", "nickname"}
     unknown = set(flat) - names
     if unknown:
         raise ValueError(f"{path}: unknown setting(s) {sorted(unknown)}; known: {sorted(names)}")
@@ -133,6 +144,25 @@ def _read(path: Path) -> dict:
         except ValueError as e:
             raise ValueError(f"{path}: {e}") from None
     return flat
+
+
+def _tables(path: Path | None) -> dict:
+    """The whole TOML file (empty for none or a missing file): for its [printers] and
+    [calibration] tables, which _read leaves out."""
+    if path is None or not path.is_file():
+        return {}
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def printer_nicknames(start: str | Path | None = None) -> dict[str, str]:
+    """Printer nicknames -> profile names, from the user config's and the workspace config's
+    [printers] tables (the workspace wins)."""
+    ws = find_workspace(start)
+    out = {}
+    for path in (user_config_path(), ws / WORKSPACE_FILE if ws else None):
+        out.update({str(k): str(v) for k, v in _tables(path).get("printers", {}).items()})
+    return out
 
 
 def parse_formats(value, where: str = "formats") -> tuple:
@@ -167,6 +197,9 @@ def load_settings(start: str | Path | None = None) -> Settings:
         explicit |= set(w)
     if os.environ.get("B123D_PRINT_PRINTER") is not None:
         s = replace(s, printer=os.environ["B123D_PRINT_PRINTER"])
+    nick = printer_nicknames(start).get(s.printer) if s.printer else None
+    if nick:
+        s = replace(s, nickname=s.printer, printer=nick)
     for name, var in _ENV.items():
         if os.environ.get(var):
             explicit.add(name)
@@ -186,7 +219,7 @@ def load_settings(start: str | Path | None = None) -> Settings:
     if s.printer:
         from .profiles import calibrated
 
-        cal = {k: v for k, v in calibrated(s.printer, s.material).items() if k not in explicit}
+        cal = {k: v for k, v in calibrated(s.calibration_key, s.material, ws).items() if k not in explicit}
         if cal:
             s = replace(s, **cal)
     for name, var in _ENV.items():
@@ -201,8 +234,8 @@ def load_settings(start: str | Path | None = None) -> Settings:
 
 def hole_comp_source(start: str | Path | None = None) -> str | None:
     """Where hole_comp comes from for a part script or folder: "environment", "workspace config",
-    "calibration" (for the active printer + material), "user config", or None when it was never
-    set and holes are cut at their nominal size."""
+    "workspace calibration" or "calibration" (for the active printer + material), "user config",
+    or None when it was never set and holes are cut at their nominal size."""
     if os.environ.get(_ENV["hole_comp"]):
         return "environment"
     ws = find_workspace(start)
@@ -210,9 +243,11 @@ def hole_comp_source(start: str | Path | None = None) -> str | None:
         return "workspace config"
     s = load_settings(start)
     if s.printer:
-        from .profiles import calibrated
+        from .profiles import calibrated, workspace_calibrated
 
-        if "hole_comp" in calibrated(s.printer, s.material):
+        if ws is not None and "hole_comp" in workspace_calibrated(ws / WORKSPACE_FILE, s.calibration_key, s.material):
+            return "workspace calibration"
+        if "hole_comp" in calibrated(s.calibration_key, s.material):
             return "calibration"
     user = user_config_path()
     if user.is_file() and "hole_comp" in _read(user):
@@ -246,34 +281,52 @@ def printer(script_file: str | Path | None = None):
     return load_printer(name) if name else None
 
 
-def set_user_setting(key: str, value: str | None, path: Path | None = None) -> Path:
+def set_user_setting(key: str, value: str | None, path: Path | None = None, table: str = "print",
+                     raw: bool = False) -> Path:
     """Set (or with None remove) `key` under [print] in the user config (or the TOML file
-    `path`, e.g. a workspace's b123d-print.toml), keeping the rest."""
+    `path`, e.g. a workspace's b123d-print.toml), keeping the rest. `table` names another table
+    (e.g. 'printers' or 'calibration."<printer>/<material>"'); raw=True writes the value as is
+    (a number) instead of as a string."""
     path = path or user_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    out, section, done = [], None, False
+    want = _table_path(table)
+    entry = f"{key} = {value}" if raw else f'{key} = "{value}"'
+    out, here, done = [], False, False
     for line in lines:
         st = line.strip()
-        if st.startswith("[") and st.endswith("]"):
-            if section == "print" and not done and value is not None:
-                out.append(f'{key} = "{value}"')
+        if st.startswith("[") and st.endswith("]") and not st.startswith("[["):
+            if here and not done and value is not None:
+                while out and not out[-1].strip():  # before the blank lines that end the table
+                    out.pop()
+                out += [entry, ""]
                 done = True
-            section = st[1:-1].strip()
-        elif section == "print" and st.split("=")[0].strip() == key:
+            here = _table_path(st[1:-1]) == want
+        elif here and st.split("=")[0].strip().strip('"') == key:
             if value is not None and not done:
-                out.append(f'{key} = "{value}"')
+                out.append(entry)
                 done = True
             continue
         out.append(line)
     if not done and value is not None:
-        if section != "print" and "[print]" not in (x.strip() for x in out):
-            out += ["", "[print]"] if out else ["[print]"]
-            out.append(f'{key} = "{value}"')
-        else:
-            out.append(f'{key} = "{value}"')
+        if not here:
+            out += ["", f"[{table}]"] if out else [f"[{table}]"]
+        out.append(entry)
     path.write_text("\n".join(out).strip() + "\n", encoding="utf-8")
     return path
+
+
+def _table_path(header: str) -> tuple:
+    """A table header's key path, however it is quoted: 'calibration."a/b"' -> ('calibration', 'a/b')."""
+    try:
+        d, keys = tomllib.loads(f"[{header}]\n"), []
+    except tomllib.TOMLDecodeError:
+        return (header.strip(),)
+    while isinstance(d, dict) and len(d) == 1:
+        k = next(iter(d))
+        keys.append(k)
+        d = d[k]
+    return tuple(keys)
 
 
 def clearance(script_file: str | Path | None = None) -> float:

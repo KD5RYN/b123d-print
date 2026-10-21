@@ -106,8 +106,14 @@ minutes; later starts are fast. If your assistant gives up waiting, see
 - Follow a whole session from start to finish: [your first bracket](../tutorials/first-bracket.md)
   or [remix a downloaded STL](../tutorials/remix-stl.md).
 - [How a session goes](../using/workflow.md): what to expect, and how to describe a part.
-- Calibrate [hole compensation](../using/hole-compensation.md) before you print anything with
-  holes that matter.
+- Set your slicer's [hole compensation](../using/hole-compensation.md) from the hole coupon
+  before you print anything with holes that matter.
+
+!!! warning "Hole compensation"
+    Holes are drawn true to size; hole shrinkage is set in your slicer (X-Y hole
+    compensation, from the [hole coupon](../using/hole-compensation.md)). Turning on `hole_comp` bakes
+    the correction into the files for one printer, with the slicer's hole compensation then at 0.
+
 - Parts on a home server, many agents, or Docker: [Advanced: run it on another machine](../advanced/index.md).
 - Other ways in: the [Claude Code plugin](mcp-clients.md#claude-code) (adds a skill that points
   at the workflow), or the [CLI and Python](cli.md) for agents that run shell commands, or by

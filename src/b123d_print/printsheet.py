@@ -151,6 +151,7 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
          ("Written by `b123d-print` export (the `print` format) from the part as built. Filament is a "
           "simple estimate (roughly ±20 %), time and supports are rough estimates: compare versions "
           "with them, the slicer has the real numbers."), "",
+         *([f"> **{_baked(p, settings)}**", ""] if p.hole_comp or p.hole_comp_h else []),
          "## Pieces", "",
          "| Piece | Size X × Y × Z (mm) | Volume (cm³) | Filament (g) | Time | Supports |",
          "| --- | --- | --- | --- | --- | --- |"]
@@ -219,12 +220,8 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
                  "per-object modifier in the slicer, or more walls for the whole part).")
     for w in _walls(mod, d, settings.min_wall):
         L.append(f"- **Wall checked by the script:** {w}")
-    hc, hch = p.hole_comp, p.hole_comp_h
-    if any(m["holes"] for m in per.values()):
-        comp = (f"{hc:g} mm" + (f" ({hch:g} mm on holes lying on their side)" if hch != hc else "")) if hc or hch else \
-            "none (hole_comp was 0, so holes may print small)"
-        L.append(f"- **Hole compensation applied in the CAD:** {comp}. Leave the slicer's own hole or X-Y "
-                 "compensation off, or the holes are corrected twice.")
+    if any(m["holes"] for m in per.values()) or p.hole_comp or p.hole_comp_h:
+        L.append(f"- **Hole compensation:** {_baked(p, settings)}")
     L.append(f"- **Fits:** clearance {settings.clearance:g} mm per side (sliding), press fit {settings.press_fit:g}, "
              f"free fit {settings.free_fit:g}, print-in-place {settings.pip_clearance:g}. They assume the "
              "slicer's flow and elephant's-foot compensation are tuned; the CAD is at nominal size.")
@@ -244,3 +241,11 @@ def write(mod, d, parts: dict, settings, out: Path, name: str, title: str) -> Pa
     path = out / f"{name}.md"
     path.write_text(sheet(mod, d, parts, settings, title), encoding="utf-8")
     return path
+
+
+def _baked(p, settings) -> str:
+    """Where the holes are corrected: the slicer (true-to-size model), or built in (opt-in hole_comp)."""
+    from .setup import slicer_note
+
+    return slicer_note(p.hole_comp, p.hole_comp_h,
+                       f"{settings.calibration_key}/{settings.material or 'any'}" if settings.printer else "")

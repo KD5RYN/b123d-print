@@ -239,6 +239,7 @@ def test_hole_comp_reminder_once(tmp_path, monkeypatch):
     s = project.load_settings(part)
     first = [f for f in project.run_checks(mod, "", s) if f.check == "hole_comp"]
     assert len(first) == 1 and "hole_coupon" in first[0].message and first[0].level == "warn"
+    assert "slicer's X-Y hole compensation" in first[0].message and "print small" not in first[0].message
     assert not [f for f in project.run_checks(mod, "big", s, nudge=False) if f.check == "hole_comp"]
     (tmp_path / "b123d-print.toml").write_text('[workspace]\nparts_dir = "parts"\n[print]\nhole_comp = 0.3\n', encoding="utf-8")
     assert not [f for f in project.run_checks(mod, "", project.load_settings(part)) if f.check == "hole_comp"]

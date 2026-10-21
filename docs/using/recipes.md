@@ -216,7 +216,7 @@ other metric or inch screws; convert inch measurements to mm.
 The cutter adds **2 × `clearance` per diameter** (`clearance` is per side) and then adds
 **`hole_comp` once per diameter** (total). Table clearance holes already have an allowance:
 `clearance` adds extra to that base, so set it to zero to keep the table's shaft clearance.
-Do not pre-add `HOLE_COMP` or also enable slicer hole compensation. The actual head must remain
+Do not pre-add `HOLE_COMP` (0 unless you opted in; then the slicer's hole compensation stays 0). The actual head must remain
 larger than the compensated shaft opening; excessive allowances are rejected. `head_depth` is
 an axial dimension with no diameter compensation: leave axial space for the measured head height.
 
@@ -283,8 +283,8 @@ position; keyholes alone do not prevent reverse travel or lifting off.
 
 The fixture's `templates(d)` exports a **full-depth crop** with the normal export tools. Print
 that small coupon with the same orientation, material, layer height and hole settings planned
-for the mount. If the exporter warns that hole compensation has never been calibrated, print
-the existing `hole_coupon` and store its result before judging the mounting fit. A thin face/slice template can check the 30 mm pattern and entry diameter, but
+for the mount. If `check` reminds you that the slicer's hole compensation is not set, print
+the existing `hole_coupon` and set it before judging the mounting fit. A thin face/slice template can check the 30 mm pattern and entry diameter, but
 cannot check recess depth, head travel or lip retention. Try both screws, head insertion, the
 full slide, seating and removal without forcing it. Record screw measurements, printer/material,
 allowances and the physical result. A maintainer must print and try this fixture before adding

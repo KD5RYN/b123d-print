@@ -16,12 +16,14 @@ b123d-print printer use bambu_lab_a1_mini --material petg
   and warns when the part only fits turned 90°).
 - Minimum wall becomes 2 line widths of your nozzle; the overhang limit comes from the printer;
   material notes (PLA vs PETG vs ASA …) reach the model.
-- `b123d-print printer hole-comp 0.4` stores your [coupon result](hole-compensation.md) for that
-  printer + material; `b123d-print printer calibrate <key> <value>` stores any other coupon
+- `b123d-print printer hole-comp 0` records that the slicer corrects holes for that printer +
+  material ([hole compensation](hole-compensation.md); a measured value is an opt-in built into
+  the files); `b123d-print printer calibrate <key> <value>` stores any other coupon
   result (fits, overhang and bridge limits; see [Settings](settings.md#keys)).
 - `b123d-print printer show` shows the active printer; `b123d-print printer use generic` goes
   back.
-- Over MCP: the `use_printer` tool searches and sets them; `list_parts` shows the active ones.
+- Over MCP: the `use_printer` tool searches and sets them; `list_parts` shows the active ones,
+  with the values measured for them.
 - First run: `b123d-print setup` (or the `setup_workspace` prompt) asks for the printer,
   material, formats and style in one go, then lists the calibration coupons to print.
 
@@ -37,7 +39,56 @@ b123d-print printer use bambu_lab_a1_mini --material petg
   `printer hole-comp` for hole compensation), kept in `~/.config/b123d-print/calibration.toml`:
   `hole_comp`, `hole_comp_h`, `clearance`, `press_fit`, `free_fit`, `pip_clearance`,
   `max_overhang`, `max_bridge`. A key missing for the material falls back to
-  `<printer>/any`.
+  `<printer>/any`. In a workspace, `printer calibrate --workspace` (and `save_setup` on a
+  shared server) keeps them in its `b123d-print.toml` instead. Shrinkage is not among them: it
+  is set per filament in the slicer (an XYZ cube), before the coupons
+  ([calibration order](hole-compensation.md#calibration-order-and-shrinkage)).
+
+## Two printers of the same model
+
+Calibration is kept per printer profile, so two P2S printers would share one set of numbers.
+Give each a nickname, and each keeps its own:
+
+```bash
+b123d-print printer use bambu_lab_p2s --nickname p2s-garage
+b123d-print printer calibrate hole_comp 0.3
+b123d-print printer use bambu_lab_p2s --nickname p2s-office
+b123d-print printer calibrate hole_comp 0.45
+b123d-print printer use p2s-garage       # switch back: hole_comp is 0.3 again
+```
+
+Over MCP: `use_printer(name="bambu_lab_p2s", nickname="p2s-garage")`, then
+`use_printer(name="p2s-garage")` to switch. A nickname uses lower case letters, digits, `_` and
+`-`, and may not be the name of a printer profile. It is saved in a `[printers]` table
+(`p2s-garage = "bambu_lab_p2s"`) next to the printer setting, and calibration is stored under
+the nickname. With one printer of each model you need no nicknames.
+
+## Calibration on a shared server
+
+On a shared server (HTTP or SSH) each workspace has its own `b123d-print.toml`, and the
+measured values live there, per printer + material, in the same shape as `calibration.toml`:
+
+```toml
+[print]
+printer = "p2s-garage"
+material = "pla"
+
+[printers]
+p2s-garage = "bambu_lab_p2s"
+
+[calibration."p2s-garage/pla"]
+hole_comp = 0.3
+clearance = 0.18
+
+[calibration."bambu_lab_a1_mini/any"]
+hole_comp = 0.2
+```
+
+`save_setup` writes them (`hole_comp`, `hole_comp_h`, and `calibration={"clearance": 0.18}` for
+the other coupon results) for the active printer, so `use_printer` switches the numbers with the
+printer. A value set flat under `[print]` still wins over every printer's calibration, as
+before; older versions saved `hole_comp` that way. `save_setup` points such values out and, if
+you agree, `save_setup(move_flat=True)` moves them under the active printer (for any material).
 
 ## Your own printer or material
 
@@ -74,8 +125,8 @@ optional `clearance` and `density`).
 - `fit` check (fails) per printable part; warns when it only fits turned 90°.
 - Wall and thin checks default to the printer's minimum wall and line width; the overhang check
   to its limits.
-- `printer(__file__)` in part scripts returns the active profile (or `None` in generic mode);
-  `hole_comp(__file__)` picks up the calibration.
+- `printer(__file__)` in part scripts returns the active profile (or `None` in generic mode;
+  for a nickname, the profile behind it); `hole_comp(__file__)` picks up the calibration.
 - MCP: `list_parts` shows the printer/material, `use_printer` searches and sets them.
 - `design_metrics` uses the printer's nozzle and layer height and the material's density for its
   rough filament and time estimates.

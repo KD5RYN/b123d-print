@@ -56,8 +56,10 @@ a **WARN** is reported and left to you. The CLI exits with code 1 on any failure
   pieces of the `assembly(d)`: the first collision and the smallest clearance over the whole
   motion, with a picture of the worst position. Declared with `Motion(...)` or `Slide(...)` in
   `checks(d)`; see [Motion clearance](#motion-clearance).
-- **hole_comp** — once per run, a warning when the part has holes but `hole_comp` has never been
-  set: they are cut at nominal size and print small. See [Hole compensation](hole-compensation.md).
+- **hole_comp** — once per run, a reminder when the part has holes and nothing records where they
+  are corrected: set the slicer's X-Y hole compensation from the hole coupon, then
+  `printer calibrate hole_comp 0` (or `save_setup(hole_comp=0)`) stops it. See
+  [Hole compensation](hole-compensation.md).
 
 !!! tip "Pin Wall and Probe to the assembly"
     Wall and Probe coordinates are in print orientation by default. Turn the part over and
