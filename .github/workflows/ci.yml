@@ -76,6 +76,9 @@ jobs:
       - name: Docs build
         if: env.FULL != 'true'
         run: uv run mkdocs build --strict
+      - name: Workflow files parse (a housekeeping workflow change takes this quick path)
+        if: env.FULL != 'true'
+        run: uv run python -c "import glob, yaml; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml') + ['.github/dependabot.yml']]"
 
   unit:
     needs: changes
