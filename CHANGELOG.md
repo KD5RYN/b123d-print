@@ -17,6 +17,23 @@
   (only the script, `ref/` and `b123d-print.toml` need keeping; on a shared server, the copy
   `download_part` brings home is your record).
 
+- **Version history, and resuming a project on a shared server** (#125): `b123d-print init` and
+  first-run setup offer to keep a version history of the project folder (git underneath; nothing
+  without a yes; `init --git` / `--no-git`), with a `.gitignore` that keeps out `out/`, downloaded
+  zips, tokens, client configs and caches. New MCP tools `save_version`, `list_versions`,
+  `restore_version` and CLI commands `save`, `versions`, `restore`, in plain words ("Saved
+  shelf_bracket as version 3: ARM_L 115 → 130"). A save takes each part's script, `ref/`,
+  `MEASURE.md`, the `.py` files beside the script and `b123d-print.toml`. Going back saves the
+  old files as a new version: no reset, no lost history, files added later kept, refused while
+  the part has unsaved changes. The agent offers "Save this version?" after a change that built
+  and passed its checks and never saves on its own. Git runs with a fixed argument list, the
+  repository's hooks and fsmonitor off, and refuses a repository whose own config defines a
+  filter. On a shared (HTTP/SSH) server the history stays on the user's machine: the tools run
+  no git there and return the commands for the project folder, and a part missing on the server
+  (removed after 30 days unused) is resumed from the user's copy with `new_part`, `write_part`
+  and `upload_reference`. [What to save](https://kd5ryn.github.io/b123d-print/using/what-to-save/)
+  has "Versions" and "Resume a project later".
+
 ## 0.3.10 — 2026-10-21
 
 - **Calibration per printer on shared servers, and printer nicknames** (#121): on an HTTP or

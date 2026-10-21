@@ -1,5 +1,5 @@
 """`b123d-print` command line: init, setup, new, build, check, bom, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
-and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
+version history (save, versions, restore) and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
 
@@ -800,6 +800,52 @@ def cmd_setup(args) -> int:
     s = load_settings(root)
     print(st.hole_note(s))
     print(st.next_steps(hole_comp_source(root) is not None))
+    if ask and (root / WORKSPACE_FILE).is_file():
+        _offer_git(root, False, False)
+    return 0
+
+
+def _offer_git(root: Path, yes: bool, no: bool) -> int:
+    """init and setup: ask whether to keep a version history (git) of the project; nothing without a yes."""
+    from . import versions
+
+    if no or versions.is_repo(root):
+        return 0
+    if not versions.git_path():
+        if yes:
+            sys.exit(f"init: {versions.NO_GIT}")
+        return 0
+    if not yes:
+        if not sys.stdin.isatty():
+            print("Version history: `b123d-print init --git` makes this folder a git repository, so `b123d-print save` "
+                  "can keep versions of your parts.")
+            return 0
+        print("Version history: keep versions of your parts (script, ref/, settings) so you can go back to one later. "
+              "It makes this folder a git repository on this machine; out/, downloaded zips and tokens are left out, "
+              "and nothing is sent anywhere.")
+        if not _ask("Start a version history here? (y/N)", "n").lower().startswith("y"):
+            print("  not started; `b123d-print init --git` starts it later")
+            return 0
+    try:
+        print(versions.start(root))
+    except versions.VersionError as e:
+        sys.exit(f"init: {e}")
+    return 0
+
+
+def cmd_versions(args) -> int:
+    from . import versions
+
+    root, _ = workspace(args.root)
+    try:
+        if args.cmd == "save":
+            print(versions.save(root, args.message, args.part))
+        elif args.cmd == "versions":
+            print(versions.history(root, args.part, args.limit))
+        else:
+            print(versions.restore(root, args.part, args.version))
+    except versions.VersionError as e:
+        sys.exit(f"{args.cmd}: {e}")
     return 0
 
 
@@ -898,6 +944,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("init", help="create a workspace (b123d-print.toml, AGENTS.md, parts/)")
     p.add_argument("dir", nargs="?", default=".")
     p.add_argument("--update-agents", action="store_true", help="replace AGENTS.md with this version's text")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--git", action="store_true", help="also keep a version history: make the folder a git repo "
+                                                     "with a .gitignore (asked when run in a terminal)")
+    g.add_argument("--no-git", action="store_true", help="never ask about version history")
     p = sub.add_parser("new", help="scaffold parts/<name>/<name>.py from the template")
     p.add_argument("name")
     p.add_argument("-d", "--description", default="")
@@ -1099,6 +1149,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", help="file name on the server (default: the file's own name)")
     p.add_argument("--overwrite", action="store_true", help="replace a reference file of the same name")
     p.add_argument("--ssh", default="ssh", help="ssh command and options (default: ssh)")
+    p = sub.add_parser("save", help="save a version of the parts (script, ref/, MEASURE.md) and b123d-print.toml "
+                                    "in the project's version history (git)")
+    p.add_argument("message", nargs="?", default="", help="what changed, in a few words (default: the changed values)")
+    p.add_argument("--part", help="only this part (default: every part)")
+    p = sub.add_parser("versions", help="list the saved versions, newest first, with what changed")
+    p.add_argument("part", nargs="?", help="number this part's versions, for restore (default: every part)")
+    p.add_argument("--limit", type=int, default=20, help="show at most this many (default 20)")
+    p = sub.add_parser("restore", help="bring a part back to a saved version, as a new version (nothing is lost)")
+    p.add_argument("part")
+    p.add_argument("version", help="a number from `b123d-print versions <part>`, or a commit id")
     sub.add_parser("config", help="show the settings in effect")
     sub.add_parser("list", help="list parts in the workspace")
     sub.add_parser("examples", help="list the bundled example parts")
@@ -1122,7 +1182,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "init":
         made = init_workspace(Path(args.dir).resolve(), args.update_agents)
         print("\n".join(f"wrote {m}" for m in made) or "workspace already set up (AGENTS.md unchanged)")
-        return 0
+        return _offer_git(Path(args.dir).resolve(), args.git, args.no_git)
+    if args.cmd in ("save", "versions", "restore"):
+        return cmd_versions(args)
     if args.cmd == "new":
         root, parts_dir = workspace(args.root)
         print(f"created {new_part(root, parts_dir, args.name, args.description, args.example)}")

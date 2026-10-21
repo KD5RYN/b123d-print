@@ -92,7 +92,8 @@ The assistant asks you to confirm the dimensions, designs the part, checks it an
 files in your parts folder, under `parts/<name>/out/`. The file for your slicer is in
 `out/print/` (for example `~/parts/parts/spacer/out/print/spacer.3mf`); `out/README.md` says
 what is where. Only the script and a few settings need a backup: see
-[What to save](../using/what-to-save.md).
+[What to save](../using/what-to-save.md). To go back to an earlier version of a part later,
+start a [version history](../using/what-to-save.md#versions) (`b123d-print init --git`).
 
 The very first start downloads a few hundred MB (mostly the geometry engine) and can take a few
 minutes; later starts are fast. If your assistant gives up waiting, see
