@@ -2,6 +2,13 @@
 
 ## 0.3.9 — unreleased
 
+- **OpenCode** and **Qwen Code** are documented, tested clients ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#opencode)):
+  OpenCode's own config format (`"mcp"`, `"type": "remote"`) and Qwen Code's (`httpUrl`), both
+  tested over HTTP with the Ollama model `gemma4:31b-cloud`. The client table also marks Claude Desktop, Claude Code, Antigravity,
+  Codex and Grok Build as tested, and the Codex snippets raise its 60 s tool timeout.
+- `token add` prints ready-to-paste config for each tested client: Claude Code, OpenCode, Qwen Code,
+  Antigravity, Codex (token from an environment variable) and Grok Build, besides the generic
+  JSON.
 - **The workflow rules reach every client** (#110): non-Claude clients (OpenCode, Qwen Code,
   Grok Build, Antigravity with Gemini) passed neither the `b123d-print://guide` resource nor the
   server instructions to the model, so it modeled on guessed dimensions and left exports on the
