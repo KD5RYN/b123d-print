@@ -70,6 +70,7 @@ b123d-print with it yet: tell us how it went in an
 | [Grok Build CLI](#grok) (xAI) | yes | yes (`--header`) | not documented | not documented | **yes** (HTTP) |
 | [OpenCode](#opencode) | yes (`"type": "local"`) | yes (`"type": "remote"`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
 | [Qwen Code](#qwen-code) | yes | yes (`httpUrl`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
+| [pi](#pi) (pi coding agent) | yes | yes (`url`, `headers`) | not documented | not documented | **yes** (HTTP, with Ollama `gemma4:31b-cloud`) |
 | [Windsurf](#windsurf) | yes | yes (`headers`) | not documented | yes | untested |
 | [Zed](#zed) | yes | yes (`headers`) | not documented | yes | untested |
 | [LM Studio](#lm-studio) | yes | yes (`headers`) | not documented | not documented | untested |
@@ -411,6 +412,45 @@ format: `~/.qwen/settings.json`, or `.qwen/settings.json` in a project. A remote
 On your own machine, `"command": "uvx"` and `"args": ["--from", "b123d-print",
 "b123d-print-mcp", "--workspace", "/Users/you/parts"]` instead of `httpUrl`. Check with `/mcp`.
 `token add` prints the remote block filled in.
+
+## pi
+
+[pi](https://github.com/earendil-works/pi) (the pi coding agent) reads `~/.pi/agent/mcp.json`,
+or `.pi/mcp.json` in a trusted project, in the common `mcpServers` format. Tested against a
+shared server over HTTP, with the Ollama model `gemma4:31b-cloud`. The easiest way is its own
+command, with the token in an environment variable:
+
+```bash
+pi mcp add b123d-print --url "https://cad.example.com/mcp" --bearer-token-env-var B123D_TOKEN --description "Design 3D-printable parts; read the b123d-print guide first"
+```
+
+That writes this entry; add `"timeout"`:
+
+```json
+{
+  "mcpServers": {
+    "b123d-print": {
+      "url": "https://cad.example.com/mcp",
+      "headers": {"Authorization": "Bearer ${B123D_TOKEN}"},
+      "description": "Design 3D-printable parts; read the b123d-print guide first",
+      "timeout": 300
+    }
+  }
+}
+```
+
+- **`"timeout": 300`** (seconds): pi's default is 60 per request, shorter than a long build or
+  check.
+- **`description`** goes into the model's system prompt: the place to tell any model to read
+  the guide first.
+- `${B123D_TOKEN}` reads the environment variable: `export B123D_TOKEN='<token>'` before `pi`.
+  The literal token works too; keep the file private.
+- pi's default `exposure` is `codemode` (the model reaches the tools through pi's code mode);
+  `/mcp` in a session changes it.
+- Check with `pi mcp list`; after editing the file, `/reload` in a running session.
+
+On your own machine: `pi mcp add b123d-print -- uvx --from b123d-print b123d-print-mcp
+--workspace ~/parts`, and the same `timeout`.
 
 ## Windsurf
 

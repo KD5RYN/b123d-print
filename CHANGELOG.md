@@ -2,11 +2,11 @@
 
 ## 0.3.9 — unreleased
 
-- **OpenCode** and **Qwen Code** are documented, tested clients ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#opencode)):
-  OpenCode's own config format (`"mcp"`, `"type": "remote"`) and Qwen Code's (`httpUrl`), both
-  tested over HTTP with the Ollama model `gemma4:31b-cloud`. The client table also marks Claude Desktop, Claude Code, Antigravity,
+- **OpenCode**, **Qwen Code** and **pi** are documented, tested clients ([docs](https://kd5ryn.github.io/b123d-print/getting-started/mcp-clients/#opencode)):
+  OpenCode's own config format (`"mcp"`, `"type": "remote"`) Qwen Code's (`httpUrl`) and pi's (`pi mcp add`, a
+  `description` for the system prompt, a longer `timeout`), all tested over HTTP with the Ollama model `gemma4:31b-cloud`. The client table also marks Claude Desktop, Claude Code, Antigravity,
   Codex and Grok Build as tested, and the Codex snippets raise its 60 s tool timeout.
-- `token add` prints ready-to-paste config for each tested client: Claude Code, OpenCode, Qwen Code,
+- `token add` prints ready-to-paste config for each tested client: Claude Code, OpenCode, Qwen Code, pi,
   Antigravity, Codex (token from an environment variable) and Grok Build, besides the generic
   JSON.
 
