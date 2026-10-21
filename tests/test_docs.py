@@ -175,7 +175,7 @@ def test_settings_documented():
     """The Keys table in settings.md is exactly the config.Settings fields a config file may set."""
     from b123d_print.config import Settings
 
-    keys = {f.name for f in dataclasses.fields(Settings)} - {"root"}
+    keys = {f.name for f in dataclasses.fields(Settings)} - {"root", "nickname"}  # derived, not set in a file
     assert table_keys(page("using/settings.md"), "Keys") == keys
 
 
@@ -183,7 +183,7 @@ def test_workspace_template_mentions_every_setting():
     from b123d_print.config import Settings
 
     template = (ROOT / "src/b123d_print/data/b123d-print.toml").read_text(encoding="utf-8")
-    keys = {f.name for f in dataclasses.fields(Settings)} - {"root", "printer", "material"}
+    keys = {f.name for f in dataclasses.fields(Settings)} - {"root", "nickname", "printer", "material"}
     assert {k for k in keys if not re.search(rf"^#?\s*{k}\s*=", template, re.M)} == set()
 
 

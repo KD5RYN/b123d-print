@@ -118,7 +118,8 @@ features have clearance.
   each loop, so a key's corners hit first. The joints round every profile corner, and the
   female's corners sit exactly `clearance` away.
 - **Faceted holes.** A round hole exported as a polygon has its flats inside the true circle,
-  so holes print small. `HOLE_COMP` corrects this together with the printer's own error [H1].
+  so holes print small. The slicer's X-Y hole compensation (or an opt-in `HOLE_COMP`) corrects
+  this together with the printer's own error [H1].
 - **Shrinkage**, in ABS, ASA and nylon over long distances. Place mating features near each
   other [F5, M1].
 

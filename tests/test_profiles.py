@@ -86,3 +86,40 @@ def test_calibrate_every_key(cfg, monkeypatch):
     assert load_settings().max_bridge == 12.0  # the environment still wins
     with pytest.raises(SystemExit):
         main(["printer", "calibrate", "min_wall", "1"])  # not a calibration value
+
+
+def test_nicknames_keep_their_own_calibration(cfg):
+    """Locally too: two of the same model, each with its own calibration in calibration.toml."""
+    assert main(["printer", "use", "bambu_lab_p2s", "--nickname", "p2s-left", "--material", "pla"]) == 0
+    assert main(["printer", "calibrate", "hole_comp", "0.3"]) == 0
+    assert main(["printer", "use", "bambu_lab_p2s", "--nickname", "p2s-right"]) == 0
+    assert main(["printer", "calibrate", "hole_comp", "0.5"]) == 0
+    assert load_settings().hole_comp == 0.5
+    assert main(["printer", "use", "p2s-left"]) == 0
+    s = load_settings()
+    assert (s.printer, s.nickname, s.hole_comp) == ("bambu_lab_p2s", "p2s-left", 0.3)
+    assert pf.calibrated("p2s-right", "pla") == {"hole_comp": 0.5} and pf.calibrated("bambu_lab_p2s", "pla") == {}
+    with pytest.raises(ValueError, match="already a printer profile"):
+        pf.save_nickname("bambu_lab_a1_mini", "bambu_lab_p2s")
+    with pytest.raises(KeyError):
+        pf.save_nickname("p2s-ghost", "p2s-left")  # a nickname must point at a profile
+
+
+def test_calibrate_into_the_workspace(cfg, tmp_path, monkeypatch, capsys):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.chdir(ws)
+    assert main(["init", str(ws)]) == 0
+    assert main(["printer", "use", "bambu_lab_a1_mini", "--material", "pla"]) == 0
+    assert main(["printer", "calibrate", "hole_comp", "0.2"]) == 0  # calibration.toml, as before
+    assert main(["printer", "calibrate", "hole_comp", "0.35", "--workspace"]) == 0
+    assert "every hole is cut 0.35 mm larger" in capsys.readouterr().out
+    assert pf.calibrated("bambu_lab_a1_mini", "pla") == {"hole_comp": 0.2}
+    assert pf.calibrated("bambu_lab_a1_mini", "pla", ws) == {"hole_comp": 0.35}  # the workspace wins key by key
+    s = load_settings()
+    assert s.hole_comp == 0.35
+    from b123d_print.config import hole_comp_source
+
+    assert hole_comp_source() == "workspace calibration"
+    set_user_setting("hole_comp", "0.1", ws / "b123d-print.toml")
+    assert load_settings().hole_comp == 0.1  # a flat workspace value still wins

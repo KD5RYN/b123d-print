@@ -2,6 +2,34 @@
 
 ## 0.3.10 — unreleased
 
+- **Calibration per printer on shared servers, and printer nicknames** (#121): on an HTTP or
+  SSH server, `save_setup` stored `hole_comp` for every printer of the workspace, so switching
+  printers kept the old printer's numbers. Measured values (`hole_comp`, `hole_comp_h`, the fits,
+  `max_overhang`, `max_bridge`) now go to `[calibration."<printer>/<material>"]` tables in the
+  workspace's `b123d-print.toml`, the same shape as `calibration.toml`, and `use_printer`
+  switches them with the printer. `save_setup` takes the other coupon results too
+  (`calibration={"clearance": 0.18}`). Old flat values still load and still win; `save_setup`
+  points them out, and `save_setup(move_flat=True)` moves them under the active printer.
+  `b123d-print printer calibrate --workspace` writes the same tables locally; `calibration.toml`
+  works as before. **Nicknames** for two printers of the same model:
+  `use_printer(name="bambu_lab_p2s", nickname="p2s-garage")` (CLI: `printer use bambu_lab_p2s
+  --nickname p2s-garage`); each keeps its own calibration, and `list_parts` shows the active one
+  with its measured values ([docs](https://kd5ryn.github.io/b123d-print/using/printer-profiles/#two-printers-of-the-same-model)).
+- **Holes are corrected in the slicer by default** (#121): models stay true to size (a 4 mm
+  hole is cut at 4.00; a hole for a 4 mm dowel at 4 + 2 × clearance), and the hole coupon's
+  result goes into the slicer's X-Y hole compensation: half the diameter error, per side. The
+  setup and `calibrate_hole_comp` prompts say so and give the number; the `hole_comp` check no
+  longer warns that holes print small, it reminds you to set the slicer's hole compensation
+  (`printer calibrate hole_comp 0` or `save_setup(hole_comp=0)` records that you did).
+  `hole_comp` / `hole_comp_h` stay as an opt-in (default 0) to build the correction into the
+  files; then `export`, the build output, `save_setup` and the print sheet say in capitals that
+  every hole is cut that much larger, for that printer only, with the slicer's X-Y hole
+  compensation at 0. The fit coupon is printed with the same slicer settings as real parts. The
+  docs give the calibration order: the slicer's XYZ cube for shrinkage (per filament, in the
+  slicer; no new coupon or scale setting), then the hole, fit and overhang/bridge coupons,
+  redone when the slicer's compensation or the filament changes. The agent's dimension list
+  says whether a hole's size is the printed hole or what goes in it, and its report gives each
+  hole's cut size ([docs](https://kd5ryn.github.io/b123d-print/using/hole-compensation/)).
 - **Print intent** (#115): the print sheet told the hole-compensation coupon to use supports,
   although the coupon tests holes printed without them. A part script now states how it must be
   printed with a `PRINT` mapping (module level, or in `Dims` per variant): `supports` (`none`,

@@ -4,7 +4,8 @@ tuning.
 
 Built-in profiles ship in b123d_print/data/{printers,materials}/<name>.toml; your own go in
 ~/.config/b123d-print/{printers,materials}/<name>.toml and win over a built-in of the same name.
-Hole compensation per printer + material lives in ~/.config/b123d-print/calibration.toml.
+Values measured per printer + material live in ~/.config/b123d-print/calibration.toml, and in a
+workspace's b123d-print.toml under [calibration."<printer>/<material>"] (shared servers).
 """
 
 from __future__ import annotations
@@ -169,30 +170,50 @@ def _read_calibration() -> dict:
     return tomllib.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
 
 
-def calibrated(printer: str, material: str) -> dict[str, float]:
-    """Measured values for printer + material ("<printer>/<material>", falling back to
-    "<printer>/any" key by key)."""
+def _lookup(raw: dict, printer: str, material: str) -> dict[str, float]:
     from .config import CALIBRATED
 
-    if not printer:
-        return {}
-    raw = _read_calibration()
     out = {}
     for entry in (raw.get(f"{printer}/any", {}), raw.get(f"{printer}/{material or 'any'}", {})):
         out.update({k: float(v) for k, v in entry.items() if k in CALIBRATED})
     return out
 
 
+def calibrated(printer: str, material: str, workspace: Path | None = None) -> dict[str, float]:
+    """Measured values for printer + material ("<printer>/<material>", falling back to
+    "<printer>/any" key by key). `printer` is the calibration key: the nickname if it has one.
+    With `workspace` (a folder with a b123d-print.toml), that file's [calibration] tables win
+    over calibration.toml key by key."""
+    if not printer:
+        return {}
+    out = _lookup(_read_calibration(), printer, material)
+    if workspace is not None:
+        from .config import WORKSPACE_FILE
+
+        out.update(workspace_calibrated(Path(workspace) / WORKSPACE_FILE, printer, material))
+    return out
+
+
+def workspace_calibrated(path: Path, printer: str, material: str) -> dict[str, float]:
+    """Measured values for printer + material in a workspace's b123d-print.toml alone."""
+    from .config import _tables
+
+    return _lookup(_tables(path).get("calibration", {}), printer, material) if printer else {}
+
+
 def calibrated_hole_comp(printer: str, material: str) -> float | None:
     return calibrated(printer, material).get("hole_comp")
 
 
-def save_calibration(printer: str, material: str, key: str, value: float) -> Path:
-    """Store one measured value for printer + material, keeping the others."""
-    from .config import CALIBRATED
+def save_calibration(printer: str, material: str, key: str, value: float, path: Path | None = None) -> Path:
+    """Store one measured value for printer + material, keeping the others: in calibration.toml,
+    or with `path` (a workspace's b123d-print.toml) in its [calibration."<printer>/<material>"]."""
+    from .config import CALIBRATED, set_user_setting
 
     if key not in CALIBRATED:
         raise ValueError(f"{key!r} is not a calibration value; choose from {list(CALIBRATED)}")
+    if path is not None:
+        return set_user_setting(key, f"{float(value):g}", path, table=f'calibration."{printer}/{material or "any"}"', raw=True)
     p = calibration_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     raw = _read_calibration()
@@ -206,6 +227,24 @@ def save_calibration(printer: str, material: str, key: str, value: float) -> Pat
 
 def save_hole_comp(printer: str, material: str, value: float) -> Path:
     return save_calibration(printer, material, "hole_comp", value)
+
+
+# --- nicknames: two printers of the same model, each with its own calibration ------------------
+
+NICK_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+def save_nickname(nickname: str, printer: str, path: Path | None = None) -> Path:
+    """Name a printer: [printers] <nickname> = "<profile>" in the user config (or the TOML file
+    `path`, a workspace's b123d-print.toml). Calibration is then kept under the nickname."""
+    from .config import set_user_setting
+
+    if not NICK_RE.match(nickname):
+        raise ValueError(f"nickname {nickname!r}: lower case letters, digits, '_' and '-', e.g. p2s-garage")
+    if nickname in available("printers"):
+        raise ValueError(f"{nickname!r} is already a printer profile name; choose another nickname")
+    load_printer(printer)  # a profile, not another nickname
+    return set_user_setting(nickname, printer, path, table="printers")
 
 
 # --- fit in the build volume --------------------------------------------------------------------

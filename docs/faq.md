@@ -52,10 +52,11 @@ read, asks for the ones that decide the fit, and waits for you to confirm, rathe
 ([Measuring for the AI](using/measuring.md), [workflow rules](scripts/rules.md)).
 
 **Why do holes print small?**
-Every FDM printer prints holes a little undersize. b123d-print adds your printer's **hole
-compensation** when it cuts holes, but it starts at 0 until you measure it with the hole coupon
-([Hole compensation](using/hole-compensation.md)). Don't also turn on the slicer's hole
-compensation ([From part to print](using/slicing.md)).
+Every FDM printer prints holes a little undersize. b123d-print models holes true to size, and
+the slicer corrects them: print the hole coupon once per printer and material and enter half
+its diameter error in the slicer's **X-Y hole compensation**
+([Hole compensation](using/hole-compensation.md)). Building it into the files instead
+(`hole_comp`) is an opt-in.
 
 **How accurate will it be?**
 About as accurate as your printer and your measurements: ±0.2 mm is normal for FDM. The fits

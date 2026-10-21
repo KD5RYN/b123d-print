@@ -121,7 +121,8 @@ place. Mind how they meet [hole compensation](hole-compensation.md), so a hole i
 | `InsertHole(insert, manufacturing_compensation=...)` | radial, added to the radius | pass `HOLE_COMP / 2` (HOLE_COMP is on the diameter). It cuts the table's **drill** size, which can differ from the maker's hole: 5.79 mm for the CNC Kitchen M4 against the maker's 5.6. Where that matters, cut the maker's size yourself |
 | `PlasticBottleThread`, `IsoThread`, ... `manufacturing_compensation` | radial | your clearance per side (above). It is a fit, not hole compensation: don't add HOLE_COMP as well |
 
-Don't also turn on the slicer's hole compensation.
+`HOLE_COMP` is 0 unless you opted in to build it into the files; then keep the slicer's hole
+compensation at 0.
 
 ![Insert bracket](../images/insert_bracket.png)
 

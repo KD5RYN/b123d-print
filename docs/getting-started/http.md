@@ -208,7 +208,11 @@ apart.
 
 **Printers are per workspace.** Over HTTP, `use_printer` saves the printer and material in that
 workspace's `b123d-print.toml`, so one client never changes another's printer. (Over stdio it
-writes your user config, as before.)
+writes your user config, as before.) Measured values (`hole_comp`, the fits, the overhang and
+bridge limits) saved with `save_setup` are kept there too, per printer + material, so switching
+printers with `use_printer` switches them. Two printers of the same model get a nickname each
+(`use_printer(name="bambu_lab_p2s", nickname="p2s-garage")`) and keep their own numbers. See
+[Calibration on a shared server](../using/printer-profiles.md#calibration-on-a-shared-server).
 
 **Builds take turns.** `--max-builds N` (default: half the CPU cores) caps how many build,
 render, section, check, export and compare processes run at once across all clients; further

@@ -10,7 +10,7 @@ import sys
 from importlib.resources import files
 from pathlib import Path
 
-from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, load_settings, parse_formats, safe_console, user_config_path
+from .config import CALIBRATED, FORMATS, WORKSPACE_FILE, find_workspace, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -638,7 +638,8 @@ def cmd_measure(args) -> int:
 
 def cmd_printer(args) -> int:
     from . import profiles as pf
-    from .config import set_user_setting
+    from .config import printer_nicknames, set_user_setting
+    from .setup import hole_note
 
     if args.pcmd == "list":
         hits = pf.search("printers", " ".join(args.query))
@@ -652,7 +653,9 @@ def cmd_printer(args) -> int:
         if not name:
             print("generic (no printer profile): min wall 0.8, overhang 45 deg, no fit check")
             return 0
-        print(pf.load_printer(name).summary())
+        if not args.name and s.nickname:
+            print(f"{s.nickname} (nickname; calibration is kept under it)")
+        print(pf.load_printer(printer_nicknames().get(name, name) if args.name else s.printer).summary())
         if not args.name and s.material:
             print(pf.load_material(s.material).summary())
         return 0
@@ -662,8 +665,12 @@ def cmd_printer(args) -> int:
             path = set_user_setting("material", None)
             print(f"generic mode ({path})")
             return 0
-        pr = pf.load_printer(args.name)  # raises with suggestions if unknown
-        path = set_user_setting("printer", args.name)
+        name = args.name
+        if args.nickname:
+            pf.save_nickname(args.nickname, name)
+            name = args.nickname
+        pr = pf.load_printer(printer_nicknames().get(name, name))  # raises with suggestions if unknown
+        path = set_user_setting("printer", name)
         if args.material:
             print(pf.load_material(args.material).summary())
             set_user_setting("material", args.material)
@@ -674,7 +681,16 @@ def cmd_printer(args) -> int:
         s = load_settings()
         if not s.printer:
             sys.exit(f"set a printer first (b123d-print printer use <name>), or put {key} in your config")
-        print(f"{key} {args.value:g} for {s.printer}/{s.material or 'any'} -> {pf.save_calibration(s.printer, s.material, key, args.value)}")
+        ws = None
+        if getattr(args, "workspace", False):
+            if s.root is None:
+                sys.exit("--workspace: no b123d-print.toml here or above (b123d-print init makes one)")
+            ws = s.root / WORKSPACE_FILE
+        where = pf.save_calibration(s.calibration_key, s.material, key, args.value, ws)
+        print(f"{key} {args.value:g} for {s.calibration_key}/{s.material or 'any'} -> {where}")
+        if key.startswith("hole_comp"):
+            s = load_settings()
+            print(hole_note(s))
         return 0
     return 1
 
@@ -760,7 +776,9 @@ def cmd_setup(args) -> int:
     print(st.report(changes, written) or "  nothing to write")
     if any(c.conflict for c in changes) and not overwrite:
         print("Existing values were kept; run again with --overwrite to replace them.")
-    print(st.next_steps(load_settings(root).hole_comp != 0))
+    s = load_settings(root)
+    print(st.hole_note(s))
+    print(st.next_steps(hole_comp_source(root) is not None))
     return 0
 
 
@@ -988,13 +1006,16 @@ def build_parser() -> argparse.ArgumentParser:
     q = psub.add_parser("show", help="show a printer (default: the active one)")
     q.add_argument("name", nargs="?")
     q = psub.add_parser("use", help="set the active printer in your user config; 'generic' clears it")
-    q.add_argument("name")
+    q.add_argument("name", help="a printer profile, or a nickname given before")
     q.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
+    q.add_argument("--nickname", help="name this printer (e.g. p2s-garage): two of the same model each keep their own calibration")
     q = psub.add_parser("hole-comp", help="store a measured hole compensation for the active printer + material")
     q.add_argument("value", type=float)
     q = psub.add_parser("calibrate", help="store a value measured with a calibration coupon for the active printer + material")
     q.add_argument("key", choices=CALIBRATED)
     q.add_argument("value", type=float)
+    q.add_argument("--workspace", action="store_true",
+                   help="store it in this workspace's b123d-print.toml instead of calibration.toml")
     p = sub.add_parser("setup", help="first-run setup: printer, material, export formats, default style, hole compensation "
                                      "(asks, or takes flags); never replaces a value without --overwrite or a yes")
     p.add_argument("--printer", help="a printer profile name or search words ('generic' for none)")

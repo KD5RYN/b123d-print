@@ -70,7 +70,17 @@ def test_export_writes_the_sheet(tmp_path):
     assert "4-6 walls" in text and "along the layers" in text  # structural style
     assert "M3" in text and "pilot boss (base" in text
     assert "Press the pin into the base before gluing." in text
-    assert "hole_comp was 0" in text and "per side" in text
+    assert "modeled true to size" in text and "X-Y hole compensation" in text and "per side" in text
+    assert "BUILT IN" not in text
+
+
+def test_sheet_says_how_much_holes_are_enlarged(tmp_path):
+    script = _part(tmp_path)
+    (tmp_path / "b123d-print.toml").write_text("[print]\nhole_comp = 0.3\n", encoding="utf-8")
+    project.export_variant(project.load(script), script, "", formats=("print",))
+    text = (tmp_path / "parts/duo/out/duo_print.md").read_text(encoding="utf-8")
+    assert text.count("HOLE COMPENSATION BUILT IN: every hole is cut 0.3 mm larger than drawn") == 2  # banner + slicer list
+    assert "X-Y hole compensation at 0" in text and "not on another printer" in text
 
 
 def test_sheet_goes_home(tmp_path):

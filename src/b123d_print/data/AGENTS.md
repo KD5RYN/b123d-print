@@ -134,12 +134,13 @@ as a starting point, say so in the report, and never turn it into a default or a
 
 **Holes**
 
-- **Hole compensation** is per printer and comes from the user's config:
-  `HOLE_COMP: float = hole_comp(__file__)`, and for holes lying on their side (axis in XY)
-  `HOLE_COMP_H: float = hole_comp(__file__, horizontal=True)`. Keep hole fields at the target
-  *printed* size and add the compensation when cutting. Both default to 0; the `hole_coupon`
-  example measures them. Never hard-code a value from somewhere else, and don't also turn on the
-  slicer's hole compensation. [H1, H2, H4]
+- **Holes are modeled true to size; the slicer corrects them** (its X-Y hole compensation, set
+  from the `hole_coupon` example). Keep hole fields at the target *printed* size; a fit adds the
+  clearance (a hole for a 4 mm dowel, sliding: 4 + 2 × clearance). Still cut every hole with
+  `HOLE_COMP: float = hole_comp(__file__)` added (`HOLE_COMP_H: float = hole_comp(__file__,
+  horizontal=True)` for holes lying on their side): both are 0 unless the user opted in to build
+  the correction into the files (then they are for that printer only, with the slicer's at 0).
+  Never hard-code a value from somewhere else. Report holes with their cut size. [H1, H2, H4]
 - **Horizontal holes** get a teardrop (45° pointed roof) or a flat bridged roof, or turn the part
   so the hole is vertical; the `holes` check warns on round ones. [H3]
 - Holes that must be precise (bearings, shafts): model them slightly small and ream to size;

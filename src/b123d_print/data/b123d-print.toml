@@ -4,8 +4,18 @@
 [workspace]
 parts_dir = "parts"
 
+# Printer nicknames, for two of the same model: each keeps its own calibration.
+# [printers]
+# p2s-garage = "bambu_lab_p2s"
+
+# Measured per printer (or nickname) + material, written by save_setup on a shared server or
+# `b123d-print printer calibrate --workspace`; "<printer>/any" holds values for every material.
+# [calibration."bambu_lab_p2s/pla"]
+# hole_comp = 0.3
+
 [print]
-# Printer-specific: usually better in the user config. Measure it with the hole_coupon example.
+# Printer-specific: usually better in the user config or [calibration] above (a value here is used
+# for every printer). Measure it with the hole_coupon example.
 # hole_comp = 0.0     # mm added to hole diameters when cutting
 # hole_comp_h = 0.0   # the same for horizontal holes (default: hole_comp)
 # clearance = 0.2     # mm per side between mating parts that slide (the default fit)

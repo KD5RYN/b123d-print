@@ -14,7 +14,7 @@
 | `blocked in part scripts: ...` | the script tried the network, a subprocess or files outside the workspace; part scripts only need build123d |
 | `unknown setting(s)` | a typo in `config.toml` or `b123d-print.toml`; the message lists the known keys ([Settings](using/settings.md)) |
 | HTTP server exits right after starting | it prints why: a missing or short token, an unreadable token file, a workspace it cannot write; see [Over the network](getting-started/http.md#if-it-does-not-start) |
-| Holes print small | calibrate `hole_comp` with the [coupon](using/hole-compensation.md) |
+| Holes print small | set the slicer's X-Y hole compensation from the [hole coupon](using/hole-compensation.md) |
 | Windows: sandbox says "no OS sandbox here" | expected: Windows has none ([Sandbox](using/sandbox.md)); run the server in WSL2 with bubblewrap, or in [Docker](getting-started/docker.md), for untrusted scripts |
 | Windows: install fails with a path-too-long error | the deepest file in the uv cache is about 165 characters below the cache folder; turn on [long paths](https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation#enable-long-paths-in-windows-10-version-1607-and-later), or point `UV_CACHE_DIR` at a short folder such as `C:\uv` |
 | Linux: sandbox says "audit hook only" | install bubblewrap (`apt install bubblewrap`); on Ubuntu 24.04 unprivileged user namespaces must also be allowed (`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`) — or use [Docker](getting-started/docker.md) |
@@ -27,7 +27,7 @@ changes the dimension with `set_params` and rebuilds, rather than rewriting the 
 | Symptom | Fix |
 | --- | --- |
 | A fit is too tight or too loose | print the [`fit_coupon`](scripts/examples.md#fit_coupon) and store your `clearance`, `press_fit` and `free_fit` ([Settings](using/settings.md)); for one part, `set_params(name, "CLEARANCE=0.25")`. Test the next try with a [fit-test template](using/templates.md) |
-| Holes too small, or a screw doesn't go in | measure `hole_comp` with the [hole coupon](using/hole-compensation.md); leave the slicer's hole compensation off ([From part to print](using/slicing.md)) |
+| Holes too small, or a screw doesn't go in | set the slicer's X-Y hole compensation from the [hole coupon](using/hole-compensation.md); if you opted in to `hole_comp`, keep the slicer's at 0 ([From part to print](using/slicing.md)) |
 | Holes lying on their side sag, string or come out oval | they need a teardrop or flat roof (the `holes` check warns about round ones), or turn the part so they are vertical ([recipes](using/recipes.md)) |
 | Corners lift, the part warps | ABS, ASA, PC and nylon warp over ~100 mm: rounded footprint corners, ribs, a brim and an enclosure ([BP-B3, B4](BEST_PRACTICES.md)); PLA and PETG rarely do: check bed adhesion |
 | A tall, thin part fell over or wobbled | brim (5-10 mm) or mouse ears; the tip-over check warns, `suggest_orientation` may lay it down |
