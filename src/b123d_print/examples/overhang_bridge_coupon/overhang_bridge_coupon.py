@@ -14,7 +14,8 @@ Print it with your usual material and settings, no supports. Store the values fo
     b123d-print printer calibrate max_bridge 25
 
 or in ~/.config/b123d-print/config.toml under [print]. The overhang and bridge checks use them.
-The checks warn on this part on purpose: it holds steep overhangs and long bridges.
+Its PRINT intent says no supports, so the overhang check reports the steep ledges and long bridges
+as accepted (OK) instead of warning: they are what it tests.
 
 Print orientation: flat on the bed, as modeled.
 """
@@ -94,6 +95,14 @@ class Dims:
 
 
 VARIANTS = {"": {}}
+
+# Print intent (PRINT): the steep ledges and long bridges are what it tests; supports under them
+# would hide the result. The overhang check reports them as accepted, the print sheet says so.
+PRINT = {
+    "supports": "none",
+    "orientation": "locked",
+    "why": "a calibration coupon: it measures how steep an overhang and how long a bridge print without supports",
+}
 
 
 def ledge(d: Dims, angle: float) -> Part:

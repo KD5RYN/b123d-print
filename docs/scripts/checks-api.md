@@ -65,6 +65,7 @@ for every part a script does not list.
 | `ignore_below` | `0.0` | mm above the bed to ignore, e.g. `1.0` to accept a small fillet on a bed edge |
 | `bridges_ok` | `True` | bridges (flat ceilings resting on walls on two opposite sides) never fail; a cantilever (hanging off one side) is an overhang |
 | `max_bridge` | `None` | mm; longer bridges warn (default: the `max_bridge` setting) |
+| `accept` | `""` | set from the script's [`PRINT`](convention.md#print-intent) when it says `supports: "none"`: the reason. The overhangs and long bridges are still reported, as **accepted** (OK) instead of a warning; a FAIL (`fail=True` on a hard overhang) stays a FAIL |
 
 ## `ThinFeature`
 

@@ -155,6 +155,10 @@ as a starting point, say so in the report, and never turn it into a default or a
 - To avoid supports, in this order: turn the part, chamfer the overhang, split the part, use
   teardrop or pointed roofs; then supports. Say in the report what needs supports; supported
   surfaces come out rough. Gaps that support must be cleared out of: at least 5 mm. [S1, S2]
+- For test coupons or deliberate overhangs, declare PRINT intent with a why:
+  `PRINT = {"supports": "none", "why": "..."}` (also `walls`, `infill`, `infill_pattern`, `brim`,
+  `orientation: "locked"`). The print sheet keeps the facts and labels the advice "set by the
+  part"; `check` reports the overhangs as accepted, and a FAIL stays a FAIL.
 - Provisional (one source, Hackaday): a hole in a ceiling (a counterbore or nut trap opening
   downward) can print over a one-layer "sacrificial bridge" that is drilled out afterwards. [O5]
 

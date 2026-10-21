@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.10 — unreleased
+
+- **Print intent** (#115): the print sheet told the hole-compensation coupon to use supports,
+  although the coupon tests holes printed without them. A part script now states how it must be
+  printed with a `PRINT` mapping (module level, or in `Dims` per variant): `supports` (`none`,
+  `auto`, `build_plate_only`, `tree`), `walls`, `infill`, `infill_pattern`, `brim`,
+  `orientation: "locked"`, and a required `why`. Unknown keys and bad values are errors that list
+  the valid ones. It overrides the recommendation, never the facts: the sheet still lists the
+  faces that would need supports, then "**Supports: none, set by the part**: <why>". Every
+  recommendation now names its source: *set by the part*, *your settings* (new `supports`,
+  `walls`, `infill` settings) or *suggested from the geometry/style*; walls and infill feed the
+  estimates. With `supports: "none"` the overhang and bridge checks report their findings as
+  accepted (OK, with the why) instead of warning; a FAIL is never turned into a pass.
+  `suggest_orientation` notes a locked orientation. The hole, fit and overhang/bridge coupons
+  declare it ([docs](https://kd5ryn.github.io/b123d-print/scripts/convention/#print-intent)).
+
 ## 0.3.9 — 2026-10-21
 
 - **The workflow rules reach every client** (#110): non-Claude clients (OpenCode, Qwen Code,

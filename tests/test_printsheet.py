@@ -66,7 +66,7 @@ def test_export_writes_the_sheet(tmp_path):
     assert "| base | 60 × 60 × 12 |" in text and "| pin | 4 × 4 × 30 |" in text and "| **all** |" in text
     assert "print orientation" in text and "Z = 0" in text
     assert "**pin**: tip-over risk" in text  # 30 mm tall on 4 x 4
-    assert "supports needed" in text  # the overhanging bar at Z 10 has no wall under its ends
+    assert "would need supports" in text and "**Supports: on, suggested from the geometry/style**" in text  # the bar at Z 10 has no wall under its ends
     assert "4-6 walls" in text and "along the layers" in text  # structural style
     assert "M3" in text and "pilot boss (base" in text
     assert "Press the pin into the base before gluing." in text

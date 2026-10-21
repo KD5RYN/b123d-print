@@ -998,7 +998,10 @@ class Overhang:
     Flat ceilings are told apart: a bridge rests on walls on two opposite sides (listed, warns when
     its span is over max_bridge, never fails), a cantilever hangs off one side (an overhang like
     any other). fail=True turns the report into a failure: use it for parts meant to print
-    without supports."""
+    without supports.
+    accept: the part's reason when its PRINT intent says supports "none" (set automatically from
+    PRINT): the overhangs and long bridges are still reported, as accepted (OK) instead of a WARN;
+    a FAIL (fail=True on a hard overhang) stays a FAIL."""
 
     part: str
     max_angle: float | None = None
@@ -1007,6 +1010,7 @@ class Overhang:
     ignore_below: float = 0.0  # mm above the bed; e.g. 1.0 to accept a small fillet on a bed edge
     bridges_ok: bool = True  # bridges (flat ceilings held on two opposite sides) never fail
     max_bridge: float | None = None  # mm; longer bridges warn (default: the max_bridge setting)
+    accept: str = ""  # PRINT supports "none": its why; the findings are accepted, never a FAIL turned to a pass
 
     def run(self, parts, assembly, settings) -> list[Finding]:
         lim = self.max_angle if self.max_angle is not None else settings.max_overhang
@@ -1037,21 +1041,24 @@ class Overhang:
             for (a, ang, z, kd), n in items[:4]
         )
         more = f" (+{len(items) - 4} more groups)" if len(items) > 4 else ""
+        failed = self.fail and hard
+        accepted = f"accepted, the part prints without supports (PRINT): {self.accept}. " if self.accept else ""
         out = [
             Finding(
-                FAIL if self.fail and hard else WARN,
+                FAIL if failed else OK if accepted else WARN,
                 "overhang",
                 self.part or "part",
-                f"{len(big)} face(s), {area:.0f} mm^2 steeper than {lim:g} deg: {top}{more}",
-                r,
+                f"{'' if failed else accepted}{len(big)} face(s), {area:.0f} mm^2 steeper than {lim:g} deg: {top}{more}",
+                {**r, "accepted": self.accept} if accepted and not failed else r,
             )
         ]
         if long:
             spans = ", ".join(f"{f['span']:g} mm at {f['center']}" for f in long[:4])
-            out.append(Finding(WARN, "bridge", self.part or "part",
-                               f"{len(long)} bridge(s) longer than max_bridge {span_lim:g} mm: {spans}; they sag. "
-                               "Add a wall or rib under them, split the part, or print the coupon to measure your printer",
-                               {"bridges": long}))
+            out.append(Finding(OK if accepted else WARN, "bridge", self.part or "part",
+                               f"{accepted}{len(long)} bridge(s) longer than max_bridge {span_lim:g} mm: {spans}; they sag"
+                               + ("" if accepted else ". Add a wall or rib under them, split the part, or print the coupon "
+                                  "to measure your printer"),
+                               {"bridges": long, **({"accepted": self.accept} if accepted else {})}))
         return out
 
 

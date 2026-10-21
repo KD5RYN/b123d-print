@@ -336,6 +336,9 @@ def text(name: str, res: dict, show: int = 6) -> str:
     lines = [head, f"{'#':>2}  {'rotation':<20} {'on the bed':<18} {'supports':>13} {'contact':>8} {'height':>7} "
                    f"{'time':>6} {'score':>6}  notes",
              f"{'':>2}  {'':<20} {'':<18} {'mm2 / g':>13} {'mm2':>8} {'mm':>7} {'min':>6}"]
+    if res.get("locked"):
+        lines.insert(0, f"Orientation locked by the part (PRINT): {res['locked']}. Keep its print orientation; "
+                        "the ranking is for information only.")
     for r in rows[:show]:
         sup = f"{r['supports_mm2']:.0f} / {r['supports_g']:g}"
         lines.append(f"{r['rank']:>2}  {_fmt_rot(r['rot']):<20} {r['down'] + ' side':<18} {sup:>13} {r['contact_mm2']:>8.0f} "
@@ -345,6 +348,8 @@ def text(name: str, res: dict, show: int = 6) -> str:
     best = rows[0]
     if best["rot"] == [0.0, 0.0, 0.0]:
         lines.append("\nThe part is already in the best orientation: nothing to change.")
+    elif res.get("locked"):
+        lines.append("\nThe part's PRINT locks its orientation: leave build(d) as it is.")
     else:
         lines += [
             f"\nTo print it this way, turn it in build(d) and put it back on the bed (print orientation, bed at Z=0):",
@@ -368,7 +373,12 @@ def for_script(mod, d, parts: dict, settings, piece: str | None = None, load=Non
         named = {piece: named[piece]}
     style, _ = M.resolve_style(mod, d, settings)
     up = M.parse_dirs(M.script_attr(mod, d, "UP", "+Z"))[0]
+    from .intent import declared
+
+    want = declared(mod, d)
     out, best = {}, {}
     for n, part in named.items():
         out[n], best[n] = suggest(part, settings, load, style, up)
+        if want.get("orientation") == "locked":
+            out[n]["locked"] = want["why"]
     return out, best
