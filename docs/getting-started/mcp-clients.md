@@ -50,22 +50,24 @@ The full `--help` output is in the [Reference](../reference.md#b123d-print-mcp).
 
 ## Which clients
 
-Each client below has its own section. "Untested" means the snippet comes from that client's
-own docs (linked) and nobody has run b123d-print with it yet: tell us how it went in an
+Each client below has its own section. **Tested** means we have run b123d-print with that
+client, the way listed (on your own machine, stdio, or against a shared server over HTTP).
+"Untested" means the snippet comes from that client's own docs (linked) and nobody has run
+b123d-print with it yet: tell us how it went in an
 [issue](https://github.com/KD5RYN/b123d-print/issues).
 
 | Client | Local (stdio) | Remote (HTTP) with a Bearer token | Images reach the model | MCP prompts | Tested |
 | --- | --- | --- | --- | --- | --- |
-| [Claude Desktop](#claude-desktop) | yes | through a [local proxy](#remote-server-from-a-stdio-only-client) | yes | yes | yes |
-| [Claude Code](#claude-code) | yes | yes (`--header`) | yes | yes | yes |
+| [Claude Desktop](#claude-desktop) | yes | through a [local proxy](#remote-server-from-a-stdio-only-client) | yes | yes | **yes** |
+| [Claude Code](#claude-code) | yes | yes (`--header`) | yes | yes | **yes** (stdio, HTTP) |
 | [claude.ai](#claudeai-web-and-mobile-custom-connectors) (web, mobile) | no | only with the Request headers beta | yes | yes | untested |
-| [ChatGPT](#chatgpt) | no | no (OAuth or no auth only) | not documented | not documented | untested |
-| [Gemini CLI](#gemini-cli) | yes | yes (`httpUrl`, `headers`) | yes | not documented | |
-| [Antigravity](#antigravity-agy-cli-and-ide) (`agy` CLI, IDE) | yes | yes (`serverUrl`, `headers`) | yes | not documented | yes (agy, HTTP) |
-| [Cursor](#cursor) | yes | see its docs | not documented | not documented | |
-| [VS Code](#vs-code-copilot-agent-mode) | yes | see its docs | not documented | not documented | |
-| [Codex CLI](#codex-cli) | yes | see its docs | not documented | not documented | |
-| [Grok Build CLI](#grok) (xAI) | yes | yes (`--header`) | not documented | not documented | untested |
+| [ChatGPT](#chatgpt) | web: no; the desktop app uses the [Codex config](#codex-cli) | web: no (OAuth or no auth only); desktop: as Codex | not documented | not documented | untested |
+| [Gemini CLI](#gemini-cli) | yes | yes (`httpUrl`, `headers`) | yes | not documented | untested (Gemini itself: tested through Antigravity) |
+| [Antigravity](#antigravity-agy-cli-and-ide) (`agy` CLI, IDE) with Gemini | yes | yes (`serverUrl`, `headers`) | yes | not documented | **yes** (`agy`, HTTP) |
+| [Cursor](#cursor) | yes | see its docs | not documented | not documented | untested |
+| [VS Code](#vs-code-copilot-agent-mode) | yes | see its docs | not documented | not documented | untested |
+| [Codex CLI](#codex-cli) | yes | yes (`bearer_token_env_var`) | not documented | not documented | **yes** (stdio, HTTP) |
+| [Grok Build CLI](#grok) (xAI) | yes | yes (`--header`) | not documented | not documented | **yes** (HTTP) |
 | [Windsurf](#windsurf) | yes | yes (`headers`) | not documented | yes | untested |
 | [Zed](#zed) | yes | yes (`headers`) | not documented | yes | untested |
 | [LM Studio](#lm-studio) | yes | yes (`headers`) | not documented | not documented | untested |
@@ -220,13 +222,32 @@ real session, not from Google's docs).
 
 ## Codex CLI
 
-`~/.codex/config.toml`:
+Tested on your own machine (stdio) and against a shared server (HTTP). `~/.codex/config.toml`,
+or `.codex/config.toml` in a trusted project; the ChatGPT desktop app and the Codex IDE extension
+read the same file ([Codex MCP](https://developers.openai.com/codex/mcp)).
+
+On your machine:
 
 ```toml
 [mcp_servers.b123d-print]
 command = "uvx"
 args = ["--from", "b123d-print", "b123d-print-mcp", "--workspace", "/Users/you/parts"]
+startup_timeout_sec = 120   # the first start downloads the packages (default 10 s)
+tool_timeout_sec = 300      # builds and checks can take minutes (default 60 s)
 ```
+
+A shared server, with the token in an environment variable (never in the file):
+
+```toml
+[mcp_servers.b123d-print]
+url = "https://cad.example.com/mcp?workspace=you-codex"
+bearer_token_env_var = "B123D_TOKEN"
+tool_timeout_sec = 300
+```
+
+**Raise `tool_timeout_sec`.** With Codex's 60-second default, a longer build or check ends in a
+timeout on the Codex side even though the server finishes it. Run `/mcp` in Codex to see the
+server connected.
 
 ## claude.ai (web and mobile): custom connectors
 
@@ -277,7 +298,8 @@ Two different tools are called "grok CLI":
 
 - **Grok Build** (xAI's own `grok` CLI): `grok mcp add` or `~/.grok/config.toml`
   (project: `.grok/config.toml`); stdio and HTTP, static headers with `--header`
-  ([MCP servers](https://docs.x.ai/build/features/mcp-servers)). Untested.
+  ([MCP servers](https://docs.x.ai/build/features/mcp-servers)). Tested with b123d-print
+  against a shared server over HTTP.
 
     ```bash
     grok mcp add b123d-print -- uvx --from b123d-print b123d-print-mcp --workspace ~/parts
