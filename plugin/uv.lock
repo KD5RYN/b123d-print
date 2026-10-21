@@ -53,30 +53,32 @@ wheels = [
 
 [[package]]
 name = "b123d-print"
-version = "0.3.2"
+version = "0.3.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "bd-warehouse" },
     { name = "build123d" },
     { name = "matplotlib" },
     { name = "mcp" },
     { name = "numpy" },
+    { name = "py-gearworks" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/b5/2934addda0ee5f74ac07123611a02fb1f1587afa5fe4910dc558bbb3a2d5/b123d_print-0.3.2.tar.gz", hash = "sha256:c2310f1b0a6452b8a02a87a2e5b3d73cf640116e5c85a83a94fa9c4aa958c548", size = 220621, upload-time = "2026-10-19T03:52:27.921Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/f7/615210d062c77ce4adb9fb30dd327f855b9cb071954a358062ce604d44ac/b123d_print-0.3.9.tar.gz", hash = "sha256:9d1b20627e5bd8b751fcb986e3d115981a7b55178b130c409841f0cf46bf09e5", size = 560548, upload-time = "2026-10-21T09:59:02.846Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/3a/583fd648c3e4782749931b6f5ec9b1f6ba4ba02c2dde4b13ba38d713d944/b123d_print-0.3.2-py3-none-any.whl", hash = "sha256:23188929037d0041aab863f0b28979e84eb2b3868222113cc57f56d269eab221", size = 240492, upload-time = "2026-10-19T03:52:26.329Z" },
+    { url = "https://files.pythonhosted.org/packages/91/a7/3a8e86d525cdf693f45e6bcc99ed17a1b123e3b8b8de3488643bb4e50443/b123d_print-0.3.9-py3-none-any.whl", hash = "sha256:329bc3197d115974544f10e5b78736440dbf45c53aab92ff4537e54b4497a69d", size = 597219, upload-time = "2026-10-21T09:59:01.322Z" },
 ]
 
 [[package]]
 name = "b123d-print-plugin"
-version = "0.3.2"
+version = "0.3.9"
 source = { virtual = "." }
 dependencies = [
     { name = "b123d-print" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "b123d-print", specifier = "==0.3.2" }]
+requires-dist = [{ name = "b123d-print", specifier = "==0.3.9" }]
 
 [[package]]
 name = "bd-materials"
@@ -89,6 +91,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/28/940946d9cc9f1489c3d3f0c6a8f2acaf2a1240ba1cf24df69ac385f9c0d7/bd_materials-0.2.4.tar.gz", hash = "sha256:daea82953c18cef04be9f8519c75518d230df1b78457f4a92a7da8725e533bb8", size = 90450, upload-time = "2026-07-30T12:20:12.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d3/fb/ea1f307dfcecb7a5e842d48031086dac70633fe61de0c0fb53ee6c8d7d35/bd_materials-0.2.4-py3-none-any.whl", hash = "sha256:27a43ba75e4eb115c03b0a3ce188ee8482228d019965d2e7d892ff9c0ad38742", size = 74803, upload-time = "2026-07-30T12:20:11.327Z" },
+]
+
+[[package]]
+name = "bd-warehouse"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bd-materials" },
+    { name = "build123d" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/02/7b/1a860283b544e39763d9b6357b39785ed1db9055756b3a6cec0bb67f084a/bd_warehouse-0.4.0.tar.gz", hash = "sha256:3c98f83b0b5c67fade67411b9775ae98a7fcffc714e231e825886f0c86778191", size = 22358664, upload-time = "2026-10-07T17:50:09.441Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/4b/2eadc5c20456b0ddff63c1b14444a7f2852ceb7956b578b521162a4e8149/bd_warehouse-0.4.0-py3-none-any.whl", hash = "sha256:2bb830513dc53a5095904d645a92466e629a50bd5493783544bdf3a7d5efc339", size = 179019, upload-time = "2026-10-07T17:50:07.634Z" },
 ]
 
 [[package]]
@@ -855,6 +871,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/da/9f/abfd2959e9261dd5217ca8551d4de211ca6ab26fe9b72cf44731ff6c4442/pure_eval-0.2.4.tar.gz", hash = "sha256:260c2774686e651b79f8b8e7fc9d80b3599ea6a66334b47d5f4abb69fc2c0ea1", size = 20563, upload-time = "2026-09-10T21:41:22.836Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/18/83376915176eb058cb86470eb7396388a13350b09a8f233a79303bbcbc5b/pure_eval-0.2.4-py3-none-any.whl", hash = "sha256:96cae060a313cfaad51bb761278bfb0e62dc0248d9315a81173752dc546cd37a", size = 11893, upload-time = "2026-09-10T21:41:21.532Z" },
+]
+
+[[package]]
+name = "py-gearworks"
+version = "0.0.24"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "build123d" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/80/7bd2b82b8244a7d4223dbc3c0ed560b4fcccc47e5038ef73d8b2153077db/py_gearworks-0.0.24.tar.gz", hash = "sha256:a8d3e44d9e91b45438c3c0b5ca5b886226fef31939fa8073eb11830e8a384768", size = 1038752, upload-time = "2026-09-24T21:43:45.002Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/15/8247c62b33d15c10790727367d1296ddf881fde670197d156d39b9004bc3/py_gearworks-0.0.24-py3-none-any.whl", hash = "sha256:c16ae7eb03ad8701373b655e34163648cc288b1740456304db2623a70c36d9b3", size = 86148, upload-time = "2026-09-24T21:43:43.433Z" },
 ]
 
 [[package]]

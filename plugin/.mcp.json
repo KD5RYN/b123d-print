@@ -2,7 +2,7 @@
   "mcpServers": {
     "b123d-print": {
       "command": "uvx",
-      "args": ["b123d-print==0.3.2", "mcp"]
+      "args": ["b123d-print==0.3.9", "mcp"]
     }
   }
 }
