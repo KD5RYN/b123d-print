@@ -48,14 +48,16 @@ class WorkerDown(RuntimeError):
     pass
 
 
-def submit(queue: Path, job: dict, workspace: Path, out_dir: Path, timeout: float) -> dict:
-    """Run `job` in the worker and return its result dict (what sandbox.run_job returns). Blocking."""
+def submit(queue: Path, job: dict, workspace: Path, out_dir: Path, timeout: float, client: str = "") -> dict:
+    """Run `job` in the worker and return its result dict (what sandbox.run_job returns). Blocking.
+    `client`: whose job it is (the token), so the worker takes turns between clients too."""
     age = worker_age(queue)
     if age is None or age > HEARTBEAT_STALE:
         raise WorkerDown(f"the build worker is not running (no heartbeat in {queue}"
                          + (f" for {age:.0f} s)" if age is not None else ")"))
     jid = f"{time.time_ns()}-{secrets.token_hex(4)}"
-    _write(queue / f"{jid}.job", {"job": job, "workspace": str(workspace), "out_dir": str(out_dir), "timeout": timeout})
+    _write(queue / f"{jid}.job", {"job": job, "workspace": str(workspace), "out_dir": str(out_dir), "timeout": timeout,
+                                  "client": client})
     result, started = queue / f"{jid}.result", time.monotonic()
     while True:
         if result.exists():
@@ -91,22 +93,53 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
     sandbox.EXTRA_HIDDEN.update({str(queue), str(queue.parent)})
     stop = stop or threading.Event()
     slots = threading.Semaphore(max_jobs)
-    print(f"b123d-print worker: queue {queue}, {max_jobs} job(s) at once, sandbox: {sandbox.describe()}", file=sys.stderr)
+    running: dict[str, int] = {}  # client -> jobs running (claim order, see `order`)
+    lock = threading.Lock()
+    mem = sandbox.human_size(sandbox.MAX_MEMORY) + " per job" if sandbox.memory_limited() else "no limit"
+    print(f"b123d-print worker: queue {queue}, {max_jobs} job(s) at once, memory {mem}, sandbox: {sandbox.describe()}",
+          file=sys.stderr)
     err = sandbox.sandbox_error()
     if err:  # loud, repeated: the worker keeps running but refuses every job (fail closed) until fixed
         print(f"b123d-print worker: REFUSING ALL JOBS — {err}. Set B123D_PRINT_SANDBOX=none to run with "
               "the audit hook only (not an isolation boundary), or enable it.", file=sys.stderr)
 
-    def run(running: Path, epoch: int) -> None:
+    def run(path: Path, client: str, epoch: int) -> None:
         try:
-            spec = json.loads(running.read_text(encoding="utf-8"))
+            spec = json.loads(path.read_text(encoding="utf-8"))
             res = sandbox.run_job(spec["job"], Path(spec["workspace"]), Path(spec["out_dir"]), float(spec["timeout"]),
                                   epoch=epoch)
         except Exception as e:  # never leave the front waiting
             res = {"ok": False, "error": f"worker: {type(e).__name__}: {e}"}
-        _write(running.with_suffix(".result"), res)
-        running.unlink(missing_ok=True)
+        _write(path.with_suffix(".result"), res)
+        path.unlink(missing_ok=True)
+        with lock:
+            running[client] -= 1
+            if not running[client]:
+                del running[client]
         slots.release()
+
+    def client_of(job: Path) -> str:
+        try:
+            return str(json.loads(job.read_text(encoding="utf-8")).get("client") or "")
+        except (OSError, ValueError):  # claimed meanwhile, or half-written by an old front: no client
+            return ""
+
+    def order(jobs: list[Path]) -> list[Path]:
+        """The front already shares its slots fairly (sched.py) and submits no more than the worker
+        runs; this keeps the worker fair too when jobs pile up here anyway (a front that gave up on
+        a job while it still runs): fewest running jobs per client first, then oldest first."""
+        if len(jobs) < 2:
+            return jobs
+        with lock:
+            busy = dict(running)
+        keyed = [(client_of(j), j) for j in sorted(jobs)]
+        out, seen = [], dict(busy)
+        while keyed:  # round-robin: take the oldest job of the least busy client, count it, repeat
+            i = min(range(len(keyed)), key=lambda k: (seen.get(keyed[k][0], 0), k))
+            c, j = keyed.pop(i)
+            seen[c] = seen.get(c, 0) + 1
+            out.append(j)
+        return out
 
     last_beat = last_sweep = 0.0
     while not stop.is_set():
@@ -120,16 +153,19 @@ def serve(queue: Path, max_jobs: int, stop: threading.Event | None = None) -> No
                 (queue / "cancel").unlink(missing_ok=True)
                 if n:
                     print(f"b123d-print worker: front shut down, {n} running build(s) killed", file=sys.stderr)
-            for job in sorted(queue.glob("*.job")):
+            for job in order(sorted(queue.glob("*.job"))):
                 if not slots.acquire(blocking=False):
                     break
-                running = job.with_suffix(".running")
+                client = client_of(job)
+                claimed = job.with_suffix(".running")
                 try:
-                    os.rename(job, running)  # atomic: if another worker got it first, this fails
+                    os.rename(job, claimed)  # atomic: if another worker got it first, this fails
                 except OSError:
                     slots.release()
                     continue
-                threading.Thread(target=run, args=(running, sandbox.current_epoch()), daemon=True).start()
+                with lock:
+                    running[client] = running.get(client, 0) + 1
+                threading.Thread(target=run, args=(claimed, client, sandbox.current_epoch()), daemon=True).start()
             if now - last_sweep > 60:  # results nobody collected (the front restarted)
                 last_sweep = now
                 for p in queue.glob("*.result"):

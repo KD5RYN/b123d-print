@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.12 — unreleased
+
+- **Fair build slots on a shared server** (#73, #71): one client could fill every build slot and
+  make everyone else wait (a 3 s `measure` took 28.5 s behind another client's six builds). The
+  single first-come queue is replaced by a fair one (`sched.py`): a free slot goes to the client
+  (token) with the fewest builds running, round-robin, and one client's own calls keep their
+  order. `--quick-slots` (default 1 over HTTP with 2+ slots) keeps a slot for quick calls
+  (`measure`, `section`, `list_faces`, `list_edges`, `hardware_list`), so they never wait behind
+  long builds. `--client-jobs` (default 4 over HTTP) caps the calls one client may have running
+  and waiting: more are refused at once with "server busy: you have 4 jobs running or queued
+  ...; wait for one to finish", not queued without end, and a call that waited a whole
+  `--timeout` for a slot is refused instead of starting after its client gave up. A `check`
+  splits over at most 2 workers (3 on 4 cores was slower), and over 1 while another client
+  waits. The worker container also claims queued jobs round-robin by client. `--max-builds`
+  keeps its meaning: builds at once, all clients together. Over stdio and SSH (one client) the
+  only change is the check split.
+- **Memory limit per build** (#71): `--max-memory` / `B123D_PRINT_MAX_MEMORY` (default `2g`;
+  `0` = no limit). A build over it fails with "the build used more than 2 GB of memory, the limit
+  per job on this server" and the server and other builds go on, instead of the kernel's OOM
+  killer taking other clients' builds with it. Linux: `RLIMIT_DATA`, set before bubblewrap starts
+  so the job cannot raise it; Windows: the Job Object's memory limit; macOS has none. The Compose
+  worker gets `mem_limit` (`B123D_PRINT_WORKER_MEMORY`, default `6g`) and `pids_limit: 1024` as
+  the backstop, and a job the kernel kills is reported as most likely out of memory, not as a
+  shutdown. `list_parts` reports the limits.
+
 ## 0.3.11 — 2026-10-21
 
 - **`out/` sorted into folders, and a "What to save" page** (#124): every export used to write

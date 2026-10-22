@@ -14,9 +14,34 @@ too: the mesh files it parses may have been written by a part script.
 | [Docker over HTTP](../getting-started/http.md#compose) | a separate `worker` container with `network_mode: none`; inside it each job runs in its own bubblewrap mount namespace that binds only its workspace, so one client's script never sees another's. The HTTP container, which has a network, runs no scripts |
 
 Every job also gets a timeout (default 240 s, `--timeout` or `B123D_PRINT_TIMEOUT`; a `check`
-300 s, `--check-timeout` or `B123D_PRINT_CHECK_TIMEOUT`) and a CPU limit. A check stops a little
-before its limit and returns the findings it has ([time limit](checks.md#time-limit)); anything
-else that runs out of time is killed.
+300 s, `--check-timeout` or `B123D_PRINT_CHECK_TIMEOUT`), a CPU limit and a [memory
+limit](#memory). A check stops a little before its limit and returns the findings it has
+([time limit](checks.md#time-limit)); anything else that runs out of time is killed.
+
+## Memory
+
+Each job may use `--max-memory` (default 2 GB, `B123D_PRINT_MAX_MEMORY`; `0` = no limit). A
+script that allocates without bound, or a huge or decompressing reference model, then fails
+with "the build used more than 2 GB of memory, the limit per job on this server" instead of
+pushing the machine, or the worker container, into the kernel's out-of-memory killer, which
+would stop other builds too. The server and the other jobs go on.
+
+| Platform | How |
+| --- | --- |
+| Linux (bubblewrap, Docker, no sandbox) | `RLIMIT_DATA`, set in the job's process before bubblewrap starts, soft and hard alike, so the job cannot raise it (that needs `CAP_SYS_RESOURCE` outside its user namespace) |
+| Windows | the Job Object's per-process memory limit (committed memory) |
+| macOS | none: macOS does not enforce a per-process memory limit |
+
+Why `RLIMIT_DATA` and not the alternatives: it counts what a build really uses (its heap,
+anonymous memory, thread stacks), not its shared libraries or address space reserved and never
+used. `RLIMIT_AS` counts those too, and they grow with the number of CPUs (a thread pool reserves
+memory per core), so a cap that fits on one machine would break builds on a bigger one. A cgroup
+per job would also count the page cache, but an unprivileged worker in a container cannot create
+cgroups (Docker mounts `/sys/fs/cgroup` read-only), so the [Compose setup](../getting-started/http.md#compose)
+puts a `mem_limit` on the whole worker container instead, as the backstop for what a per-process
+limit does not cover; keep it at least `B123D_PRINT_MAX_BUILDS` × `B123D_PRINT_MAX_MEMORY` + 1 GB.
+A job the kernel kills anyway is reported as "killed by the system, most likely because the
+worker ran out of memory", not as a shutdown.
 
 ## What keeps workspaces apart
 

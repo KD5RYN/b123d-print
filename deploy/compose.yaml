@@ -21,7 +21,17 @@
 # front, e.g. the Caddy block below; 8000 on a trusted network), B123D_PRINT_PARTS,
 # B123D_PRINT_CONFIG, B123D_PRINT_UID/GID, B123D_PRINT_MAX_BUILDS, B123D_PRINT_RETENTION_DAYS (default 30:
 # a workspace nobody used for that many days is removed; 0 = never), B123D_PRINT_TIMEOUT (default 240 s
-# per build), B123D_PRINT_CHECK_TIMEOUT (default 300 s per check).
+# per build), B123D_PRINT_CHECK_TIMEOUT (default 300 s per check), B123D_PRINT_QUICK_SLOTS (default 1),
+# B123D_PRINT_CLIENT_JOBS (default 4), B123D_PRINT_MAX_MEMORY (default 2g per build),
+# B123D_PRINT_WORKER_MEMORY (default 6g: the whole worker container).
+#
+# Sharing between clients (tokens): builds run at most MAX_BUILDS at once; QUICK_SLOTS of those only
+# take quick calls (measure, section, faces, edges, hardware_list), so they never wait behind other
+# clients' long builds; a free slot goes to the client with the fewest builds running (round-robin);
+# a client with CLIENT_JOBS calls running and waiting is refused until one finishes.
+# Memory: each build may use MAX_MEMORY, and the worker container WORKER_MEMORY in all. Keep
+# WORKER_MEMORY >= MAX_BUILDS x MAX_MEMORY + 1g, so a runaway build fails with "the build used more
+# than 2 GB of memory" instead of the kernel's OOM killer stopping other clients' builds.
 x-common: &common
   image: ${B123D_PRINT_IMAGE:-ghcr.io/kd5ryn/b123d-print-mcp:latest}
   restart: unless-stopped
@@ -42,6 +52,9 @@ services:
       B123D_PRINT_TOKENS_FILE: /config/tokens.toml
       B123D_PRINT_JOB_QUEUE: /work/.b123d-print/jobs   # builds go to the worker below
       B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}   # builds at once, all clients together
+      B123D_PRINT_QUICK_SLOTS: ${B123D_PRINT_QUICK_SLOTS:-1}   # of those, kept for quick calls (0 = none)
+      B123D_PRINT_CLIENT_JOBS: ${B123D_PRINT_CLIENT_JOBS:-4}   # calls running + waiting per token (0 = no cap)
+      B123D_PRINT_MAX_MEMORY: ${B123D_PRINT_MAX_MEMORY:-2g}    # per build: enforced by the worker, reported here
       B123D_PRINT_TIMEOUT: ${B123D_PRINT_TIMEOUT:-240}               # seconds per build, render, export
       B123D_PRINT_CHECK_TIMEOUT: ${B123D_PRINT_CHECK_TIMEOUT:-300}   # seconds per check (returns what it has, near the end)
       B123D_PRINT_SHUTDOWN_GRACE: "30"                 # on stop: let running calls finish this long
@@ -60,6 +73,9 @@ services:
     command: ["worker", "--queue", "/work/.b123d-print/jobs"]
     environment:
       B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}
+      # memory per build (RLIMIT_DATA, set before bubblewrap starts, so a job cannot raise it); a
+      # build over it fails with a plain message and the other builds go on; 0 = no limit
+      B123D_PRINT_MAX_MEMORY: ${B123D_PRINT_MAX_MEMORY:-2g}
       # "bubblewrap" REQUIRES the sandbox: each job runs in its own bubblewrap mount namespace that
       # binds only its workspace's part folder and a scratch folder, so one client's script cannot
       # see other workspaces, the job queue or the shared config on the volume. If bubblewrap cannot
@@ -77,6 +93,10 @@ services:
       # unprivileged user namespaces also need AppArmor not to block them (Ubuntu 23.10+ restricts
       # them by default); the worker has no network regardless (network_mode: none)
       - apparmor:unconfined
+    # the backstop for what the per-build limit does not count (several processes, the page cache):
+    # the kernel stops builds in this container only, never the front or the host
+    mem_limit: ${B123D_PRINT_WORKER_MEMORY:-6g}
+    pids_limit: 1024                                   # builds, their threads and bubblewrap
     stop_grace_period: 15s
     healthcheck:
       test: ["CMD", "b123d-print-mcp", "worker", "--queue", "/work/.b123d-print/jobs", "--check"]

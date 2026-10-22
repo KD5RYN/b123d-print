@@ -139,8 +139,8 @@ b123d-print-mcp --transport http --workspace ~/parts --host 0.0.0.0 --port 8000
   check against DNS rebinding.
 
 Every option also has an environment variable (`B123D_PRINT_TRANSPORT`, `B123D_PRINT_HOST`,
-`B123D_PRINT_PORT`, `B123D_PRINT_MAX_BUILDS`, `B123D_PRINT_ALLOWED_HOSTS`,
-`B123D_PRINT_SHUTDOWN_GRACE`); see
+`B123D_PRINT_PORT`, `B123D_PRINT_MAX_BUILDS`, `B123D_PRINT_QUICK_SLOTS`, `B123D_PRINT_CLIENT_JOBS`,
+`B123D_PRINT_MAX_MEMORY`, `B123D_PRINT_ALLOWED_HOSTS`, `B123D_PRINT_SHUTDOWN_GRACE`); see
 [Server options](mcp-clients.md#server-options) and [Settings](../using/settings.md#environment-variables).
 
 ## Tokens
@@ -214,13 +214,41 @@ printers with `use_printer` switches them. Two printers of the same model get a 
 (`use_printer(name="bambu_lab_p2s", nickname="p2s-garage")`) and keep their own numbers. See
 [Calibration on a shared server](../using/printer-profiles.md#calibration-on-a-shared-server).
 
-**Builds take turns.** `--max-builds N` (default: half the CPU cores) caps how many build,
-render, section, check, export and compare processes run at once across all clients; further
-calls wait; a `check` uses up to N of them at once, split by check, and gives them up as its
-shares finish. Each one keeps its own time limit once it starts: `--timeout` (default 240 s), or
+**Builds take turns, fairly.** `--max-builds N` (default: half the CPU cores) caps how many
+build, render, section, check, export and compare processes run at once across all clients.
+Further calls wait, and one client cannot crowd out the others:
+
+- **Round-robin.** When a slot frees up, it goes to the waiting client (token) with the fewest
+  builds running; a tie goes to the one served longest ago. One client's own calls start in the
+  order they came. A client that queued six builds therefore waits its turn behind another
+  client's one, instead of the other way round.
+- **A quick lane.** `--quick-slots` (default 1 when N is 2 or more) of the N slots take only
+  quick calls: `measure`, `section`, `list_faces`, `list_edges` and `hardware_list`, which read
+  the built pieces from the cache and answer in seconds (with `fresh=True` they rebuild, and
+  queue like a build). So a quick call never waits behind other clients' long builds. Quick
+  calls also use any other free slot; long ones never use the quick lane, and at least one slot
+  always stays for them. With N = 2 that leaves one slot for long builds: on 4 or more cores,
+  N = 3 is the better setting.
+- **A cap per client.** A client with `--client-jobs` calls (default 4) running and waiting is
+  refused at once with "server busy: you have 4 jobs running or queued on this shared server
+  (at most 4 per client); wait for one to finish, then try again", instead of piling more into
+  the queue. `0` turns the cap off.
+- **A wait limit.** A call that waited `--timeout` seconds for a slot is refused ("server busy:
+  no build slot came free ..."): by then its client has most likely stopped waiting for it.
+- **Checks split less.** A `check` splits over at most 2 workers (3 on 4 cores was slower than
+  2), fewer when the slots are busy, and only 1 while another client waits.
+
+Each job keeps its own time limit once it starts: `--timeout` (default 240 s), or
 `--check-timeout` for a check (default 300 s; a check returns a little before it, with what it
-found). A long queue can outlast a client's read timeout (300 s by default in the MCP Python
-SDK), so size N and the number of clients together. `list_parts` reports the limit.
+found). A queue can still outlast a client's read timeout (300 s by default in the MCP Python
+SDK), so size N and the number of clients together. `list_parts` reports the limits.
+
+**Memory per build.** Each build process may use `--max-memory` (default 2 GB,
+`B123D_PRINT_MAX_MEMORY`; `0` = no limit). One that needs more fails with "the build used more
+than 2 GB of memory, the limit per job on this server", and the server and the other clients'
+builds go on. It is enforced on Linux and Windows ([how](../using/sandbox.md#memory)); macOS has
+no per-process limit. In the [Compose setup](#compose) the worker container also has a
+`mem_limit` as a backstop.
 
 ## Get the files
 
@@ -470,7 +498,11 @@ shipped and `git pull` updates it cleanly (`deploy/.env.example` lists them with
 | `B123D_PRINT_PUBLIC_URL` | taken from each request | the address clients use (behind a proxy, its `https://` URL): used in download links and in the config `token add` prints |
 | `B123D_PRINT_LISTEN` | `127.0.0.1:8000` | where the port is published: localhost for a reverse proxy on the same machine (the optional Caddy block), `8000` for the whole network |
 | `B123D_PRINT_IMAGE` | `ghcr.io/kd5ryn/b123d-print-mcp:latest` | the image; `b123d-print-mcp` for one [built from a clone](#from-a-clone) |
-| `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together |
+| `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together ([shared fairly](#several-clients-at-once)); `3` on 4 or more cores |
+| `B123D_PRINT_QUICK_SLOTS` | `1` | of those, slots kept for quick calls (`measure`, `section`, ...); `0` = none |
+| `B123D_PRINT_CLIENT_JOBS` | `4` | calls one token may have running and waiting; more are refused until one finishes; `0` = no cap |
+| `B123D_PRINT_MAX_MEMORY` | `2g` | memory per build; a build over it fails with a plain message; `0` = no limit |
+| `B123D_PRINT_WORKER_MEMORY` | `6g` | the worker container's `mem_limit`: keep it at least `MAX_BUILDS` × `MAX_MEMORY` + 1 GB |
 | `B123D_PRINT_RETENTION_DAYS` | `30` | remove a workspace nobody used for this many days ([retention](#workspace-retention)); `0` = never |
 | `B123D_PRINT_TIMEOUT` | `240` | seconds per build, render, section or export (under the 300 s a client waits for a result) |
 | `B123D_PRINT_CHECK_TIMEOUT` | `300` | seconds per `check` (a big remix on a slow CPU needs more); it returns a little before, with the findings it has |
