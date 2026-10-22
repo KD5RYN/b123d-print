@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.11 — unreleased
+## 0.3.11 — 2026-10-21
 
 - **`out/` sorted into folders, and a "What to save" page** (#124): every export used to write
   everything into one flat `parts/<name>/out/` list. Now `out/print/` holds what you open in the
