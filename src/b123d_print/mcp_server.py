@@ -29,7 +29,7 @@ import anyio
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import handoff, jobqueue, links, outdir, sandbox, tokens, viewer
+from . import handoff, jobqueue, links, outdir, sandbox, sched, tokens, viewer
 from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
 from .config import WORKSPACE_FILE, formats_configured, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 from .partfiles import find_parts, timing_lines
@@ -168,6 +168,7 @@ def _in_use(name: str | None, start: bool) -> None:
 mcp = MCPServer("b123d-print", version=_dist_version("b123d-print"), instructions=INSTRUCTIONS,
                 middleware=[_request_workspace])
 STATE: dict = {"root": Path.cwd(), "timeout": sandbox.DEFAULT_TIMEOUT, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
+               "quick_slots": None, "client_jobs": None,  # None: the default for the transport (_scheduler)
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
@@ -196,11 +197,41 @@ def _resume_note(name: str) -> str:
             f"upload_reference('{name}', <file>) for each file in its ref/ (read_guide: Resume a project)")
 
 
-def _limiter() -> anyio.CapacityLimiter:
-    # at most max_builds worker processes at once, across all clients; the rest wait their turn
+# jobs that read the built pieces from the cache and answer in seconds: they get the quick lane
+# (sched.py), so they never wait behind another client's long builds. With fresh=True they rebuild,
+# so they queue like any build.
+QUICK_OPS = frozenset({"measure", "section", "faces", "edges", "hardware"})
+CHECK_SHARES = 2  # a check splits into at most this many workers: 3 on 4 cores was slower than 2 (#73)
+CLIENT_JOBS = 4  # HTTP default: jobs running + waiting per client (--client-jobs)
+
+
+def _quick_slots() -> int:
+    """Slots kept for quick jobs: --quick-slots, else 1 over HTTP (several clients) with 2+ slots."""
+    q = STATE["quick_slots"]
+    return q if q is not None else (1 if _http() and STATE["max_builds"] >= 2 else 0)
+
+
+def _client_jobs() -> int:
+    """Jobs running + waiting per client: --client-jobs, else CLIENT_JOBS over HTTP, no cap otherwise
+    (stdio and SSH have one client, whose own parallel calls simply wait)."""
+    c = STATE["client_jobs"]
+    return c if c is not None else (CLIENT_JOBS if _http() else 0)
+
+
+def _scheduler() -> sched.FairScheduler:
+    # at most max_builds worker processes at once, across all clients, shared fairly (sched.py)
     if STATE["limiter"] is None:
-        STATE["limiter"] = anyio.CapacityLimiter(STATE["max_builds"])
+        STATE["limiter"] = sched.FairScheduler(STATE["max_builds"], _quick_slots(), _client_jobs())
     return STATE["limiter"]
+
+
+def _client() -> str:
+    """Whose job it is, for fair shares: the token's name over HTTP (else the workspace), one
+    client otherwise."""
+    if not _http():
+        return "local"
+    tok = _token_name()
+    return f"token:{tok}" if tok else f"workspace:{_ws_name()}"
 
 
 def _parts_dir() -> Path:
@@ -224,15 +255,27 @@ async def _run(job: dict, out_dir: Path) -> dict:
     queue = STATE["queue"]
     timeout = STATE["check_timeout"] if job.get("op") == "check" else STATE["timeout"]
 
+    client = _client()
+
     def run() -> dict:
         if queue is None:
             return sandbox.run_job(job, root, out_dir, timeout)
         try:  # a separate worker (container) runs it: see jobqueue.py
-            return jobqueue.submit(queue, job, root, out_dir, timeout)
+            return jobqueue.submit(queue, job, root, out_dir, timeout, client=client)
         except jobqueue.WorkerDown as e:
             return {"ok": False, "error": str(e)}
 
-    return await anyio.to_thread.run_sync(run, limiter=_limiter())
+    quick = job.get("op") in QUICK_OPS and not job.get("fresh")
+    # over HTTP, a call that waited a whole build's time for a slot is refused: its client has most
+    # likely given up waiting by then (stdio: the one client's own calls simply take turns)
+    wait = STATE["timeout"] if _http() else None
+    try:
+        # the slot is held until the thread returns: a cancelled call does not free a slot whose
+        # build is still running (to_thread.run_sync waits for the thread before it is cancelled)
+        async with _scheduler().slot(client, quick=quick, wait_limit=wait):
+            return await anyio.to_thread.run_sync(run)
+    except (sched.Busy, sched.Waited) as e:  # refused at once: the message says what to do
+        return {"ok": False, "error": str(e), "usage_error": True}
 
 
 async def _job(name: str, op: str, **kw) -> dict:
@@ -249,7 +292,9 @@ def _error_text(res: dict) -> str:
     from .diagnose import PROGRESS, text
 
     s = f"ERROR: {res.get('error')}"
-    if res.get("usage_error"):  # a wrong argument (piece, variant, face, measurement): the message says it all
+    # a wrong argument (piece, variant, face, measurement) or a server limit (busy, memory): the
+    # message says it all
+    if res.get("usage_error"):
         return _scrub(s)
     if res.get("diagnosis"):
         s += "\n\n" + text(res["diagnosis"], res.get("part_name"))
@@ -482,6 +527,8 @@ def list_parts() -> str:
             "styles": _styles(),
             "sandbox": sandbox.describe(),
             "max_concurrent_builds": STATE["max_builds"],
+            "max_memory_per_build": sandbox.human_size(sandbox.MAX_MEMORY) if sandbox.memory_limited() else "no limit",
+            **({"quick_slots": _quick_slots(), "max_jobs_per_client": _client_jobs() or "no limit"} if _http() else {}),
             **({"token": _token_name(), "build_worker": "separate process (job queue)" if STATE["queue"] else "in-process"}
                if _http() else {}),
         },
@@ -839,14 +886,17 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
 
 
 async def _check(name: str, variant: str | None, fresh: bool = False) -> dict:
-    """Run a check over up to --max-builds workers at once: each builds the part (import_model's
-    conversion is cached and shared) and runs its share of the check items (project.partition);
-    the findings are merged back in order. Each worker takes a build slot like any build, so on
-    a busy server the shares simply take turns; with one slot it is one worker, as before.
+    """Run a check over up to CHECK_SHARES workers at once (fewer while the server is busy, see
+    sched.FairScheduler.shares): each builds the part (import_model's conversion is cached and
+    shared) and runs its share of the check items (project.partition); the findings are merged
+    back in order. Each worker takes a build slot like any build; with one slot it is one worker.
     All shares stop at the same soft deadline, so a check that runs out of time still returns
     every finding that finished. fresh: build again instead of reading the build cache (every
     share then rebuilds; they write the same cache entries)."""
-    count = max(1, STATE["max_builds"])
+    # how many workers: at most CHECK_SHARES, the slots free now and the client's room, and one
+    # while another client waits (sched.FairScheduler.shares), so one check never takes every slot
+    want = min(CHECK_SHARES, max(1, STATE["max_builds"]))
+    count = _scheduler().shares(_client(), want) if want > 1 else 1
     extra = {"fresh": True} if fresh else {}
     if count == 1:
         return await _job(name, "check", variant=variant, **extra)
@@ -2478,6 +2528,11 @@ def _healthcheck(args) -> int:
         return 1
 
 
+def _env_int(var: str) -> int | None:
+    v = os.environ.get(var, "").strip()
+    return int(v) if v else None
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The server's command line; the docs' reference is generated from it."""
     env = os.environ.get
@@ -2493,6 +2548,17 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-builds", type=int, default=int(env("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_count() or 2) // 2),
                     help="build processes at once, across all clients and all server processes of this user (one per SSH session); "
                          "more calls wait (default: half the CPUs; $B123D_PRINT_MAX_BUILDS)")
+    ap.add_argument("--max-memory", default=env("B123D_PRINT_MAX_MEMORY", sandbox.DEFAULT_MAX_MEMORY),
+                    help="memory per build process, e.g. 2g or 1536m; a build over it fails with a plain message "
+                         "(Linux and Windows; macOS has no per-process limit); 0 = no limit "
+                         f"(default {sandbox.DEFAULT_MAX_MEMORY}; $B123D_PRINT_MAX_MEMORY)")
+    ap.add_argument("--quick-slots", type=int, default=_env_int("B123D_PRINT_QUICK_SLOTS"),
+                    help="build slots (out of --max-builds) kept for quick calls (measure, section, faces, edges, "
+                         "hardware_list), so they never wait behind long builds; at least one slot stays for long ones "
+                         "(default: 1 over HTTP with 2+ slots, else 0; $B123D_PRINT_QUICK_SLOTS)")
+    ap.add_argument("--client-jobs", type=int, default=_env_int("B123D_PRINT_CLIENT_JOBS"),
+                    help=f"http: jobs one client (token) may have running and waiting; more are refused with a message "
+                         f"until one finishes; 0 = no cap (default {CLIENT_JOBS}; $B123D_PRINT_CLIENT_JOBS)")
     ap.add_argument("--transport", choices=("stdio", "http"), default=env("B123D_PRINT_TRANSPORT", "stdio"),
                     help="stdio (default) or http: Streamable HTTP at /mcp ($B123D_PRINT_TRANSPORT)")
     ap.add_argument("--host", default=env("B123D_PRINT_HOST", "127.0.0.1"),
@@ -2545,6 +2611,10 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     # also the limit across server processes (one per SSH session); set before any early exit
     sandbox.MAX_BUILDS = max(1, args.max_builds)
+    try:  # the per-job memory cap is enforced where the jobs run (here, or in the worker)
+        sandbox.MAX_MEMORY = sandbox.parse_size(args.max_memory)
+    except ValueError as e:
+        sys.exit(f"b123d-print-mcp: --max-memory: {e}")
     if args.command == "token":
         sys.exit(tokens.cli(args))
     if args.command == "worker" and env("B123D_PRINT_CONFIG_IN_WORKSPACE") == "1" and args.workspace:
@@ -2567,7 +2637,9 @@ def main(argv: list[str] | None = None) -> None:
         # home folder that disappears with the container
         os.environ["XDG_CONFIG_HOME"] = str(root / ".config")
     STATE.update(root=root, timeout=args.timeout, check_timeout=args.check_timeout or max(300.0, args.timeout),
-                 transport=args.transport, max_builds=max(1, args.max_builds))
+                 transport=args.transport, max_builds=max(1, args.max_builds), limiter=None,
+                 quick_slots=None if args.quick_slots is None else max(0, args.quick_slots),
+                 client_jobs=None if args.client_jobs is None else max(0, args.client_jobs))
     if args.transport == "stdio":
         mcp.run("stdio")
         return
@@ -2613,7 +2685,8 @@ def main(argv: list[str] | None = None) -> None:
 
     auth = f"tokens {', '.join(store.names())}" if store else "NONE"
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  auth {auth}  "
-          f"max builds {STATE['max_builds']}  builds {'in worker via ' + str(queue) if queue else 'here'}  "
+          f"max builds {STATE['max_builds']} (quick {_quick_slots()}, per client {_client_jobs() or 'no cap'})  "
+          f"builds {'in worker via ' + str(queue) if queue else 'here'}  "
           f"retention {f'{args.retention_days:g} days' if args.retention_days > 0 else 'off'}", file=sys.stderr)
     retention.start()
     if store and hasattr(signal, "SIGHUP"):  # SIGHUP (not on Windows): re-read the tokens file now (it is also re-read whenever it changes)

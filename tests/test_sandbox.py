@@ -5,6 +5,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from b123d_print import sandbox
 
 # a part script that starts a child process (the audit hook is off for this test) and never ends
@@ -95,3 +97,50 @@ def test_timeout_kills_the_worker_and_its_children(tmp_path, monkeypatch):
             break
         time.sleep(0.1)
     assert not alive(pid), f"the worker's child {pid} outlived the timeout"
+
+
+def test_parse_size():
+    assert sandbox.parse_size("2g") == sandbox.parse_size("2GB") == sandbox.parse_size("2") == 2 * 2**30
+    assert sandbox.parse_size("1536m") == sandbox.parse_size("1.5GiB") == 1536 * 2**20
+    assert sandbox.parse_size("0") == sandbox.parse_size("") == 0
+    for bad in ("lots", "-1g"):
+        with pytest.raises(ValueError):
+            sandbox.parse_size(bad)
+    assert sandbox.human_size(2 * 2**30) == "2 GB" and sandbox.human_size(512 * 2**20) == "512 MB"
+
+
+# a part script that allocates far more than the cap (at import, like a runaway build)
+HOG = "BIG = bytearray(4 * 2**30)\n"
+
+
+@pytest.mark.skipif(not (sys.platform.startswith("linux") or sys.platform == "win32"),
+                    reason="macOS enforces no per-process memory limit")
+def test_a_build_over_the_memory_cap_fails_plainly_and_the_next_one_runs(tmp_path, monkeypatch):
+    # in the real sandbox where there is one (bubblewrap in CI): the limit is set before bwrap starts
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    monkeypatch.setattr(sandbox, "MAX_MEMORY", 1 * 2**30)
+    out = tmp_path / "parts" / "hog" / "out"
+    script = tmp_path / "parts" / "hog" / "hog.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(HOG, encoding="utf-8")
+    res = sandbox.run_job({"op": "build", "script": str(script)}, tmp_path, out, timeout=60)
+    assert not res["ok"] and res["usage_error"], res
+    assert res["error"].startswith("the build used more than 1 GB of memory"), res
+    assert "MemoryError" in res.get("detail", "") or "MemoryError" in res.get("log", ""), res
+    # the server (this process) is fine, and the next job runs normally under the same cap
+    script.write_text("SMALL = bytearray(10 * 2**20)\n", encoding="utf-8")
+    res = sandbox.run_job({"op": "build", "script": str(script)}, tmp_path, out, timeout=60)
+    assert "memory" not in res.get("error", ""), res
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="no signals on Windows")
+def test_a_job_killed_by_the_system_says_so(tmp_path, monkeypatch):
+    # SIGKILL from no one here (what the kernel's OOM killer sends) is not reported as a shutdown
+    monkeypatch.setenv("B123D_PRINT_SANDBOX", "none")  # the hook would refuse os.kill
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    out = tmp_path / "parts" / "die" / "out"
+    script = tmp_path / "parts" / "die" / "die.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n", encoding="utf-8")
+    res = sandbox.run_job({"op": "build", "script": str(script), "guard": False}, tmp_path, out, timeout=60)
+    assert not res["ok"] and "killed by the system" in res["error"] and "out of memory" in res["error"], res

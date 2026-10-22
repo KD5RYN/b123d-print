@@ -123,6 +123,9 @@ In both, a key missing for the material falls back to `"<printer>/any"`. A flat 
 | `B123D_PRINT_NO_CACHE` | `1` turns the MCP server's [build cache](../scripts/convention.md#big-and-multi-piece-projects) off: every call builds the part again |
 | `B123D_PRINT_CHECK_TIMEOUT` | the MCP server's time limit for a `check` call in seconds when `--check-timeout` is not given (default 300, or the build limit if that is longer) |
 | `B123D_PRINT_MAX_BUILDS` | the MCP server's `--max-builds`; also holds across all server processes of the user (one per SSH connection) |
+| `B123D_PRINT_MAX_MEMORY` | the MCP server's (and worker's) `--max-memory`: memory per build process, e.g. `2g` (default); `0` = no limit |
+| `B123D_PRINT_QUICK_SLOTS` | the MCP server's `--quick-slots`: build slots kept for quick calls |
+| `B123D_PRINT_CLIENT_JOBS` | the MCP server's `--client-jobs`: calls per HTTP client running and waiting (default 4) |
 | `B123D_PRINT_TRANSPORT` | the MCP server's `--transport` (`stdio` or `http`) |
 | `B123D_PRINT_HOST` | the MCP server's `--host` (HTTP; the Docker image sets `0.0.0.0`) |
 | `B123D_PRINT_PORT` | the MCP server's `--port` (HTTP) |

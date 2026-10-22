@@ -199,6 +199,14 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     await c.call_tool("write_part", {"name": "box", "code": "import time\nwhile True: time.sleep(0.1)\n"})
     res = await c.call_tool("build_part", {"name": "box"})
     expect("timed out" in text(res), "runaway script is killed at the timeout")
+    mem = json.loads(text(await c.call_tool("list_parts", {}))).get("max_memory_per_build", "no limit")
+    if mem != "no limit":  # Linux and Windows (macOS has no per-process limit): a hog fails plainly
+        await c.call_tool("write_part", {"name": "box", "code": "BIG = bytearray(4 * 2**30)\n"})
+        res = await c.call_tool("build_part", {"name": "box"})
+        expect(f"the build used more than {mem} of memory" in text(res), f"a build over the memory cap ({mem}) fails plainly"
+               + ("" if "memory" in text(res) else f"\n{text(res)[:1500]}"))
+        res = await c.call_tool("list_parts", {})
+        expect('"box"' in text(res), "the server is fine after a build ran out of memory")
 
     res = await c.call_tool("new_part", {"name": "coupon", "example": "hole_coupon"})
     expect("Created" in text(res), "new_part from a bundled example")

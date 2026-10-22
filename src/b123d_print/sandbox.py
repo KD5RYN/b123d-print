@@ -46,6 +46,55 @@ MAX_BUILDS = int(os.environ.get("B123D_PRINT_MAX_BUILDS", 0)) or max(1, (os.cpu_
 SLOT_DIR = CACHE / "build-slots"
 
 
+def parse_size(text) -> int:
+    """Bytes from "2g", "2GB", "1536m", "512M" or a plain number of GB ("2", "1.5"); 0 or "" = no limit."""
+    s = str(text if text is not None else "").strip().lower().removesuffix("b").removesuffix("i")
+    if not s:
+        return 0
+    unit = {"k": 2**10, "m": 2**20, "g": 2**30, "t": 2**40}.get(s[-1])
+    try:
+        n = float(s[:-1] if unit else s)
+    except ValueError:
+        raise ValueError(f"not a memory size: {text!r} (e.g. 2g, 1536m, or 0 for no limit)") from None
+    if n < 0:
+        raise ValueError(f"not a memory size: {text!r} (e.g. 2g, 1536m, or 0 for no limit)")
+    return int(n * (unit or 2**30))
+
+
+def human_size(n: int) -> str:
+    return f"{n / 2**30:g} GB" if n >= 2**30 else f"{n / 2**20:g} MB"
+
+
+# memory per job (--max-memory, $B123D_PRINT_MAX_MEMORY; 0 = no limit): a build that allocates more
+# fails with a plain message instead of pushing the host or the worker container into the OOM
+# killer, which would take the other clients' builds with it. Linux: RLIMIT_DATA (the job's heap,
+# anonymous memory and thread stacks; not its shared libraries or reserved-but-unused address
+# space, which RLIMIT_AS would count and which grows with the CPU count). Windows: the Job Object's
+# per-process commit limit. macOS enforces neither, so there is no per-job limit there.
+DEFAULT_MAX_MEMORY = "2g"
+MAX_MEMORY = parse_size(os.environ.get("B123D_PRINT_MAX_MEMORY", DEFAULT_MAX_MEMORY))
+
+
+def memory_limited() -> bool:
+    """Whether MAX_MEMORY is enforced on this platform."""
+    return bool(MAX_MEMORY) and (sys.platform.startswith("linux") or WINDOWS)
+
+
+def memory_message() -> str:
+    return (f"the build used more than {human_size(MAX_MEMORY)} of memory, the limit per job on this server "
+            "(B123D_PRINT_MAX_MEMORY), and was stopped. Make it lighter: build fewer pieces at once (parts=), use "
+            "fewer points in curves and fewer faces, or a smaller reference model; or ask the operator to raise the limit")
+
+
+# what a job that ran out of memory leaves in its error or output (Python, numpy, C++ and OCCT)
+_OOM_MARKERS = ("MemoryError", "bad_alloc", "Standard_OutOfMemory", "Unable to allocate", "Cannot allocate memory",
+                "out of memory")
+
+
+def _out_of_memory(*texts) -> bool:
+    return any(m in (t or "") for t in texts for m in _OOM_MARKERS)
+
+
 def _real(p) -> str:
     return os.path.realpath(str(p))
 
@@ -378,13 +427,21 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
         elif k == "bwrap":
             cmd = linux_bwrap(writable, readable, hidden, secrets) + cmd
 
-        def limits():  # in the child, before exec
-            try:
-                import resource
+        mem = MAX_MEMORY if memory_limited() else 0
 
+        def limits():  # in the child, before exec (bubblewrap and the job inherit them)
+            import resource
+
+            try:
                 resource.setrlimit(resource.RLIMIT_CPU, (int(timeout) + 5, int(timeout) + 10))
             except Exception:
                 pass
+            if mem:  # no try: a memory cap that cannot be set fails the job (fail closed)
+                hard = resource.getrlimit(resource.RLIMIT_DATA)[1]
+                cap = mem if hard == resource.RLIM_INFINITY else min(mem, hard)
+                # soft = hard: the job cannot raise it again (that needs CAP_SYS_RESOURCE in the
+                # host's user namespace, which bubblewrap's user namespace does not give)
+                resource.setrlimit(resource.RLIMIT_DATA, (cap, cap))
 
         if epoch is not None and current_epoch() != epoch:  # cancelled before it got this far
             return {"ok": False, "error": "cancelled before it started (server shutting down)"}
@@ -392,7 +449,7 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
             if epoch is not None and current_epoch() != epoch:  # cancelled while it waited
                 return {"ok": False, "error": "cancelled before it started (server shutting down)"}
             if WINDOWS:
-                proc = _popen_windows(cmd, env, tmp, timeout)
+                proc = _popen_windows(cmd, env, tmp, timeout, mem)
             else:
                 proc = subprocess.Popen(cmd, env=env, cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         start_new_session=True, preexec_fn=limits)
@@ -411,16 +468,29 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
                 with _LIVE_LOCK:
                     _LIVE.discard(proc)
                 _close_job(proc)
-        if _was_killed(proc) and not Path(job["result"]).exists():
-            return {"ok": False, "error": "worker was killed (server shutting down, or out of memory)", "log": _tail(stdout, stderr)}
         rp = Path(job["result"])
         if not rp.exists():
-            return {"ok": False, "error": f"worker exited with code {proc.returncode} and no result",
-                    "log": _tail(stdout, stderr)}
+            log = _tail(stdout, stderr)
+            if getattr(proc, "b123d_killed", False):  # we killed it: a cancel (server shutting down)
+                return {"ok": False, "error": "worker was killed (server shutting down)", "log": log}
+            if mem and _out_of_memory(log):  # e.g. a MemoryError while Python was still starting
+                return {"ok": False, "error": memory_message(), "usage_error": True, "log": log}
+            if _was_killed(proc):  # SIGKILL from no one here: the kernel's OOM killer (container limit)
+                return {"ok": False, "error": "the build was killed by the system, most likely because the worker ran "
+                        "out of memory (the host's or the container's memory limit)" + (
+                            f"; each job may use up to {human_size(mem)}" if mem else ""), "log": log}
+            crash = f" (signal {-proc.returncode})" if proc.returncode < 0 else ""
+            return {"ok": False, "error": f"worker exited with code {proc.returncode}{crash} and no result"
+                    + (f"; it may have run out of memory (the limit is {human_size(mem)} per job)" if mem and crash else ""),
+                    "log": log}
         res = json.loads(rp.read_text(encoding="utf-8"))
         log = _tail(stdout, stderr, progress=False)  # the worker reported: its progress lines say nothing more
         if log:
             res["log"] = log
+        if not res.get("ok") and mem and _out_of_memory(res.get("error"), res.get("traceback")):
+            # the cap, not the script: say so plainly instead of a diagnosis of the traceback
+            res = {"ok": False, "error": memory_message(), "usage_error": True, "detail": res.get("error"),
+                   **({"log": log} if log else {})}
         res["sandbox"] = k
         return res
 
@@ -434,6 +504,7 @@ def _killpg(proc: subprocess.Popen) -> None:
         else:
             proc.kill()
         return
+    proc.b123d_killed = True
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
@@ -469,6 +540,7 @@ class _Win:
 
     KILL_ON_JOB_CLOSE = 0x2000
     PROCESS_TIME = 0x0002
+    PROCESS_MEMORY = 0x0100
     EXTENDED_LIMIT_INFORMATION = 9
 
     def __init__(self):
@@ -505,13 +577,16 @@ class _Win:
         k.CloseHandle.argtypes = [wintypes.HANDLE]
         self.k = k
 
-    def job(self, cpu_seconds: float) -> int:
+    def job(self, cpu_seconds: float, memory: int = 0) -> int:
         h = self.k.CreateJobObjectW(None, None)
         if not h:
             raise self.ctypes.WinError(self.ctypes.get_last_error())
         info = self.EXTENDED()
         info.BasicLimitInformation.LimitFlags = self.KILL_ON_JOB_CLOSE | self.PROCESS_TIME
         info.BasicLimitInformation.PerProcessUserTimeLimit = int(cpu_seconds * 10_000_000)  # 100 ns units
+        if memory:  # committed memory per process: an allocation over it fails (MemoryError)
+            info.BasicLimitInformation.LimitFlags |= self.PROCESS_MEMORY
+            info.ProcessMemoryLimit = int(memory)
         if not self.k.SetInformationJobObject(h, self.EXTENDED_LIMIT_INFORMATION, self.ctypes.byref(info),
                                               self.ctypes.sizeof(info)):
             err = self.ctypes.get_last_error()
@@ -535,11 +610,11 @@ def _kernel32() -> _Win:
     return _Win()
 
 
-def _popen_windows(cmd: list[str], env: dict, cwd: str, timeout: float) -> subprocess.Popen:
+def _popen_windows(cmd: list[str], env: dict, cwd: str, timeout: float, memory: int = 0) -> subprocess.Popen:
     """Start the worker and put it in a new job at once. (subprocess cannot start it suspended; the
     worker spends its first second importing libraries and starts nothing, so nothing escapes.)"""
     flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW  # no Ctrl+C from our console, no window
-    job = _kernel32().job(timeout + 5)
+    job = _kernel32().job(timeout + 5, memory)
     try:
         proc = subprocess.Popen(cmd, env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 creationflags=flags)

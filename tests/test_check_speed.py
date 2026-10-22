@@ -356,7 +356,7 @@ def test_server_splits_a_check_and_merges_it(remix_ws, monkeypatch):
     root = remix_ws.parents[2]
     one = run_server_check(monkeypatch, root, "rx", 1)
     two = run_server_check(monkeypatch, root, "rx", 3)
-    assert one["ok"] and two["ok"] and two["workers"] == 3
+    assert one["ok"] and two["ok"] and two["workers"] == 2  # at most CHECK_SHARES, even with 3 slots
     key = lambda r: [(f["level"], f["check"], f["target"], f["message"]) for f in r["variants"]["standard"]]  # noqa: E731
     assert key(one) == key(two)
     assert one["passed"] == two["passed"]
