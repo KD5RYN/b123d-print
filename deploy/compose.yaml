@@ -22,7 +22,8 @@
 # B123D_PRINT_CONFIG, B123D_PRINT_UID/GID, B123D_PRINT_MAX_BUILDS, B123D_PRINT_RETENTION_DAYS (default 30:
 # a workspace nobody used for that many days is removed; 0 = never), B123D_PRINT_TIMEOUT (default 240 s
 # per build), B123D_PRINT_CHECK_TIMEOUT (default 300 s per check), B123D_PRINT_QUICK_SLOTS (default 1),
-# B123D_PRINT_CLIENT_JOBS (default 4), B123D_PRINT_MAX_MEMORY (default 2g per build),
+# B123D_PRINT_CLIENT_JOBS (default 4), B123D_PRINT_MAX_UPLOADS (default 8), B123D_PRINT_CLIENT_UPLOADS
+# (default 2), B123D_PRINT_MAX_MEMORY (default 2g per build),
 # B123D_PRINT_WORKER_MEMORY (default 6g: the whole worker container).
 #
 # Sharing between clients (tokens): builds run at most MAX_BUILDS at once; QUICK_SLOTS of those only
@@ -54,6 +55,8 @@ services:
       B123D_PRINT_MAX_BUILDS: ${B123D_PRINT_MAX_BUILDS:-2}   # builds at once, all clients together
       B123D_PRINT_QUICK_SLOTS: ${B123D_PRINT_QUICK_SLOTS:-1}   # of those, kept for quick calls (0 = none)
       B123D_PRINT_CLIENT_JOBS: ${B123D_PRINT_CLIENT_JOBS:-4}   # calls running + waiting per token (0 = no cap)
+      B123D_PRINT_MAX_UPLOADS: ${B123D_PRINT_MAX_UPLOADS:-8}         # signed-link uploads at once, all tokens (0 = no cap)
+      B123D_PRINT_CLIENT_UPLOADS: ${B123D_PRINT_CLIENT_UPLOADS:-2}   # signed-link uploads at once per token (0 = no cap)
       B123D_PRINT_MAX_MEMORY: ${B123D_PRINT_MAX_MEMORY:-2g}    # per build: enforced by the worker, reported here
       B123D_PRINT_TIMEOUT: ${B123D_PRINT_TIMEOUT:-240}               # seconds per build, render, export
       B123D_PRINT_CHECK_TIMEOUT: ${B123D_PRINT_CHECK_TIMEOUT:-300}   # seconds per check (returns what it has, near the end)

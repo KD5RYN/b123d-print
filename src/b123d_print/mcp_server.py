@@ -15,6 +15,7 @@ whole part, and export a signed 3D view link (GET /view/..., viewer.py). A named
 from __future__ import annotations
 
 import argparse
+import collections
 import contextvars
 import json
 import os
@@ -167,8 +168,13 @@ def _in_use(name: str | None, start: bool) -> None:
 # version: what initialize reports as serverInfo.version (the SDK default is "")
 mcp = MCPServer("b123d-print", version=_dist_version("b123d-print"), instructions=INSTRUCTIONS,
                 middleware=[_request_workspace])
+# signed-link uploads (upload): 0 = no cap
+UPLOADS = 8  # uploads at once, all clients together (--max-uploads)
+CLIENT_UPLOADS = 2  # uploads at once per client (token) (--client-uploads)
+UPLOAD_FLUSH = 1 << 20  # an upload is written to disk in pieces of about this size (its memory, per upload)
 STATE: dict = {"root": Path.cwd(), "timeout": sandbox.DEFAULT_TIMEOUT, "check_timeout": 300.0, "transport": "stdio", "max_builds": 2, "limiter": None,
                "quick_slots": None, "client_jobs": None,  # None: the default for the transport (_scheduler)
+               "max_uploads": UPLOADS, "client_uploads": CLIENT_UPLOADS, "uploads": collections.Counter(),  # see upload
                "link_secret": b"", "link_ttl": 3600.0, "public_url": None, "allowed_hosts": [],
                "tokens": None, "queue": None, "retention_days": 30.0, "retention": None,
                "ssh_dest": None}  # ssh_dest: user@host when started by `b123d-print ssh-serve`
@@ -1617,8 +1623,8 @@ def upload_reference(part: str, filename: str, data_base64: str = "", overwrite:
     if os.path.lexists(target) and not overwrite:
         return f"{rel} is already there. Next: {_ref_next(part, filename)} (overwrite=True to replace it)."
     if _http():
-        url, expires = links.sign(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"],
-                                  purpose="put-overwrite" if overwrite else "put")
+        url, expires = links.sign_upload(STATE["link_secret"], _ws_name(), rel, STATE["link_ttl"], overwrite,
+                                         by=_token_name() or "")
         return (f"Ask the user to upload the file from their machine (no token needed; up to "
                 f"{refs.MAX_BYTES // 1_000_000} MB; the link expires "
                 f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(expires))}):\n"
@@ -2317,25 +2323,37 @@ async def view_asset(request):
     return Response(viewer.asset_bytes(name), media_type=viewer.ASSETS[name], headers=viewer.ASSET_HEADERS)
 
 
+def _upload_refusal(client: str) -> tuple[int, str] | None:
+    """(status, message) when `client` may not start another upload now, else None."""
+    running, total, per = STATE["uploads"], STATE["max_uploads"], STATE["client_uploads"]
+    if per and running[client] >= per:
+        return 429, (f"server busy: you have {running[client]} uploads running on this shared server (at most {per} "
+                     "per client); wait for one to finish, then try again")
+    if total and sum(running.values()) >= total:
+        return 503, f"server busy: {total} uploads are running on this shared server; try again in a minute"
+    return None
+
+
 @mcp.custom_route("/upload/{workspace}/{token}/{path:path}", methods=["PUT"])
 async def upload(request):
     """A signed upload link (upload_reference): needs no bearer token, stores one reference file in
-    <parts_dir>/<part>/ref/ until it expires; capped at refs.MAX_BYTES."""
+    <parts_dir>/<part>/ref/ until it expires; capped at refs.MAX_BYTES. The body goes straight to a
+    hidden temp file next to the target (refs.Staged), in pieces of UPLOAD_FLUSH, and is renamed into
+    place only once it is all there and checked; too large, refused, failed or cut off, the temp
+    file is removed. At most --client-uploads per client (the token named in the link) and
+    --max-uploads in all run at once; more are refused before the body is read."""
+    from starlette.requests import ClientDisconnect
     from starlette.responses import PlainTextResponse
 
     from . import refs
 
     ws, token, path = (request.path_params[k] for k in ("workspace", "token", "path"))
+    by = request.query_params.get("by", "")
     try:
         links.check_path(path)
-        try:
-            links.verify(STATE["link_secret"], ws, token, path, purpose="put-overwrite")
-            overwrite = True
-        except links.LinkError as e:
-            if e.status == 410:
-                raise
-            links.verify(STATE["link_secret"], ws, token, path, purpose="put")
-            overwrite = False
+        if by and not tokens.NAME_RE.match(by):
+            raise links.LinkError(404, "not found")
+        overwrite = links.verify_upload(STATE["link_secret"], ws, token, path, by)
         root = _ws_dir(ws)
         if root is None:
             raise links.LinkError(404, "not found")
@@ -2343,20 +2361,43 @@ async def upload(request):
         part, filename = links.upload_target(parts_dir, path)
     except links.LinkError as e:
         return PlainTextResponse(str(e) + "\n", status_code=e.status)
-    size = int(request.headers.get("content-length") or 0)
-    if size > refs.MAX_BYTES:
-        return PlainTextResponse(f"too large: the limit is {refs.MAX_BYTES // 1_000_000} MB\n", status_code=413)
-    chunks, n = [], 0
-    async for chunk in request.stream():
-        n += len(chunk)
-        if n > refs.MAX_BYTES:
-            return PlainTextResponse(f"too large: the limit is {refs.MAX_BYTES // 1_000_000} MB\n", status_code=413)
-        chunks.append(chunk)
+    too_large = PlainTextResponse(f"too large: the limit is {refs.MAX_BYTES // 1_000_000} MB\n", status_code=413)
+    cl = request.headers.get("content-length", "").strip()
+    if cl.isdigit() and int(cl) > refs.MAX_BYTES:
+        return too_large
+    client = f"token:{by}" if by else f"workspace:{ws}"  # as _client(): whose upload it is
+    refused = _upload_refusal(client)
+    if refused:
+        return PlainTextResponse(refused[1] + "\n", status_code=refused[0], headers={"Retry-After": "30"})
+    running = STATE["uploads"]
+    running[client] += 1  # no await since the check: nothing else ran in between
+    staged = None
     try:
-        p = refs.store(root, parts_dir, part, filename, b"".join(chunks), overwrite)
+        staged = refs.Staged(root, parts_dir, part, filename, overwrite)
+        buf = bytearray()
+        async for chunk in request.stream():
+            if staged.size + len(buf) + len(chunk) > refs.MAX_BYTES:
+                return too_large
+            buf += chunk
+            if len(buf) >= UPLOAD_FLUSH:
+                await anyio.to_thread.run_sync(staged.write, bytes(buf))
+                buf.clear()
+        if buf:
+            await anyio.to_thread.run_sync(staged.write, bytes(buf))
+        p = await anyio.to_thread.run_sync(staged.commit)
+    except refs.TooLarge:
+        return too_large
     except refs.RefError as e:
         return PlainTextResponse(f"refused: {e}\n", status_code=409 if "already exists" in str(e) else 400)
-    return PlainTextResponse(f"stored {p.relative_to(root).as_posix()} ({n} bytes)\n", status_code=201)
+    except ClientDisconnect:  # cut off: nobody is left to answer; the temp file goes below
+        return PlainTextResponse("upload interrupted\n", status_code=400)
+    finally:
+        if staged is not None:
+            staged.abort()  # after commit() a no-op; otherwise no partial file stays behind
+        running[client] -= 1
+        if not running[client]:
+            del running[client]
+    return PlainTextResponse(f"stored {p.relative_to(root).as_posix()} ({staged.size} bytes)\n", status_code=201)
 
 
 DRAIN_LIMIT = 8 * 1024 * 1024  # request body read and thrown away before an early reply; more -> close
@@ -2559,6 +2600,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--client-jobs", type=int, default=_env_int("B123D_PRINT_CLIENT_JOBS"),
                     help=f"http: jobs one client (token) may have running and waiting; more are refused with a message "
                          f"until one finishes; 0 = no cap (default {CLIENT_JOBS}; $B123D_PRINT_CLIENT_JOBS)")
+    ap.add_argument("--max-uploads", type=int, default=_env_int("B123D_PRINT_MAX_UPLOADS"),
+                    help=f"http: signed-link uploads (upload_reference) at once, all clients together; more are refused "
+                         f"with a message (HTTP 503); 0 = no cap (default {UPLOADS}; $B123D_PRINT_MAX_UPLOADS)")
+    ap.add_argument("--client-uploads", type=int, default=_env_int("B123D_PRINT_CLIENT_UPLOADS"),
+                    help=f"http: signed-link uploads one client (token) may have running at once; more are refused "
+                         f"with a message (HTTP 429); 0 = no cap (default {CLIENT_UPLOADS}; $B123D_PRINT_CLIENT_UPLOADS)")
     ap.add_argument("--transport", choices=("stdio", "http"), default=env("B123D_PRINT_TRANSPORT", "stdio"),
                     help="stdio (default) or http: Streamable HTTP at /mcp ($B123D_PRINT_TRANSPORT)")
     ap.add_argument("--host", default=env("B123D_PRINT_HOST", "127.0.0.1"),
@@ -2639,7 +2686,9 @@ def main(argv: list[str] | None = None) -> None:
     STATE.update(root=root, timeout=args.timeout, check_timeout=args.check_timeout or max(300.0, args.timeout),
                  transport=args.transport, max_builds=max(1, args.max_builds), limiter=None,
                  quick_slots=None if args.quick_slots is None else max(0, args.quick_slots),
-                 client_jobs=None if args.client_jobs is None else max(0, args.client_jobs))
+                 client_jobs=None if args.client_jobs is None else max(0, args.client_jobs),
+                 max_uploads=UPLOADS if args.max_uploads is None else max(0, args.max_uploads),
+                 client_uploads=CLIENT_UPLOADS if args.client_uploads is None else max(0, args.client_uploads))
     if args.transport == "stdio":
         mcp.run("stdio")
         return
@@ -2686,6 +2735,7 @@ def main(argv: list[str] | None = None) -> None:
     auth = f"tokens {', '.join(store.names())}" if store else "NONE"
     print(f"b123d-print-mcp: http://{args.host}:{args.port}/mcp  workspace {root}  auth {auth}  "
           f"max builds {STATE['max_builds']} (quick {_quick_slots()}, per client {_client_jobs() or 'no cap'})  "
+          f"uploads {STATE['max_uploads'] or 'no cap'} (per client {STATE['client_uploads'] or 'no cap'})  "
           f"builds {'in worker via ' + str(queue) if queue else 'here'}  "
           f"retention {f'{args.retention_days:g} days' if args.retention_days > 0 else 'off'}", file=sys.stderr)
     retention.start()

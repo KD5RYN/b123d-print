@@ -18,7 +18,9 @@ the flat layout before 0.3.11; servable); nothing else.
 
 Upload links (`upload_reference`) are the same with /upload/ and a signature over a purpose
 ("put" or "put-overwrite") as well: a PUT to one stores one reference file in
-<parts_dir>/<part>/ref/ (refs.store), until it expires.
+<parts_dir>/<part>/ref/ (refs.Staged), until it expires. A link made for a named bearer token ends
+in ?by=<token name>, which the signature covers too (after a NUL, which no path or name contains):
+the server counts that token's uploads at once from it (sign_upload, verify_upload).
 """
 
 from __future__ import annotations
@@ -64,6 +66,32 @@ def sign(secret: bytes, workspace: str, path: str, ttl: float, now: float | None
     route = "upload" if purpose else "files"
     url = f"/{route}/{workspace}/{expires}.{_sig(secret, workspace, path, expires, purpose)}/{quote(path)}"
     return url, expires
+
+
+def _upload_msg(path: str, by: str) -> str:
+    return f"{path}\0by={by}" if by else path  # without a name: the message of a link from before 0.3.12
+
+
+def sign_upload(secret: bytes, workspace: str, path: str, ttl: float, overwrite: bool = False, by: str = "",
+                now: float | None = None) -> tuple[str, int]:
+    """URL path ("/upload/...") that stores `path`, made for the token named `by` (if any), and its expiry."""
+    purpose = "put-overwrite" if overwrite else "put"
+    expires = int((now if now is not None else time.time()) + ttl)
+    url = f"/upload/{workspace}/{expires}.{_sig(secret, workspace, _upload_msg(path, by), expires, purpose)}/{quote(path)}"
+    return url + (f"?by={quote(by)}" if by else ""), expires
+
+
+def verify_upload(secret: bytes, workspace: str, token: str, path: str, by: str = "", now: float | None = None) -> bool:
+    """Like verify(), for an upload link: True if it may overwrite (put-overwrite), False if not (put)."""
+    msg = _upload_msg(path, by)
+    try:
+        verify(secret, workspace, token, msg, now, purpose="put-overwrite")
+        return True
+    except LinkError as e:
+        if e.status == 410:
+            raise
+    verify(secret, workspace, token, msg, now, purpose="put")
+    return False
 
 
 def zip_query(variant: str | None = None, formats: str | None = None) -> str:

@@ -32,6 +32,8 @@ In place of `b123d-print` in any config on this page:
 | `--max-memory <size>` | `$B123D_PRINT_MAX_MEMORY`, else `2g` | memory per build process (`2g`, `1536m`); a build over it fails with a plain message; Linux and Windows ([memory](../using/sandbox.md#memory)); `0` = no limit |
 | `--quick-slots <n>` | `$B123D_PRINT_QUICK_SLOTS`, else 1 over HTTP with 2+ build slots, 0 otherwise | build slots (out of `--max-builds`) kept for quick calls (`measure`, `section`, `list_faces`, `list_edges`, `hardware_list`), so they never wait behind long builds; at least one slot stays for long ones |
 | `--client-jobs <n>` | `$B123D_PRINT_CLIENT_JOBS`, else 4 | HTTP: calls one client (token) may have running and waiting; more are refused with a message until one finishes; `0` = no cap |
+| `--max-uploads <n>` | `$B123D_PRINT_MAX_UPLOADS`, else 8 | HTTP: [signed-link uploads](http.md#uploading-a-model) (`upload_reference`) at once, all clients together; more are refused with "server busy" (HTTP 503); `0` = no cap |
+| `--client-uploads <n>` | `$B123D_PRINT_CLIENT_UPLOADS`, else 2 | HTTP: signed-link uploads one client (token) may have running at once; more are refused with "server busy" (HTTP 429); `0` = no cap |
 | `--transport <mode>` | `$B123D_PRINT_TRANSPORT`, else `stdio` | `stdio` or `http`; `http` serves Streamable HTTP at `/mcp`: see [Over the network](http.md) |
 | `--host <address>` | `$B123D_PRINT_HOST`, else `127.0.0.1` | HTTP: address to bind |
 | `--port <port>` | `$B123D_PRINT_PORT`, else 8000 | HTTP: port |

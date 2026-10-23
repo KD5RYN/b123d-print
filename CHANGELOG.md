@@ -25,6 +25,21 @@
   the backstop, and a job the kernel kills is reported as most likely out of memory, not as a
   shutdown. `list_parts` reports the limits.
 
+- **Uploads streamed to disk, a few at a time** (#132, #71): a signed upload link
+  (`upload_reference`, `curl -fT`) used to collect the whole file, up to 50 MB, in the server's
+  memory, with no limit on how many ran at once. Now the body goes to a hidden temp file next to
+  the target (`ref/.<name>.<random>.part`) in pieces of about 1 MB and is renamed into place once
+  it is all there and checked, so the file is never seen half written. Too large, refused, failed
+  or cut off, the temp file is removed; one a stopped server left behind goes a day later.
+  Chunked bodies work as well as ones with `Content-Length`. `--client-uploads` (default 2,
+  `B123D_PRINT_CLIENT_UPLOADS`) and `--max-uploads` (default 8, `B123D_PRINT_MAX_UPLOADS`) cap
+  uploads at once per token and in all; more are refused before the body is read with "server
+  busy: ..." (HTTP 429 / 503). New links end in `?by=<token name>`, covered by the signature, so
+  the cap counts the token that asked for the link; links from 0.3.11 still work until they
+  expire (counted per workspace). Not-replacing links now cannot replace a file that another
+  upload stored meanwhile (a hard link, which fails when the name exists). Every other check
+  (signature, purpose, expiry, 50 MB, names, symlinks, content) is unchanged.
+
 ## 0.3.11 — 2026-10-21
 
 - **`out/` sorted into folders, and a "What to save" page** (#124): every export used to write
