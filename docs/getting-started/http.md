@@ -140,7 +140,7 @@ b123d-print-mcp --transport http --workspace ~/parts --host 0.0.0.0 --port 8000
 
 Every option also has an environment variable (`B123D_PRINT_TRANSPORT`, `B123D_PRINT_HOST`,
 `B123D_PRINT_PORT`, `B123D_PRINT_MAX_BUILDS`, `B123D_PRINT_QUICK_SLOTS`, `B123D_PRINT_CLIENT_JOBS`,
-`B123D_PRINT_MAX_MEMORY`, `B123D_PRINT_ALLOWED_HOSTS`, `B123D_PRINT_SHUTDOWN_GRACE`); see
+`B123D_PRINT_MAX_MEMORY`, `B123D_PRINT_MAX_UPLOADS`, `B123D_PRINT_CLIENT_UPLOADS`, `B123D_PRINT_ALLOWED_HOSTS`, `B123D_PRINT_SHUTDOWN_GRACE`); see
 [Server options](mcp-clients.md#server-options) and [Settings](../using/settings.md#environment-variables).
 
 ## Tokens
@@ -364,11 +364,33 @@ days with `--retention-days` or `B123D_PRINT_RETENTION_DAYS` (`0` = never). The 
 workspace (clients without `?workspace=`) is never removed. Tool results say how long the copy
 is kept ("deleted after 30 days unused").
 
+### Uploading a model
+
 The other way, a model to [remix](../using/remix.md): `upload_reference` returns a signed
 **upload link**, and `curl -fT bracket.stl '<link>'` on your machine stores the file as
 `parts/<part>/ref/bracket.stl`. Like a download link it needs no token, works for that one file
 only and expires; it takes STL, 3MF and STEP up to 50 MB and does not replace an existing file
 unless the tool was asked to (`overwrite=true`).
+
+How an upload is stored:
+
+- **Streamed to disk.** The body goes straight to a hidden temp file next to the target
+  (`ref/.bracket.stl.<random>.part`, which nothing lists, zips, saves or serves), in pieces of
+  about 1 MB, so an upload holds about 1 MB of the server's memory, not the whole file. Once it
+  is all there and checked (size, content matches the suffix), it is renamed into place in one
+  step: `bracket.stl` is the old file or the whole new one, never part of one. Too large (over
+  50 MB, refused at once when `Content-Length` says so, otherwise as soon as it gets there),
+  refused, failed or cut off, the temp file is removed. One left by a server that stopped in the
+  middle of an upload is removed a day later, by the next upload to that folder. Bodies sent
+  with `Content-Length` and chunked ones both work.
+- **A few at a time.** `--client-uploads` (default 2, `B123D_PRINT_CLIENT_UPLOADS`) caps the
+  uploads one client (token) has running at once, and `--max-uploads` (default 8,
+  `B123D_PRINT_MAX_UPLOADS`) all of them together; more are refused at once, before the body is
+  read, with "server busy: ..." (HTTP 429 for the client's own cap, 503 for the total;
+  `curl -f` shows only the code). Try again when one has finished. `0` turns a cap off. The
+  link names the token it was made for (`...?by=<token name>`), and the signature covers that
+  name, so a link cannot be changed to count against another token. A link from before 0.3.12
+  (no name) counts against its workspace.
 
 **Behind a reverse proxy**, set `--public-url https://cad.example.com` (or
 `B123D_PRINT_PUBLIC_URL`) so the links point at the proxy. Without it the server uses the
@@ -501,6 +523,8 @@ shipped and `git pull` updates it cleanly (`deploy/.env.example` lists them with
 | `B123D_PRINT_MAX_BUILDS` | `2` | builds at once, all clients together ([shared fairly](#several-clients-at-once)); `3` on 4 or more cores |
 | `B123D_PRINT_QUICK_SLOTS` | `1` | of those, slots kept for quick calls (`measure`, `section`, ...); `0` = none |
 | `B123D_PRINT_CLIENT_JOBS` | `4` | calls one token may have running and waiting; more are refused until one finishes; `0` = no cap |
+| `B123D_PRINT_MAX_UPLOADS` | `8` | [signed-link uploads](#uploading-a-model) at once, all tokens together; more are refused ("server busy", 503); `0` = no cap |
+| `B123D_PRINT_CLIENT_UPLOADS` | `2` | signed-link uploads one token may have running at once; more are refused ("server busy", 429); `0` = no cap |
 | `B123D_PRINT_MAX_MEMORY` | `2g` | memory per build; a build over it fails with a plain message; `0` = no limit |
 | `B123D_PRINT_WORKER_MEMORY` | `6g` | the worker container's `mem_limit`: keep it at least `MAX_BUILDS` × `MAX_MEMORY` + 1 GB |
 | `B123D_PRINT_RETENTION_DAYS` | `30` | remove a workspace nobody used for this many days ([retention](#workspace-retention)); `0` = never |

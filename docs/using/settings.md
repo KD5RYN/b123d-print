@@ -126,6 +126,8 @@ In both, a key missing for the material falls back to `"<printer>/any"`. A flat 
 | `B123D_PRINT_MAX_MEMORY` | the MCP server's (and worker's) `--max-memory`: memory per build process, e.g. `2g` (default); `0` = no limit |
 | `B123D_PRINT_QUICK_SLOTS` | the MCP server's `--quick-slots`: build slots kept for quick calls |
 | `B123D_PRINT_CLIENT_JOBS` | the MCP server's `--client-jobs`: calls per HTTP client running and waiting (default 4) |
+| `B123D_PRINT_MAX_UPLOADS` | the MCP server's `--max-uploads`: signed-link uploads at once, all HTTP clients together (default 8) |
+| `B123D_PRINT_CLIENT_UPLOADS` | the MCP server's `--client-uploads`: signed-link uploads at once per HTTP client (default 2) |
 | `B123D_PRINT_TRANSPORT` | the MCP server's `--transport` (`stdio` or `http`) |
 | `B123D_PRINT_HOST` | the MCP server's `--host` (HTTP; the Docker image sets `0.0.0.0`) |
 | `B123D_PRINT_PORT` | the MCP server's `--port` (HTTP) |
