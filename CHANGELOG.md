@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.12 — unreleased
+## 0.3.12 — 2026-10-22
 
 - **Fair build slots on a shared server** (#73, #71): one client could fill every build slot and
   make everyone else wait (a 3 s `measure` took 28.5 s behind another client's six builds). The
