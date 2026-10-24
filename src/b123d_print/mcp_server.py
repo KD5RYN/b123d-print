@@ -2191,13 +2191,16 @@ the slicer corrects the holes.
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request):
     """Liveness for Docker / monitors; needs no token and reveals nothing but the version (and, with
-    a separate build worker, whether it is alive: 503 "degraded" when it is not)."""
+    a separate build worker, whether it is alive and well: 503 "degraded" when it is down, or alive
+    but reporting a problem such as its process limit nearly used up)."""
     from starlette.responses import JSONResponse
 
     body = {"status": "ok", "version": _pkg_version()}
     if STATE["queue"] is not None:
         age = jobqueue.worker_age(STATE["queue"])
         body["worker"] = "ok" if age is not None and age < jobqueue.HEARTBEAT_STALE else "down"
+        if body["worker"] == "ok" and jobqueue.degraded(STATE["queue"]):
+            body["worker"] = "degraded"  # alive, but about to fail builds (e.g. its process limit nearly used up)
         if body["worker"] != "ok":
             body["status"] = "degraded"
             return JSONResponse(body, status_code=503)

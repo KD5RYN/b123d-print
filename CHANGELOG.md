@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.13 — unreleased
+
+- **Fix: every build failed with "Can't fork" after about 8 hours on the Docker deployment**
+  (0.3.12). The worker's healthcheck runs a bubblewrap probe every 30 s, and each one left an
+  orphaned process behind. Process 1 in the container was the worker itself, which never reaps
+  orphans, so the zombies piled up. 0.3.12's new `pids_limit: 1024` turned that slow leak into
+  a hard failure. The image now runs **`tini`** as process 1, which reaps them. Restarting the
+  worker container clears an affected 0.3.12 server until it is upgraded.
+- **The monitoring catches it next time:** the worker checks its container's process limit every
+  10 s. At 80 % in use it logs why and writes `worker.degraded`, its Docker healthcheck turns
+  unhealthy, and `/health` answers 503 with `"worker": "degraded"`. Before, `/health` only knew
+  that the worker's heartbeat was fresh. CI now runs the healthcheck repeatedly and fails if any
+  zombie stays behind in the worker.
+
 ## 0.3.12 — 2026-10-22
 
 - **Fair build slots on a shared server** (#73, #71): one client could fill every build slot and
