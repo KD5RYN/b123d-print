@@ -506,7 +506,11 @@ docker compose up -d && docker compose ps
 Then [connect each AI](#connect-a-new-ai) with `docker compose run --rm -T b123d-print token add <name>`.
 
 Both services show `(healthy)` once they run; `/health` answers 503 `"degraded"` while the worker
-is down, and builds then fail at once with "the build worker is not running". `parts` and `config`
+is down, and builds then fail at once with "the build worker is not running". It also answers
+`"worker": "degraded"` (and the worker container turns unhealthy) when the worker is alive but
+about to fail builds, for example with its process limit (`pids_limit`) nearly used up; the
+worker's log says why. The image runs `tini` as process 1, so orphaned processes are cleaned up
+and never fill that limit. `parts` and `config`
 must be writable by uid 1000, the user the image runs as (or set `B123D_PRINT_UID` /
 `B123D_PRINT_GID`). The tokens live in `config/`, which only the HTTP container mounts.
 

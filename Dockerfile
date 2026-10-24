@@ -21,7 +21,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789
 # OpenCascade (in the OCP wheel) links against the libGL/X libraries; bubblewrap lets the HTTP
 # deployment's worker run each job in its own mount namespace (deploy/compose.yaml)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 bubblewrap \
+ && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libxrender1 libfontconfig1 bubblewrap tini \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/b123d-print
@@ -44,4 +44,7 @@ WORKDIR /work
 EXPOSE 8000
 # stdio: always healthy while it runs; http: GET /health
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --start-interval=2s CMD ["b123d-print-mcp", "--healthcheck"]
-ENTRYPOINT ["b123d-print-mcp", "--workspace", "/work"]
+# tini as process 1: it reaps orphaned processes (a bubblewrap whose parent exited, e.g. from the
+# healthcheck's sandbox probe). Without an init, process 1 is the server or worker itself, which
+# never reaps them: the zombies fill the worker's pids_limit and every build fails with "Can't fork".
+ENTRYPOINT ["tini", "--", "b123d-print-mcp", "--workspace", "/work"]

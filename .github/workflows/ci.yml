@@ -302,4 +302,11 @@ jobs:
             B123D_PRINT_SMOKE_SPLIT=1 uv run python tests/mcp_smoke.py \
             || { (cd deploy && docker compose logs worker | tail -120; echo "--- front ---"; docker compose logs b123d-print | tail -40); exit 1; }
           (cd deploy && docker compose logs b123d-print | grep -q " ci POST /mcp ") || { echo "token name not in the log"; exit 1; }
+          # no zombies pile up in the worker: in 0.3.12 each healthcheck's bubblewrap probe left one,
+          # process 1 never reaped them, and they filled pids_limit ("Can't fork" on every build)
+          for i in 1 2 3 4 5; do (cd deploy && docker compose exec -T worker b123d-print-mcp worker --queue /work/.b123d-print/jobs --check); done
+          sleep 1
+          z=$(docker top $worker -eo pid,stat | awk 'NR>1 && $2 ~ /^Z/' | wc -l)
+          echo "zombies in the worker: $z"; docker top $worker -eo pid,ppid,stat,comm
+          [ "$z" -eq 0 ] || { echo "zombie processes pile up in the worker (is tini process 1?)"; exit 1; }
           (cd deploy && docker compose down)
