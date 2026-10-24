@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.13 — unreleased
+## 0.3.13 — 2026-10-24
 
 - **Fix: every build failed with "Can't fork" after about 8 hours on the Docker deployment**
   (0.3.12). The worker's healthcheck runs a bubblewrap probe every 30 s, and each one left an
