@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.15 — unreleased
+
+- **Models keep to the design workflow: a review checklist in the tool results** (#146). Models,
+  non-Claude ones above all, skipped the style, `design_metrics` and `suggest_orientation` and
+  went straight to export. The server now keeps, per part and per version of its script (a hash:
+  any edit starts afresh), which steps ran: a style, a passing check, preview and section,
+  `design_metrics` with the part's style, `suggest_orientation`. `build_part`, `check`,
+  `design_metrics` and `export` end with one short **Before printing** block: only the missing
+  steps, each with the exact call, or one "Ready to print" line; shown unchanged again, it is just
+  the next call. It is stored in `out/.cache/review.json`, the same locally, over HTTP and over
+  SSH. Calibration coupons say `"review": "exempt"` in `PRINT` (a new key) and get none.
+- **`export` notices skipped steps.** The new `review` setting (workspace or user config, or
+  `B123D_PRINT_REVIEW`): `warn` (default) exports, starts the result with `Exported WITHOUT ...`
+  and adds a **Design review** section to the print sheet; `required` refuses until the steps
+  are done, unless `export(..., skip_review="<the user's reason>")`, which the print sheet
+  records; `off` is the old behaviour.
+- The rules in the first results (ESSENTIALS) and the descriptions of `design_metrics`,
+  `suggest_orientation` and `export` now give the whole order: sizes, style, build, preview and
+  section, check, `design_metrics`, `suggest_orientation`, export.
+
 ## 0.3.14 — 2026-10-25
 
 - **Fix: Linux sandbox could not start a uv-managed Python.** With `uvx b123d-print` on Linux,

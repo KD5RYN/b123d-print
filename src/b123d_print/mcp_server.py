@@ -45,8 +45,8 @@ and WAIT for confirmation: never model on guesses. Dimensions: named UPPER_CASE 
 print orientation, bed at Z=0. Verify with render_preview, section and check before reporting. On
 a remote server a part is done only when download_part has brought its files to the user.
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
-check -> fix and repeat -> (offer a fit-test template: list_faces, make_template) -> export (it returns a
-3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
+check -> fix and repeat -> design_metrics (style) -> suggest_orientation -> (offer a fit-test template:
+list_faces, make_template) -> export (it returns a 3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
 describe_model -> import_model in the script (prompt remix_part). The rules (read_guide, the
 resource b123d-print://guide, or the prompt design_part_from_photos) also cover 0.2 mm mating
 clearance, HOLE_COMP from the user's config, holes, overhangs and strength. render_preview and
@@ -85,9 +85,10 @@ ESSENTIALS = """\
 Rules (all of them: read_guide):
 1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation. For a hole, say whether its size is the printed hole or what goes in it (then + clearance per side); holes are drawn true to size, plus hole_comp only if the user opted in.
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
-3. Before reporting: build_part, render_preview, section through holes and pockets, and check; fix every FAIL. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
-4. export; on a remote server bring the files home: download_part(name) (embed=True if your shell has no network).
-5. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own."""
+3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural); set STYLE in Dims.
+4. The order, every part: build_part -> render_preview + section through holes and pockets -> check (fix every FAIL) -> design_metrics(name, style=...) -> suggest_orientation(name) -> export. The results end with "Before printing": make the calls it lists. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
+5. On a remote server bring the files home after export: download_part(name) (embed=True if your shell has no network).
+6. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own."""
 
 REMOTE_DOC = """
     Remote server (HTTP/SSH): the files stay on the server, as a temporary working copy deleted
@@ -494,6 +495,41 @@ def _show(image: str) -> str:
     return Path(image).relative_to(_root()).as_posix() if _remote() else image
 
 
+def _version(script: Path) -> str:
+    """The script's hash before a job runs: the review step is recorded only if it is unchanged after."""
+    from .review import script_hash
+
+    return script_hash(script)
+
+
+def _record(script: Path, version: str, step: str, **info) -> None:
+    from .review import record
+
+    record(script, step, version=version, **info)
+
+
+def _review_block(name: str, script: Path, full: bool = False) -> str:
+    """The review checklist that ends build_part, check, design_metrics and export results
+    (review.py): the missing steps with their calls, or one "Ready to print" line. "" with
+    review = "off" and for an exempt part (a calibration coupon). Shown unchanged before for this
+    part: only the next call (full=True: the whole block anyway)."""
+    from . import review
+
+    s = load_settings(script)
+    if review.mode(s) == "off":
+        return ""
+    c = review.checklist(name, script, s)
+    text = c.block()
+    if not text:
+        return ""
+    seen = STATE.setdefault("review_shown", {})
+    key = (_ws_name(), name)
+    if not full and seen.get(key) == text:
+        return c.short()
+    seen[key] = text
+    return text
+
+
 # ---------------------------------------------------------------------------------------------
 # Tools
 
@@ -824,12 +860,16 @@ async def build_part(name: str, variant: str | None = None, parts: str | None = 
     parts: comma-separated piece names from build(): build only those (lazy pieces: the others
     are never built). Built pieces are cached in out/.cache/, so render_preview, section, check
     and export reuse them while the script, its Dims and the settings stay the same; fresh=True
-    builds again and replaces the cached pieces. Writes no other files."""
+    builds again and replaces the cached pieces. Writes no other files. Ends with
+    "before_printing": the review steps this version still needs, each with its call."""
     res = await _job(name, "build", variant=variant, parts=parts, fresh=fresh or None)
     if not res.get("ok"):
         return _error_text(res)
     res.pop("ok", None)
-    return json.dumps(res, indent=1, default=str)
+    block = _review_block(name, _script(name))
+    if block:
+        res["before_printing"] = block.splitlines()
+    return json.dumps(res, indent=1, default=str, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -862,9 +902,12 @@ async def render_preview(name: str, variant: str | None = None, parts: str | Non
     HTTP: its download link), not the image itself. Uses the pieces cached by an earlier build;
     fresh=True builds them again."""
     _image_options(size)
+    script = _script(name)
+    ver = _version(script)
     res = await _job(name, "render", variant=variant, parts=parts, size=size, fresh=fresh or None)
     if not res.get("ok"):
         return [_error_text(res)]
+    _record(script, ver, "preview", variant=res["variant"])
     summary = {"variant": res["variant"], "layout": res["layout"], "drawn": res["drawn"], "parts": res["parts"],
                "timing": res["timing"], "file": _show(res["image"])}
     return _with_note(_with_image(json.dumps(summary, indent=1), res["image"], inline), name)
@@ -883,9 +926,12 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
     if plane.upper() not in ("XY", "XZ", "YZ"):
         return ["plane must be XY, XZ or YZ"]
     _image_options(size)
+    script = _script(name)
+    ver = _version(script)
     res = await _job(name, "section", variant=variant, parts=parts, plane=plane, at=at, size=size, fresh=fresh or None)
     if not res.get("ok"):
         return [_error_text(res)]
+    _record(script, ver, "section", plane=res["plane"], at=res["at"])
     hints = "".join(f"\nhint: {h}" for h in res["timing"]["hints"])
     return _with_note(_with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}{hints}",
                                   res["image"], inline), name)
@@ -943,10 +989,14 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     a separate tool, check_fit, unless the script lists Mates() in checks(d). Fix every FAIL;
     report every WARN. On a remote server (HTTP/SSH) the part is not on the user's machine until
     download_part brings it home. Uses the pieces cached by an earlier build, and each unchanged
-    piece's findings of the per-piece checks; fresh=True builds and checks everything again."""
+    piece's findings of the per-piece checks; fresh=True builds and checks everything again.
+    A passing result ends with the review steps this version still needs, each with its call."""
+    script = _script(name)
+    ver = _version(script)
     res = await _check(name, variant, fresh)
     if not res.get("ok"):
         return _error_text(res)
+    _record(script, ver, "check", passed=bool(res["passed"]), variant=variant)
     lines = [f"{'PASSED' if res['passed'] else 'FAILED'}"]
     for v, findings in res["variants"].items():
         lines.append(f"\n{name} [{v}]")
@@ -964,6 +1014,9 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
 
         if note := offer(_root(), name):
             lines.append(f"\n{note}")
+    block = _review_block(name, script) if res["passed"] else ""
+    if block:
+        lines.append(f"\n{block}")
     return _scrub("\n".join(lines))
 
 
@@ -975,7 +1028,7 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
     radii and chamfer sizes), mirror symmetry, screw sizes, seam corners, water traps, inside
     corners, hole edge distance and slenderness across the layers (and the thinnest walls for a
     style that asks); then the suggestions the part's style triggers, each citing its DS-* rule.
-    Run it after check passes. style: override the part's STYLE (functional, modern, least_cost,
+    ALWAYS before export, after check passes; report its suggestions to the user. style: override the part's STYLE (functional, modern, least_cost,
     rugged, soft, structural, or a style file of the user's: list_parts shows them). up: the
     direction that points up in use for the water-trap check (+X, -Y, ...; default the script's UP,
     else +Z). as_json: the full numbers as JSON instead of the text report. Changes nothing."""
@@ -986,12 +1039,17 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
             load_style(style, _root())
         except StyleError as e:
             raise ToolError(str(e)) from None
+    script = _script(name)
+    ver = _version(script)
     res = await _job(name, "metrics", variant=variant, style=style or None, up=up or None)
     if not res.get("ok"):
         return _error_text(res)
+    _record(script, ver, "metrics", style=res["metrics"].get("style"), explicit=bool(style), variant=res["variant"])
+    block = _review_block(name, script)
     if as_json:
-        return json.dumps({"variant": res["variant"], **res["metrics"]}, indent=1, default=str)
-    return f"{name} [{res['variant']}]\n{res['text']}"
+        extra = {"before_printing": block.splitlines()} if block else {}
+        return json.dumps({"variant": res["variant"], **res["metrics"], **extra}, indent=1, default=str, ensure_ascii=False)
+    return f"{name} [{res['variant']}]\n{res['text']}" + (f"\n\n{block}" if block else "")
 
 
 @mcp.tool(structured_output=False)
@@ -1003,8 +1061,8 @@ async def suggest_orientation(name: str, variant: str | None = None, piece: str 
     scored on supports (area and grams under overhangs past max_overhang, bridges apart), bed
     contact, height and print time (rough estimates), bridges, tip-over risk (as the check) and,
     with a load or the structural style, whether the load runs along the layers (DS-T1). Returns
-    a ranked table with the Rot(x, y, z) to apply in build(d) and how. Run it before export when
-    the part is not obviously flat-bottomed. piece: one printable part (default: each).
+    a ranked table with the Rot(x, y, z) to apply in build(d) and how. ALWAYS before export (a
+    part already flat on the bed: it says so in a second). piece: one printable part (default: each).
     load: the bending or tension direction as build(d) returns the part ('X', 'along Y', 'XZ',
     '1,0,1'). image: also render the top choice (of the first part). Changes nothing."""
     _image_options(size)
@@ -1014,9 +1072,12 @@ async def suggest_orientation(name: str, variant: str | None = None, piece: str 
         parse_load(load)
     except ValueError as e:
         raise ToolError(str(e)) from None
+    script = _script(name)
+    ver = _version(script)
     res = await _job(name, "orient", variant=variant, piece=piece, load=load or None, image=image or None, size=size)
     if not res.get("ok"):
         return [_error_text(res)]
+    _record(script, ver, "orient", load=load, variant=res["variant"])
     text = f"{name} [{res['variant']}]\n{res['text']}"
     if not res.get("image"):
         return [text]
@@ -1026,7 +1087,7 @@ async def suggest_orientation(name: str, variant: str | None = None, piece: str 
 @mcp.tool(structured_output=False)
 @_files_doc
 async def export(name: str, variant: str | None = None, formats: str | None = None, parts: str | None = None,
-                 embed: bool = False, fresh: bool = False, view: str = "print") -> list:
+                 embed: bool = False, fresh: bool = False, view: str = "print", skip_review: str = "") -> list:
     """Export printable parts to parts/<name>/out/, sorted: print/ (3MF, STL, print sheet: for the
     slicer), cad/ (STEP, GLB), images/, docs/ (BOM, view HTML), README.md. Default: every part, all variants. The
     files must reach the user: on a remote server download_part brings them home.
@@ -1049,7 +1110,12 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     Over HTTP (a remote server) each file comes with a download link (no token needed, expires)
     and a b123d-print://files/ resource link; download_part gets the whole part (script, out/,
     ref/) in one zip. embed=True also puts files up to 2 MB into the result itself, for clients
-    that can neither fetch URLs nor read resources."""
+    that can neither fetch URLs nor read resources.
+    Before export, ALWAYS: check passes, design_metrics(name, style=...), suggest_orientation(name)
+    (the "Before printing" block of build_part and check lists what is missing). With the review
+    setting "warn" (default) export says what was skipped, here and on the print sheet; with
+    "required" it refuses until the steps are done. skip_review: only when the user said to export
+    without them, their reason (recorded on the print sheet)."""
     if formats:
         try:
             parse_formats(formats)
@@ -1059,10 +1125,30 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         layout = viewer.parse_layout(view)
     except ValueError as e:
         raise ToolError(str(e)) from None
-    res = await _job(name, "export", variant=variant, formats=formats, parts=parts, fresh=fresh or None, view=layout)
+    from . import review
+
+    script = _script(name)
+    settings = load_settings(script)
+    mode = review.mode(settings)
+    skip_review = (skip_review or "").strip()
+    c = review.checklist(name, script, settings) if mode != "off" else None
+    missing = c is not None and not c.exempt and bool(c.missing)
+    if missing and mode == "required" and not skip_review:
+        return [_scrub(f"NOT EXPORTED: this workspace requires the design steps before export (review = \"required\"), "
+                       f"and this version of {name} is missing {c.skipped()}.\n\n{c.block()}\n\n"
+                       f"Make those calls, then export('{name}') again. Only if the user says to export without them: "
+                       f"export('{name}', skip_review=\"<the user's reason>\").")]
+    sheet = review.sheet_lines(c, skip_review if missing else "") if c is not None else []
+    res = await _job(name, "export", variant=variant, formats=formats, parts=parts, fresh=fresh or None, view=layout,
+                     review=sheet or None)
     if not res.get("ok"):
         return [_error_text(res)]
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
+    if missing:
+        out.append(f"Exported WITHOUT {c.skipped()}"
+                   + (f" (skipped on purpose: {skip_review})." if skip_review else
+                      ". Tell the user, or make the calls below and export again.")
+                   + (" The print sheet records it." if any(f.endswith("_print.md") for v in res["variants"] for f in v["files"]) else ""))
     files = [Path(f) for v in res["variants"] for f in v["files"]]
     total = sum(f.stat().st_size for f in files)
     out.append(f"Exported {len(files)} file(s), {_human_size(total)} in all.")
@@ -1098,6 +1184,9 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
         out.append("\n" + "\n".join(views))
     if STATE["ssh_dest"]:
         out.append("\n" + _pull_note(name, formats, None))
+    block = _review_block(name, script, full=True) if missing else ""
+    if block:
+        out.append("\n" + block)
     if _remote():
         out.append("\n" + _home_note(name))
         out.append("\n" + _next_step(name))
@@ -2037,8 +2126,9 @@ section through every pocket, boss, rib, hole and mating feature, and check. Loo
 Wall checks around cuts deeper than their wall, magic numbers outside Dims, missing clearance or
 hole compensation, overhangs that need supports, bed edges with fillets. Report findings
 most serious first; do not change the script unless I ask. When check passes, offer a fit-test
-template (make_template) for its mating faces or hole pattern if it has any, and a design
-review (the design_review prompt) for the part's style.
+template (make_template) for its mating faces or hole pattern if it has any, then run the design
+review (design_metrics for the part's style, or the design_review prompt) and suggest_orientation:
+the "Before printing" block in the results lists what is still missing.
 
 The full rules:
 

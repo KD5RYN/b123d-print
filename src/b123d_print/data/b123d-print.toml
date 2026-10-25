@@ -28,6 +28,7 @@ parts_dir = "parts"
 # max_triangles = 50000  # import_model refuses meshes with more triangles (simplify them first)
 # formats = ["step", "stl", "3mf", "png"]   # what export writes; e.g. ["3mf", "png"]
 # style = "functional"  # design review style for parts without STYLE: functional, modern, least_cost, rugged, soft, structural
+# review = "warn"     # export and the design review: warn (export, say what was skipped), required (refuse until done), off
 # filament_price = 25  # per kg; design_metrics then shows a cost
 # print_flow = 10      # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
 # tip_speed = 200      # mm/s, your slicer's fastest print speed: the tip-over check scales with it; 0 turns it off

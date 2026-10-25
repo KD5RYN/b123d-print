@@ -5,7 +5,8 @@ Lookup order, later wins:
   2. user config:      $XDG_CONFIG_HOME/b123d-print/config.toml (~/.config/b123d-print/config.toml)
   3. workspace config: the nearest b123d-print.toml at or above the part script (or the cwd)
   4. environment:      B123D_PRINT_HOLE_COMP, B123D_PRINT_CLEARANCE, ... (one per number, see
-                       _ENV), B123D_PRINT_FORMATS (e.g. "step,3mf")
+                       _ENV), B123D_PRINT_FORMATS (e.g. "step,3mf"), B123D_PRINT_REVIEW (warn,
+                       required, off: a shared server's operator can require the design review)
 
 Clearances are per side. With a printer profile set, values measured with the calibration
 coupons replace the defaults: per printer + material, in calibration.toml next to the user
@@ -65,6 +66,7 @@ class Settings:
     supports: str = ""  # your default support style for the print sheet: none, auto, build_plate_only, tree; "" = suggest from the geometry
     walls: int = 0  # your default wall count (perimeters) for the print sheet and estimates; 0 = the slicer default (2)
     infill: float | None = None  # your default infill percent for the print sheet and estimates; none = 15
+    review: str = "warn"  # export's review mode (#146): warn (export, say what was skipped), required (refuse until the review steps are done, or skip_review="<reason>"), off
     parts_dir: str = "parts"  # workspace-relative folder holding <name>/<name>.py
     root: Path | None = None  # workspace root (folder of b123d-print.toml), if one was found
     nickname: str = ""  # the printer's nickname when `printer` was set to one ([printers] table); printer is then its profile
@@ -128,9 +130,13 @@ def _read(path: Path) -> dict:
                 flat[k] = float(flat[k])
             except (TypeError, ValueError):
                 raise ValueError(f"{path}: {k} must be a number, got {flat[k]!r}") from None
-    for k in ("printer", "material", "parts_dir", "style"):
+    for k in ("printer", "material", "parts_dir", "style", "review"):
         if k in flat:
             flat[k] = str(flat[k])
+    if "review" in flat:
+        flat["review"] = flat["review"].strip().lower()
+        if flat["review"] not in ("warn", "required", "off"):
+            raise ValueError(f"{path}: review must be warn, required or off, got {flat['review']!r}")
     if flat.get("supports") or flat.get("walls") or "infill" in flat:  # the same vocabulary as a part's PRINT
         from .intent import validate
 
@@ -229,6 +235,11 @@ def load_settings(start: str | Path | None = None) -> Settings:
         s = replace(s, hole_comp_h=s.hole_comp)
     if os.environ.get("B123D_PRINT_FORMATS"):
         s = replace(s, formats=parse_formats(os.environ["B123D_PRINT_FORMATS"], "B123D_PRINT_FORMATS"))
+    if os.environ.get("B123D_PRINT_REVIEW"):
+        r = os.environ["B123D_PRINT_REVIEW"].strip().lower()
+        if r not in ("warn", "required", "off"):
+            raise ValueError(f"B123D_PRINT_REVIEW must be warn, required or off, got {r!r}")
+        s = replace(s, review=r)
     return s
 
 

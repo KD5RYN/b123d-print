@@ -33,6 +33,7 @@ max_bridge = 10      # mm; longer bridges warn
 max_triangles = 50000  # import_model refuses bigger meshes
 formats = ["step", "stl", "3mf", "png"]
 style = "functional"   # design review style for parts without STYLE
+review = "warn"        # export and the design review: warn, required or off
 filament_price = 25    # per kg: design_metrics shows a cost
 print_flow = 10        # mm^3/s for the rough print-time estimate
 tip_speed = 200        # mm/s: the tip-over check scales with it; 0 turns it off
@@ -59,6 +60,7 @@ An unknown key is an error, so typos don't pass silently.
 | `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
 | `formats` | `step`, `stl`, `3mf`, `png` | what export writes: `step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware` ([formats](formats.md)) |
 | `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` or [your own](design-review.md#custom-styles) |
+| `review` | `"warn"` | what `export` does when the [design steps](design-review.md#the-review-checklist) (a passing check, preview and section, `design_metrics`, `suggest_orientation`, a style) did not run on this version of the part: `warn` exports and says what was skipped (in the result and on the print sheet), `required` refuses unless called with `skip_review="<the user's reason>"` (recorded on the print sheet), `off` says nothing and ends no result with the checklist |
 | `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
 | `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |
 | `tip_speed` | `200` | mm/s, your slicer's fastest print move (infill or inner walls); the [tip-over check](checks.md) estimates the brim OrcaSlicer's Auto brim would give at this speed and warns from 5 mm; `0` turns the check off |
@@ -118,6 +120,7 @@ In both, a key missing for the material falls back to `"<printer>/any"`. A flat 
 | `B123D_PRINT_MAX_TRIANGLES` | overrides `max_triangles` |
 | `B123D_PRINT_FORMATS` | overrides `formats`, e.g. `step,3mf` |
 | `B123D_PRINT_PRINTER` | overrides `printer` |
+| `B123D_PRINT_REVIEW` | overrides `review` (`warn`, `required`, `off`): a shared server's operator can require the design review in every workspace |
 | `B123D_PRINT_WORKSPACE` | the MCP server's workspace when `--workspace` is not given |
 | `B123D_PRINT_TIMEOUT` | the MCP server's per-build time limit in seconds when `--timeout` is not given (default 240) |
 | `B123D_PRINT_NO_CACHE` | `1` turns the MCP server's [build cache](../scripts/convention.md#big-and-multi-piece-projects) off: every call builds the part again |

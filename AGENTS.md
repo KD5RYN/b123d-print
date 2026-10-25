@@ -505,6 +505,13 @@ The rules and their sources are in
 - When `check` has no failures, run the design review (the `design_review` prompt, or
   `design_metrics` plus the rubric): the numbers, renders of the sides seen in use, and 3–7
   concrete suggestions, each citing its rule ([DS-G1]) and the numbers it would change.
+- **The order before export, every part:** `check` passes → `design_metrics(name, style=...)` →
+  `suggest_orientation(name)` → `export`. The results of `build_part`, `check`,
+  `design_metrics` and `export` end with a **Before printing** block: make the calls it lists
+  (it starts again after every edit). With the `review` setting `"warn"` (default) `export` says
+  what was skipped, also on the print sheet; with `"required"` it refuses until the steps are
+  done, or the user gives a reason: `export(name, skip_review="<their reason>")`. A calibration
+  coupon says `"review": "exempt"` in its `PRINT`.
 - **Report; do not change the part without the user's OK.** A trial variant to measure a
   suggestion is fine; leave the script as it was unless the user agrees.
 - Filament is a simple estimate (roughly ±20 %), print time and supports are rough estimates:

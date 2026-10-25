@@ -23,6 +23,7 @@ from collections.abc import Mapping
 
 SUPPORTS = ("none", "auto", "build_plate_only", "tree")
 ORIENTATIONS = ("locked",)
+REVIEWS = ("exempt",)
 KEYS = {  # key -> what it takes (for the error message)
     "supports": " | ".join(f'"{s}"' for s in SUPPORTS),
     "walls": "an int (perimeters)",
@@ -30,6 +31,7 @@ KEYS = {  # key -> what it takes (for the error message)
     "infill_pattern": "a string, e.g. \"gyroid\"",
     "brim": "true / false, or a width in mm",
     "orientation": '"locked" (don\'t re-orient)',
+    "review": '"exempt" (a calibration coupon or test print: no design review checklist, review.py)',
     "why": "free text, required whenever anything else is set",
 }
 PART, SETTINGS, SUGGESTED = "set by the part", "your settings", "suggested from the geometry/style"
@@ -69,6 +71,9 @@ def validate(value, where: str = "PRINT") -> dict:
             v = v if isinstance(v, bool) else float(v)
         elif k == "orientation":
             if v not in ORIENTATIONS:
+                raise bad
+        elif k == "review":
+            if v not in REVIEWS:
                 raise bad
         elif k in ("infill_pattern", "why"):
             if not isinstance(v, str) or not v.strip():

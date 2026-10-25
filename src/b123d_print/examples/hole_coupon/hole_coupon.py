@@ -116,6 +116,7 @@ VARIANTS = {"": {}}
 PRINT = {
     "supports": "none",
     "orientation": "locked",
+    "review": "exempt",  # a calibration coupon: no design review checklist
     "why": "a calibration coupon: it measures holes printed without supports, flat as modeled",
 }
 

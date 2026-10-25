@@ -492,7 +492,7 @@ def do(job: dict, warned: list | None = None) -> dict:
         return {"variant": k or "standard", **measure.run(pc, q, settings, out, tag, size)}
     if op == "export":
         fmts = parse_formats(job["formats"]) if job.get("formats") else None
-        res = {"variants": [export_variant(mod, script, kk, out, fmts, only=only, cache=cache)
+        res = {"variants": [export_variant(mod, script, kk, out, fmts, only=only, cache=cache, review=job.get("review"))
                             for kk in (keys if key is None else [key])]}
         if job.get("view"):  # the 3D view of each variant (export's view=), from the same (cached) pieces
             for kk, v in zip(keys if key is None else [key], res["variants"]):
