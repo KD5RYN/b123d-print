@@ -186,6 +186,9 @@ jobs:
     needs: changes
     env:
       FULL: ${{ needs.changes.outputs.full }}  # false: docs-only change, the steps below are skipped
+      # what a Linux user gets from uvx: a uv-managed Python under HOME, behind bwrap's tmpfs over
+      # HOME. Forced here so the job keeps covering it even if the runner image has a system 3.12
+      UV_PYTHON_PREFERENCE: only-managed
     runs-on: ubuntu-latest
     steps:
       - if: env.FULL != 'true'
