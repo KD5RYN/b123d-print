@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.14 — unreleased
+
+- **Fix: Linux sandbox could not start a uv-managed Python.** With `uvx b123d-print` on Linux,
+  the job's `bin/python` links into uv's minor-version folder (`cpython-3.12-linux-x86_64-gnu`,
+  itself a link to `cpython-3.12.15-...`). Bubblewrap hides HOME behind a tmpfs and bound only
+  the link's target, so that path did not exist in the sandbox and every build failed with
+  `bwrap: execvp .../bin/python: No such file or directory`. The sandbox now also binds each
+  folder on the interpreter's symlink chain, read-only, and still nothing else of HOME or the uv
+  cache. CI only caught it once the GitHub runners stopped providing a system Python 3.12; the
+  `wheel` job now forces a uv-managed Python (`UV_PYTHON_PREFERENCE=only-managed`).
+- Dependencies: `setup-uv` 10.3.1, `gh-action-pypi-publish` 1.14.3 (GHSA-5xjx-3w67-w9x9),
+  `anthropic` 1.17.0 (dev), and a new `python:3.12-slim-bookworm` digest (#138, #139, #140).
+
 ## 0.3.13 — 2026-10-24
 
 - **Fix: every build failed with "Can't fork" after about 8 hours on the Docker deployment**

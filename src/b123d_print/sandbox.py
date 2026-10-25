@@ -99,9 +99,29 @@ def _real(p) -> str:
     return os.path.realpath(str(p))
 
 
+def _interpreter_dirs(exe: str) -> set[str]:
+    """The folders on the way from `exe` through each of its symlinks to the real interpreter, as
+    each link names them: a uv venv's bin/python points into uv's minor-version link folder
+    (cpython-3.12-linux-x86_64-gnu -> cpython-3.12.15-...). Under bwrap's tmpfs over HOME that link
+    does not exist unless its path is bound too, and the exec fails with "No such file"."""
+    dirs, seen = set(), set()
+    while exe and exe not in seen:
+        seen.add(exe)
+        d = os.path.dirname(exe)
+        dirs.add(d)
+        if os.path.basename(d) == "bin":  # the install root holds the lib/ the interpreter loads
+            dirs.add(os.path.dirname(d))
+        if not os.path.islink(exe):
+            break
+        exe = os.path.normpath(os.path.join(d, os.readlink(exe)))
+    return dirs
+
+
 def _python_roots() -> list[str]:
     """Folders the interpreter and installed packages live in (must stay readable)."""
     paths = {sys.prefix, sys.base_prefix, sys.exec_prefix, os.path.dirname(sys.executable)}
+    for exe in (sys.executable, getattr(sys, "_base_executable", "")):
+        paths |= _interpreter_dirs(os.path.abspath(exe)) if exe else set()
     for key in ("stdlib", "platstdlib", "purelib", "platlib"):
         paths.add(sysconfig.get_paths().get(key, ""))
     paths.update(p for p in sys.path if p and os.path.isdir(p))

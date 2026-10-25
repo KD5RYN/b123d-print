@@ -55,6 +55,28 @@ def test_bwrap_binds_the_folders_a_job_needs():
         assert ("--ro-bind-try", r) in pairs, (r, cmd)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinked interpreters are a POSIX layout")
+def test_python_roots_follow_a_venv_interpreter_through_uv_link_folders(tmp_path, monkeypatch):
+    # uv's layout under HOME: venv/bin/python -> py/cpython-3.12-gnu/bin/python3.12, where
+    # cpython-3.12-gnu is itself a link to cpython-3.12.15-gnu. bwrap hides HOME, so the link
+    # folder's own path must be bound, not only its target, or the exec fails with "No such file"
+    real = tmp_path / "py" / "cpython-3.12.15-gnu"
+    (real / "bin").mkdir(parents=True)
+    (real / "bin" / "python3.12").write_text("")
+    (tmp_path / "py" / "cpython-3.12-gnu").symlink_to(real, target_is_directory=True)
+    venv = tmp_path / "cache" / "env"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").symlink_to(tmp_path / "py" / "cpython-3.12-gnu" / "bin" / "python3.12")
+    monkeypatch.setattr(sys, "executable", str(venv / "bin" / "python"))
+    roots = sandbox._python_roots()
+    link = str(tmp_path / "py" / "cpython-3.12-gnu")
+    assert link in roots and link + "/bin" in roots, roots
+    assert sandbox._real(real) in roots, roots
+    assert str(venv / "bin") in roots, roots
+    # only the interpreter's own folders: never the uv cache or python folders above them
+    assert str(tmp_path / "py") not in roots and str(tmp_path / "cache") not in roots, roots
+
+
 def test_bwrap_never_tmpfs_over_root(monkeypatch):
     # a container running as a uid with no passwd entry gets HOME=/; a tmpfs over / would wipe the
     # dynamic loader and the interpreter could not start. The home-hide must be skipped then.
