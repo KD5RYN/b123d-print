@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.14 — unreleased
+## 0.3.14 — 2026-10-25
 
 - **Fix: Linux sandbox could not start a uv-managed Python.** With `uvx b123d-print` on Linux,
   the job's `bin/python` links into uv's minor-version folder (`cpython-3.12-linux-x86_64-gnu`,
