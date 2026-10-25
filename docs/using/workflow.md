@@ -40,10 +40,19 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    A part too big for the bed is [split into pieces](splitting.md): the model proposes where to
    cut and which joint to use (keys, pins, a dovetail, inserts), and you get a fit test of the
    joint and assembly notes.
-6. **A design review, if you want one.** Once the checks pass, the model can review the part for
-   the style you chose (functional, modern, least cost, rugged, soft, structural, or your own) and suggest
-   changes with rough filament and time numbers. It changes nothing without your OK. See
-   [Design review](design-review.md).
+6. **A design review and the orientation, before export.** Once the checks pass, the model
+   reviews the part for the style you chose (functional, modern, least cost, rugged, soft,
+   structural, or your own) and suggests changes with rough filament and time numbers, then
+   checks the print orientation with `suggest_orientation`. It changes nothing without your OK.
+   See [Design review](design-review.md).
+
+The full order, for every part: confirm the sizes → pick or confirm the style → `build_part` →
+`render_preview` and a `section` through holes and pockets → `check` → `design_metrics` →
+`suggest_orientation` → `export`. The server keeps a [checklist](design-review.md#the-review-checklist)
+of these steps per version of the part and ends `build_part`, `check`, `design_metrics` and
+`export` with the ones still missing, each with its call. By default `export` exports anyway
+and says what was skipped; with `review = "required"` in your [settings](settings.md#keys) it
+refuses until they are done, unless you give a reason.
 
 !!! note
     The model can only look at its renders if your client passes tool-result images to the

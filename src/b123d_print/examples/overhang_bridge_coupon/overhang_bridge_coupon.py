@@ -101,6 +101,7 @@ VARIANTS = {"": {}}
 PRINT = {
     "supports": "none",
     "orientation": "locked",
+    "review": "exempt",  # a calibration coupon: no design review checklist
     "why": "a calibration coupon: it measures how steep an overhang and how long a bridge print without supports",
 }
 

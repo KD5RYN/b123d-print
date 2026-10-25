@@ -111,6 +111,50 @@ Shares are fractions (0.9 = 90 %). The built-in files are in
 [`src/b123d_print/data/styles/`](https://github.com/KD5RYN/b123d-print/tree/main/src/b123d_print/data/styles):
 copy one as a starting point.
 
+## The review checklist
+
+Models forget steps: they skip the style, never run `design_metrics` or `suggest_orientation`,
+and go straight to export. So the MCP server keeps a short checklist per part and per version of
+its script, and ends the results of `build_part`, `check` (when it passes), `design_metrics` and
+`export` with it. Only the missing steps carry the call to make:
+
+```text
+Before printing shelf_bracket (style: structural):
+  ✓ style: structural (the script's STYLE)
+  ✓ check passed (this version)
+  ✗ not looked at: render_preview('shelf_bracket'), then section('shelf_bracket', 'XY', <a height through the holes and pockets>)
+  ✗ design review not run: design_metrics('shelf_bracket', style='structural')
+  ✗ orientation not checked: suggest_orientation('shelf_bracket', load='<bending direction, e.g. X>')
+```
+
+When everything ran, it is one line: `Ready to print shelf_bracket (style: structural): ...`.
+Shown unchanged a second time, it shrinks to the next call.
+
+- **The steps:** a style (the script's `STYLE`, the workspace `style`, or an explicit
+  `design_metrics(style=...)`), a passing `check`, a `render_preview` and a `section`,
+  `design_metrics` with the part's style, and `suggest_orientation` (done already when the
+  script's `PRINT` locks the orientation).
+- **Per version:** the server keys it by a hash of the script. Any edit (`write_part`,
+  `set_params`, `restore_version`) starts an empty checklist; going back to an earlier version
+  finds its steps again.
+- **Where it lives:** `parts/<name>/out/.cache/review.json`, next to the build cache. It works
+  the same locally, over HTTP and over SSH, survives a server restart, and is never downloaded.
+- **Not for coupons:** a part whose `PRINT` says `"review": "exempt"` (the calibration coupons)
+  gets no checklist. Fit-test templates (`make_template`) never do.
+
+### What export does
+
+The [`review` setting](settings.md#keys) decides:
+
+| `review` | `export` with steps missing |
+| --- | --- |
+| `warn` (default) | exports; the result starts with `Exported WITHOUT ...` and ends with the checklist; the [print sheet](slicing.md#the-print-sheet) gets a **Design review** section listing what is missing |
+| `required` | refuses with `NOT EXPORTED` and the checklist. `export(name, skip_review="<the user's reason>")` exports anyway; the print sheet records the reason |
+| `off` | exports as before 0.3.15: no checklist in any result, nothing on the print sheet |
+
+When every step ran, the print sheet says so in its **Design review** section. Over HTTP the
+operator can set `B123D_PRINT_REVIEW=required` for every workspace.
+
 ## Running it
 
 From an MCP client, use the `design_review` prompt (or ask for a design review): it runs

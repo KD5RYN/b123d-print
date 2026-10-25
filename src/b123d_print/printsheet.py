@@ -126,8 +126,10 @@ def _notes(mod, d) -> list[str]:
 
 
 def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, variant: str = "",
-          hardware_resolved: bool = False) -> str:
-    """The Markdown text of the print sheet for the built pieces `parts` ({name: Part})."""
+          hardware_resolved: bool = False, review: list[str] | None = None) -> str:
+    """The Markdown text of the print sheet for the built pieces `parts` ({name: Part}). review:
+    the "Design review" section (review.sheet_lines: what ran on the exported version, what was
+    skipped and why), from the MCP server's export."""
     from . import hardware
 
     if not hardware_resolved:
@@ -234,6 +236,8 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
         if hasattr(mod, "assembly"):
             L.append("- The script has an `assembly(d)`: `check_fit` (CLI `b123d-print fit`) checks how the pieces mate.")
         L += [f"- {n}" for n in notes]
+    if review:
+        L += ["", *[str(x) for x in review]]
     return "\n".join(L) + "\n"
 
 

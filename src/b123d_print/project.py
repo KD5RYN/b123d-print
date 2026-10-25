@@ -1439,7 +1439,7 @@ def setup_findings_for(findings: list[ck.Finding], hole_comp_set: bool) -> list[
 
 
 def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = None, formats=None,
-                   only=None, cache: CacheConfig | None = None) -> dict:
+                   only=None, cache: CacheConfig | None = None, review: list[str] | None = None) -> dict:
     """Export every printable part in `formats` (default: the `formats` setting), plus the
     assembly render and section views when png is among them, and the print sheet
     (<name>[_<variant>]_print.md, printsheet.py) when print is, and whole-assembly BOM JSON
@@ -1447,7 +1447,8 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     (<name>[_<variant>]_bom.md) and CSV (_bom.csv) when bom and bom_csv are. Returns a summary, with the timing
     report (Pieces.timing) under "timing".
     only: just these pieces (comma-separated or a list): no assembly render, and only the views
-    and templates of those pieces. cache: build through the build cache (the worker)."""
+    and templates of those pieces. cache: build through the build cache (the worker). review: the
+    print sheet's "Design review" lines (the MCP server's review checklist, review.py)."""
     settings = load_settings(script)
     formats = formats or settings.formats
     out = out or script.parent / "out"
@@ -1480,7 +1481,7 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
 
         title = out_name(script.stem, key, "")
         text = printsheet.sheet(mod, d, parts, settings, title, hardware_items=hardware_items,
-                                variant=key, hardware_resolved=True)
+                                variant=key, hardware_resolved=True, review=review)
         f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'print')}.md"), text, outputs)
         summary["files"].append(str(f))
     if "hardware" in formats:

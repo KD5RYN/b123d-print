@@ -113,7 +113,9 @@ It lists, from the part as built:
   use, screw holes that want more walls, the script's `Wall` checks, the fits and hole
   compensation applied (and the reminder to leave the slicer's hole compensation off);
 - the pieces and `PRINT_NOTES` (a string or list in `Dims`, see
-  [the part script](../scripts/convention.md#for-the-print-sheet)).
+  [the part script](../scripts/convention.md#for-the-print-sheet));
+- **Design review** (from the MCP server's `export`): whether the [design steps](design-review.md#the-review-checklist)
+  ran on the exported version, and what was skipped and why.
 
 **Facts and recommendations.** The geometry is always reported as found: the faces that would
 need supports, the bridges, the tip-over risk. Each recommendation (supports, walls, infill,

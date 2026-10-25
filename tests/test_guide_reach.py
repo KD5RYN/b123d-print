@@ -38,13 +38,14 @@ def ws(tmp_path, monkeypatch):
 def test_read_guide_is_the_resource():
     assert m.read_guide() == data("AGENTS.md") == m.guide()
     short = m.read_guide(essentials=True)
-    assert short == m.ESSENTIALS and len(short.splitlines()) <= 6 and "read_guide" in short
+    assert short == m.ESSENTIALS and len(short.splitlines()) <= 7 and "read_guide" in short
 
 
 def test_essentials_cover_the_skipped_rules():
     e = m.ESSENTIALS
     for words in ("WAIT", "UPPER_CASE", "Dims", "mm", "Z=0", "render_preview", "section", "check", "export",
-                  "download_part", "embed=True"):
+                  "download_part", "embed=True", "STYLE", "structural", "design_metrics(name, style=",
+                  "suggest_orientation(name)", "Before printing"):
         assert words in e, words
 
 

@@ -176,7 +176,8 @@ PRINT = {
 | `infill` | a percent, 0-100 | the infill the sheet recommends and the estimates use |
 | `infill_pattern` | a string, e.g. `"gyroid"` | named next to the infill |
 | `brim` | `True` / `False`, or a width in mm | the sheet's brim advice (and its tip-over line) |
-| `orientation` | `"locked"` | don't re-orient: the sheet says so and `suggest_orientation` ranks for information only |
+| `orientation` | `"locked"` | don't re-orient: the sheet says so and `suggest_orientation` ranks for information only; the [review checklist](../using/design-review.md#the-review-checklist) counts the orientation as done |
+| `review` | `"exempt"` | a calibration coupon or test print: no [review checklist](../using/design-review.md#the-review-checklist) in the results, and `export` never asks for the design review |
 | `why` | free text | **required** whenever anything else is set; shown next to every setting it overrides |
 
 - An unknown key or a bad value is an error that lists the valid keys (a typo such as
