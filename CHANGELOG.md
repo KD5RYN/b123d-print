@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.15 — unreleased
+## 0.3.15 — 2026-10-25
 
 - **Models keep to the design workflow: a review checklist in the tool results** (#146). Models,
   non-Claude ones above all, skipped the style, `design_metrics` and `suggest_orientation` and
