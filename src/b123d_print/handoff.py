@@ -78,7 +78,7 @@ def _variant_of(stem: str, name: str, keys: list[str]) -> str:
 
 
 def _plain_files(folder: Path) -> list[Path]:
-    """Regular, non-hidden files directly in `folder` (no symlinks, nothing below)."""
+    """Regular, non-hidden files directly in `folder` (no symlinks, nothing below, no crash dumps)."""
     try:
         st = os.lstat(folder)
     except OSError:
@@ -87,7 +87,7 @@ def _plain_files(folder: Path) -> list[Path]:
         return []
     found = []
     for p in sorted(folder.iterdir()):
-        if p.name.startswith(".") or p.suffix == ".pyc":
+        if p.name.startswith(".") or p.suffix == ".pyc" or outdir.is_core_dump(p.name):
             continue
         if stat.S_ISREG(os.lstat(p).st_mode):
             found.append(p)

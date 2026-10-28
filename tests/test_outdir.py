@@ -283,3 +283,16 @@ def test_pull_refuses_an_escape_through_a_folder(tmp_path):
     with pytest.raises(RuntimeError, match="unexpected entry"):
         ssh.pull("box", "me@cad", tmp_path / "dest", ssh=f'"{sys.executable}" "{fake}"')
     assert not (tmp_path / "escape.txt").exists()
+
+
+def test_core_dumps_are_never_listed_tidied_or_shipped(tmp_path):
+    """#150: a crash dump in out/ was filed under docs/ and made download_part refuse the part."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "core.2").write_bytes(b"x")
+    (out / "core").write_bytes(b"x")
+    (out / "part.stl").write_bytes(b"solid")
+    assert outdir.tidy(out) == ["part.stl"]
+    assert [rel for rel, _ in outdir.files(out)] == ["print/part.stl"]
+    assert (out / "core.2").exists() and not (out / "docs" / "core.2").exists()
+    assert outdir.is_core_dump("core.123") and not outdir.is_core_dump("core_holder.stl")

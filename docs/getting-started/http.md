@@ -529,7 +529,7 @@ shipped and `git pull` updates it cleanly (`deploy/.env.example` lists them with
 | `B123D_PRINT_CLIENT_JOBS` | `4` | calls one token may have running and waiting; more are refused until one finishes; `0` = no cap |
 | `B123D_PRINT_MAX_UPLOADS` | `8` | [signed-link uploads](#uploading-a-model) at once, all tokens together; more are refused ("server busy", 503); `0` = no cap |
 | `B123D_PRINT_CLIENT_UPLOADS` | `2` | signed-link uploads one token may have running at once; more are refused ("server busy", 429); `0` = no cap |
-| `B123D_PRINT_MAX_MEMORY` | `2g` | memory per build; a build over it fails with a plain message; `0` = no limit |
+| `B123D_PRINT_MAX_MEMORY` | `2g` | memory per build; a build over it fails with a plain message; `0` = no limit. Lofted or organic parts can need more: on an 8 GB host with 3 builds, `3g` works (rarely, three heavy builds at once then exceed `WORKER_MEMORY`, and the kernel stops only the biggest) |
 | `B123D_PRINT_WORKER_MEMORY` | `6g` | the worker container's `mem_limit`: keep it at least `MAX_BUILDS` × `MAX_MEMORY` + 1 GB |
 | `B123D_PRINT_RETENTION_DAYS` | `30` | remove a workspace nobody used for this many days ([retention](#workspace-retention)); `0` = never |
 | `B123D_PRINT_TIMEOUT` | `240` | seconds per build, render, section or export (under the 300 s a client waits for a result) |
