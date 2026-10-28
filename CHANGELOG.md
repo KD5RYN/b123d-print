@@ -2,6 +2,8 @@
 
 ## 0.3.16 — unreleased
 
+- **`deploy/compose.yaml` passes `B123D_PRINT_LINK_TTL`** to the server, so how long download,
+  zip, 3D view and upload links last can be set in `deploy/.env` (default still 1 hour).
 - **Fix: the style review crashed on lofted (organic) parts on the shared server** (#150).
   `design_metrics`' symmetry measure ran three OpenCascade booleans of the part with its mirror
   image. On a lofted banana that took 7 s and about 1 GB extra (1.7 GB peak), and on Linux it went

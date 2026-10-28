@@ -67,6 +67,8 @@ services:
       # the address clients use (behind a reverse proxy: its https URL), for download links and
       # the config `token add` prints; empty: taken from each request
       B123D_PRINT_PUBLIC_URL: ${B123D_PRINT_PUBLIC_URL:-}
+      # seconds a signed download, zip, 3D view or upload link stays valid (default 1 hour)
+      B123D_PRINT_LINK_TTL: ${B123D_PRINT_LINK_TTL:-3600}
     stop_grace_period: 45s                             # > B123D_PRINT_SHUTDOWN_GRACE
     # the image's HEALTHCHECK probes /health (503 while the worker is down)
 
