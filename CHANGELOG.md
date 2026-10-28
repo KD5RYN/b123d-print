@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.16 — unreleased
+## 0.3.16 — 2026-10-28
 
 - **`deploy/compose.yaml` passes `B123D_PRINT_LINK_TTL`** to the server, so how long download,
   zip, 3D view and upload links last can be set in `deploy/.env` (default still 1 hour).
