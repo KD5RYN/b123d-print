@@ -166,3 +166,45 @@ def test_a_job_killed_by_the_system_says_so(tmp_path, monkeypatch):
     script.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n", encoding="utf-8")
     res = sandbox.run_job({"op": "build", "script": str(script), "guard": False}, tmp_path, out, timeout=60)
     assert not res["ok"] and "killed by the system" in res["error"] and "out of memory" in res["error"], res
+
+
+def _abort_job(tmp_path, monkeypatch):
+    """Run a job that aborts, with core dumps allowed in this process; return (result, cores)."""
+    import resource
+
+    monkeypatch.setenv("B123D_PRINT_SANDBOX", "none")  # the hook would refuse os.abort
+    monkeypatch.setattr(sandbox, "SLOT_DIR", tmp_path / "slots")
+    soft, hard = resource.getrlimit(resource.RLIMIT_CORE)
+    try:  # allow cores here, so only the job's own limit can stop one
+        resource.setrlimit(resource.RLIMIT_CORE, (hard, hard))
+    except (ValueError, OSError):
+        pass
+    try:
+        out = tmp_path / "parts" / "crash" / "out"
+        script = tmp_path / "parts" / "crash" / "crash.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("import os\nos.abort()\n", encoding="utf-8")
+        res = sandbox.run_job({"op": "build", "script": str(script), "guard": False}, tmp_path, out, timeout=60)
+    finally:
+        resource.setrlimit(resource.RLIMIT_CORE, (soft, hard))
+    return res, [p for p in tmp_path.rglob("core*") if p.is_file()]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="no signals or core dumps on Windows")
+def test_a_crashing_job_writes_no_core_dump(tmp_path, monkeypatch):
+    """#150: OCC aborted under the memory cap and the container wrote a 1.7 GB core into out/."""
+    res, cores = _abort_job(tmp_path, monkeypatch)
+    assert not res["ok"] and not cores, (res, cores)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the memory cap is enforced on Linux (and Windows)")
+def test_a_crash_under_the_memory_cap_says_out_of_memory(tmp_path, monkeypatch):
+    monkeypatch.setattr(sandbox, "MAX_MEMORY", 3 * 2**30)
+    res, cores = _abort_job(tmp_path, monkeypatch)
+    assert not res["ok"] and res.get("usage_error") and not cores, res
+    assert "crashed (SIGABRT)" in res["error"] and "3 GB per job" in res["error"], res
+
+
+def test_crash_signal():
+    assert sandbox._crash_signal(-6) == 6 and sandbox._crash_signal(134) == 6
+    assert sandbox._crash_signal(1) == 0 and sandbox._crash_signal(0) == 0 and sandbox._crash_signal(None) == 0

@@ -18,6 +18,7 @@ a part never has both layouts. files() lists both, so an old flat part still dow
 from __future__ import annotations
 
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -71,13 +72,20 @@ def _dir(p: Path) -> bool:
         return False
 
 
+CORE_RE = re.compile(r"^core(\.\d+)?$")  # a crash dump (core, core.<pid>): never sorted, listed or shipped
+
+
+def is_core_dump(name: str) -> bool:
+    return bool(CORE_RE.match(name))
+
+
 def _plain(d: Path) -> list[Path]:
-    """Regular, non-hidden files directly in folder `d` (no symlinks, nothing below)."""
+    """Regular, non-hidden files directly in folder `d` (no symlinks, nothing below, no crash dumps)."""
     if not _dir(d):
         return []
     found = []
     for p in sorted(d.iterdir()):
-        if p.name.startswith(".") or p.suffix == ".pyc":
+        if p.name.startswith(".") or p.suffix == ".pyc" or is_core_dump(p.name):
             continue
         try:
             if stat.S_ISREG(os.lstat(p).st_mode):

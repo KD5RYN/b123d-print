@@ -86,6 +86,31 @@ def memory_message() -> str:
             "fewer points in curves and fewer faces, or a smaller reference model; or ask the operator to raise the limit")
 
 
+# signals a job dies of when an allocation fails under the memory cap and the C++ code does not
+# raise: abort (OCC's Standard_OutOfMemory unhandled, std::terminate), segfault, bus error
+_CRASH_SIGNALS = (signal.SIGABRT, signal.SIGSEGV, signal.SIGBUS) if hasattr(signal, "SIGBUS") else (signal.SIGABRT, signal.SIGSEGV)
+
+
+def _crash_signal(returncode: int | None) -> int:
+    """The signal a job died of: -N from Popen, or 128+N where bubblewrap passes the child's on."""
+    if returncode is None:
+        return 0
+    if returncode < 0:
+        return -returncode
+    return returncode - 128 if 128 < returncode < 160 else 0
+
+
+def crash_message(sig: int) -> str:
+    try:
+        name = signal.Signals(sig).name
+    except ValueError:
+        name = f"signal {sig}"
+    return (f"the build crashed ({name}), most likely because it ran out of memory: the limit is "
+            f"{human_size(MAX_MEMORY)} per job on this server (B123D_PRINT_MAX_MEMORY). Make it lighter: build "
+            "fewer pieces at once (parts=), use fewer sections or points in lofts and curves, or a smaller "
+            "reference model; or ask the operator to raise the limit")
+
+
 # what a job that ran out of memory leaves in its error or output (Python, numpy, C++ and OCCT)
 _OOM_MARKERS = ("MemoryError", "bad_alloc", "Standard_OutOfMemory", "Unable to allocate", "Cannot allocate memory",
                 "out of memory")
@@ -456,6 +481,9 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
                 resource.setrlimit(resource.RLIMIT_CPU, (int(timeout) + 5, int(timeout) + 10))
             except Exception:
                 pass
+            # no core dumps: a crashing job (OCC aborts when an allocation fails under the memory
+            # cap) wrote gigabytes of its memory into the part's out/ folder (#150)
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
             if mem:  # no try: a memory cap that cannot be set fails the job (fail closed)
                 hard = resource.getrlimit(resource.RLIMIT_DATA)[1]
                 cap = mem if hard == resource.RLIM_INFINITY else min(mem, hard)
@@ -499,10 +527,11 @@ def run_job(job: dict, workspace: Path, out_dir: Path, timeout: float = DEFAULT_
                 return {"ok": False, "error": "the build was killed by the system, most likely because the worker ran "
                         "out of memory (the host's or the container's memory limit)" + (
                             f"; each job may use up to {human_size(mem)}" if mem else ""), "log": log}
-            crash = f" (signal {-proc.returncode})" if proc.returncode < 0 else ""
-            return {"ok": False, "error": f"worker exited with code {proc.returncode}{crash} and no result"
-                    + (f"; it may have run out of memory (the limit is {human_size(mem)} per job)" if mem and crash else ""),
-                    "log": log}
+            sig = _crash_signal(proc.returncode)
+            if mem and sig in _CRASH_SIGNALS:  # OCC aborts (or faults) when an allocation fails under the cap
+                return {"ok": False, "error": crash_message(sig), "usage_error": True, "log": log}
+            crash = f" (signal {sig})" if sig else ""
+            return {"ok": False, "error": f"worker exited with code {proc.returncode}{crash} and no result", "log": log}
         res = json.loads(rp.read_text(encoding="utf-8"))
         log = _tail(stdout, stderr, progress=False)  # the worker reported: its progress lines say nothing more
         if log:

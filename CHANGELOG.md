@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.16 — unreleased
+
+- **Fix: the style review crashed on lofted (organic) parts on the shared server** (#150).
+  `design_metrics`' symmetry measure ran three OpenCascade booleans of the part with its mirror
+  image. On a lofted banana that took 7 s and about 1 GB extra (1.7 GB peak), and on Linux it went
+  over the 2 GB per-job memory cap. OpenCascade aborted instead of raising, so the job crashed.
+  Symmetry is now measured on an occupancy grid built from mesh sections: 0.2 s and a few MB, the
+  same values within 0.03 on every bundled example, and it no longer gives up where the boolean
+  failed (`jar_lid`).
+- **Jobs never write core dumps:** each job runs with `RLIMIT_CORE` 0. The crashed job had left a
+  1.7 GB `core` file in the part's `out/`. The out/ tidy filed it under `docs/`, and
+  `download_part` refused the part as too large. `core`/`core.<n>` files are also never sorted,
+  listed or downloaded.
+- **A crash under the memory cap says so:** a job that dies of SIGABRT, SIGSEGV or SIGBUS while a
+  cap is set is reported as "crashed …, most likely because it ran out of memory: the limit is
+  N GB per job", with advice, instead of "worker exited … and no result".
+
 ## 0.3.15 — 2026-10-25
 
 - **Models keep to the design workflow: a review checklist in the tool results** (#146). Models,

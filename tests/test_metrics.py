@@ -1,6 +1,7 @@
 """Design metrics on shapes with known answers (sanity tests; the estimates are rough by design)."""
 
 import math
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -271,3 +272,39 @@ def test_edges_preference():
 def test_text_report_says_the_estimates_are_rough():
     t = M.text(M.design_metrics(None, None, {"": box()}, Settings()))
     assert "roughly ±20 %" in t and "rough estimate" in t and "style: functional (default; built-in style functional)" in t
+
+
+def test_symmetry_on_a_grid():
+    from build123d import Box, Pos
+
+    assert M.symmetry(Box(10, 20, 30)) == {"x": 1.0, "y": 1.0, "z": 1.0, "best": 1.0}
+    ell = Box(30, 10, 10) + Pos(-10, 10, 0) * Box(10, 10, 10)  # an L: symmetric about XZ? no
+    s = M.symmetry(ell)
+    assert s["z"] == 1.0 and s["x"] < 0.9 and s["best"] == max(s["x"], s["y"])
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="measured with resource.getrusage")
+def test_design_metrics_memory_on_a_lofted_part():
+    """#150: symmetry's three OCC booleans took 7 s and ~1 GB more on this lofted banana; on the
+    server that crashed the job under its memory cap. Measured in a fresh process."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "banana_half.py"
+    code = "\n".join([
+        "import importlib.util, resource, sys, time",
+        f"spec = importlib.util.spec_from_file_location('b', {str(fixture)!r})",
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+        "part = m.build(m.Dims())",
+        "from b123d_print import metrics",
+        "before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss",
+        "t = time.time(); metrics.symmetry(part); dt = time.time() - t",
+        "after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss",
+        "scale = 1 if sys.platform == 'darwin' else 1024",
+        "print((after - before) * scale / 2**20, dt)",
+    ])
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr[-2000:]
+    grew_mb, secs = map(float, r.stdout.split()[-2:])
+    assert grew_mb < 200 and secs < 5, (grew_mb, secs)

@@ -691,21 +691,51 @@ def slenderness(part: Part, faces_per_level: list) -> dict:
 # M8 symmetry, M9 economy, M10 seams, M11 water traps
 
 
+SYMMETRY_GRID = 48  # cells per side of the occupancy grid symmetry() compares (about 2 % of the part)
+
+
+def _occupancy(part: Part, n: int = SYMMETRY_GRID) -> np.ndarray | None:
+    """The part as an n x n x n boolean grid over its bounding box (cell centres), from mesh
+    sections: a cell is set where its centre lies inside a section's loops (even-odd, so holes
+    count out). None for a part flat in some direction."""
+    from matplotlib.path import Path as MPath
+
+    bb = part.bounding_box()
+    lo = np.array([bb.min.X, bb.min.Y, bb.min.Z])
+    size = np.array([bb.size.X, bb.size.Y, bb.size.Z])
+    if (size <= 1e-9).any():
+        return None
+    centres = [lo[i] + (np.arange(n) + 0.5) * size[i] / n for i in range(3)]
+    gx, gy = np.meshgrid(centres[0], centres[1], indexing="ij")
+    pts = np.column_stack([gx.ravel(), gy.ravel()])
+    sl = ck.MeshSlicer(part)
+    grid = np.zeros((n, n, n), bool)
+    for k, z in enumerate(centres[2]):
+        cell = np.zeros(len(pts), bool)
+        for face in sl.section("XY", float(z), 1e9):
+            for loop in face:
+                loop = np.asarray(loop, float)
+                if len(loop) >= 3:
+                    cell ^= MPath(loop[:, :2]).contains_points(pts)
+        grid[:, :, k] = cell.reshape(n, n)
+    return grid
+
+
 def symmetry(part: Part) -> dict:
     """M8 (DS-G7): vol(part & mirror) / vol(part) for the YZ (x), XZ (y) and XY (z) planes through
-    the bounding-box centre; best of x and y (z reported, rarely meaningful)."""
-    from build123d import Plane
-
-    c = part.bounding_box().center()
-    V = part.volume
-    out = {}
-    for k, nrm in (("x", (1, 0, 0)), ("y", (0, 1, 0)), ("z", (0, 0, 1))):
-        try:
-            m = part.mirror(Plane(origin=c, z_dir=nrm))
-            out[k] = round(min(1.0, (part & m).volume / V), 3) if V > 0 else 0.0
-        except Exception:  # noqa: BLE001 - a boolean that OCC cannot do: unknown
-            out[k] = None
-    out["best"] = max((out[k] for k in ("x", "y") if out[k] is not None), default=None)
+    the bounding-box centre; best of x and y (z reported, rarely meaningful). Measured on an
+    occupancy grid of the part (_occupancy), not with OCC booleans: on a lofted or other curved
+    part the three booleans took seconds and over a gigabyte, enough to crash a job under the
+    server's memory cap (#150)."""
+    try:
+        g = _occupancy(part)
+    except Exception:  # noqa: BLE001 - a section the mesh cannot give: unknown
+        g = None
+    if g is None or not g.any():
+        return {"x": None, "y": None, "z": None, "best": None}
+    total = int(g.sum())
+    out = {k: round(min(1.0, int((g & np.flip(g, axis=i)).sum()) / total), 3) for i, k in enumerate("xyz")}
+    out["best"] = max(out["x"], out["y"])
     return out
 
 
