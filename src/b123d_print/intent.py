@@ -32,6 +32,7 @@ KEYS = {  # key -> what it takes (for the error message)
     "brim": "true / false, or a width in mm",
     "orientation": '"locked" (don\'t re-orient)',
     "review": '"exempt" (a calibration coupon or test print: no design review checklist, review.py)',
+    "vase": "true / false: print in vase mode (spiral vase / spiralize: one continuous wall, no top, no infill)",
     "why": "free text, required whenever anything else is set",
 }
 PART, SETTINGS, SUGGESTED = "set by the part", "your settings", "suggested from the geometry/style"
@@ -75,11 +76,17 @@ def validate(value, where: str = "PRINT") -> dict:
         elif k == "review":
             if v not in REVIEWS:
                 raise bad
+        elif k == "vase":
+            if not isinstance(v, bool):
+                raise bad
         elif k in ("infill_pattern", "why"):
             if not isinstance(v, str) or not v.strip():
                 raise bad
             v = v.strip()
         out[k] = v
+    clash = sorted({"walls", "infill", "infill_pattern"} & set(out)) + (["supports"] if out.get("supports", "none") != "none" else [])
+    if out.get("vase") and clash:
+        raise ValueError(f"{where}: vase mode prints one wall, no infill and no supports; drop {clash} or 'vase'")
     if set(out) - {"why"} and "why" not in out:
         raise ValueError(f"{where}: say why with a 'why' key (sets {sorted(out)}): the print sheet and the "
                          "checks show it next to every setting the part overrides")

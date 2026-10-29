@@ -1,0 +1,25 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Decorative / vase"
+description = "Looked at more than handled: vases, planters, lamp shades, ornaments; twisted and patterned bodies, vase mode."
+review = """
+Look for: a form that reads from a step back: a twist, a taper or a pattern of a few strong
+features (flutes, ribs, facets at least 2 line widths across), not fine detail the layers or the
+slicer's smoothing blur [DS-D5, DS-S5]; shallow slopes that show layer steps on the show faces
+[DS-S1]. Vase mode (spiralize) [DS-D1..D4]: the model is a solid and the slicer makes one
+continuous wall, no top, no infill, no supports, so every layer must be one closed contour
+(no islands, holes or anything inside) and every overhang within the printer's limit; the wall
+is one line (widen the outer line for a stiffer or more watertight vase; a water vase still
+wants a liner) and the spiral leaves no seam. Not in vase mode: give the seam a flute or ridge
+to hide in [DS-S3]. Lamp shades: thin, even walls let light through evenly (lithophane
+thickness 0.4-0.8 to 2-3 mm), vase mode avoids the reflections of several walls; LED bulbs
+only, an air gap to the bulb (20 mm, provisional: one source), PETG or better in a closed shade
+[DS-D6, DS-D7, DS-R1].
+Typical: "the 0.6 mm ribs vanish at 0.2 mm layers: make them 2 mm wide and 1.5 mm deep";
+"the handle is a second island: drop it or print without vase mode"; "the shoulder leans 55 deg
+from vertical: keep it under 45 in vase mode"; "6 mm from the bulb: leave about 20 mm, and PETG".
+"""
+max_shallow_slope_share = 0.2
+seam_note = true
+curved_supports_note = true
+vase_mode_note = true

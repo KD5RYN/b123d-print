@@ -22,8 +22,9 @@ import math
 from dataclasses import dataclass, field
 
 from build123d import (Align, Axis, Bezier, Box, Circle, Compound, Cone, Cylinder, Edge, Face, FontStyle, GeomType, Keep,
-                       Part, Plane, Polygon, Pos, Rectangle, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere, Spline, Text,
-                       Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, scale, section, split, sweep)
+                       Line, Part, Plane, Polygon, Polyline, Pos, Rectangle, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere,
+                       Spline, Text, Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale, section,
+                       split, sweep)
 
 from .pcb import pcb_board, pcb_mounting_pattern, pcb_standoff
 
@@ -711,6 +712,108 @@ def demo_flat_base() -> Part:
 
 
 # ---------------------------------------------------------------------------------------------
+# Decorative: twisted, patterned and vase-mode bodies (DESIGN_GUIDE DS-D*)
+
+
+def star_section(points: int = 6, r_outer: float = 30.0, r_inner: float = 22.0, round_r: float = 1.0) -> Face:
+    """A star (points >= 3) in the XY plane, centered on the origin, a point on +X: the section
+    for twisted_loft. r_inner = r_outer x cos(180 / points) gives a regular polygon's flats.
+    round_r rounds the points and valleys (a sharp point is a knife edge the nozzle cannot draw);
+    0 keeps them sharp."""
+    if points < 3 or not 0 < r_inner <= r_outer:
+        raise ValueError("star_section: points >= 3 and 0 < r_inner <= r_outer")
+    pts = [((r_outer if i % 2 == 0 else r_inner) * math.cos(math.pi * i / points),
+            (r_outer if i % 2 == 0 else r_inner) * math.sin(math.pi * i / points)) for i in range(2 * points)]
+    face = make_face(Polyline(*pts, close=True))
+    return fillet(face.vertices(), round_r).face() if round_r > 0 else face
+
+
+def twisted_loft(section: Face, height: float, twist: float = 90.0, scale: float = 1.0, steps: int = 6) -> Part:
+    """A body lofted through `steps` + 1 copies of `section` (a closed face in XY, e.g.
+    star_section) from Z=0 up `height`, turned `twist` degrees and scaled to `scale` at the top,
+    both evenly. A smooth (B-spline) loft: the corners become spiral ridges. Bottom on Z=0, solid:
+    for vase mode the slicer makes the wall (vase_shell's notes)."""
+    if height <= 0 or steps < 1 or scale <= 0:
+        raise ValueError("twisted_loft: height > 0, steps >= 1, scale > 0")
+    secs = []
+    for i in range(steps + 1):
+        t = i / steps
+        secs.append(Pos(0, 0, height * t) * Rot(0, 0, twist * t) * section.scale(1 + (scale - 1) * t))
+    return loft(secs)
+
+
+def demo_twisted_loft() -> Part:
+    return twisted_loft(star_section(6, 30, 22), 80, twist=60, scale=0.8)
+
+
+def fluted_section(radius: float, flutes: int = 12, depth: float = 1.5, samples: int = 8) -> Face:
+    """A round section `radius` across at its ridges with `flutes` smooth grooves `depth` deep
+    (radius - depth x (1 - cos(flutes x angle)) / 2), as a closed periodic spline in XY."""
+    if flutes < 3 or not 0 <= depth < radius:
+        raise ValueError("fluted_section: flutes >= 3 and 0 <= depth < radius")
+    m = flutes * samples
+    pts = []
+    for i in range(m):
+        a = 2 * math.pi * i / m
+        r = radius - depth * (1 - math.cos(flutes * a)) / 2
+        pts.append(Vector(r * math.cos(a), r * math.sin(a)))
+    return make_face(Spline(*pts, periodic=True))
+
+
+def patterned_surface(profile: list, flutes: int = 12, depth: float = 1.5, twist: float = 0.0) -> Part:
+    """A revolved-looking body with a fluted surface: `profile` is [(radius, z), ...] from z = 0 up
+    (the outline at the ridges); a fluted_section at each point, turned twist x z / height
+    degrees, lofted smoothly, so the flutes follow the profile (and spiral with a twist). Bottom
+    on Z=0, solid."""
+    if len(profile) < 2 or abs(profile[0][1]) > 1e-9:
+        raise ValueError("patterned_surface: at least two (radius, z) points, the first at z = 0")
+    top = profile[-1][1]
+    secs = [Pos(0, 0, z) * Rot(0, 0, twist * z / top) * fluted_section(r, flutes, depth) for r, z in profile]
+    return loft(secs)
+
+
+def demo_patterned_surface() -> Part:
+    return patterned_surface([(30, 0), (38, 35), (34, 70), (26, 100), (28, 110)], flutes=16, depth=2.0, twist=20)
+
+
+def vase_lean(profile: list) -> float:
+    """The steepest lean from vertical (degrees, either way) of the smooth curve through
+    `profile` [(radius, z), ...]: in vase mode the single wall overhangs inward as well as outward."""
+    pts = [Vector(r, 0, z) for r, z in profile]
+    curve = Spline(*pts)
+    worst = 0.0
+    for i in range(201):
+        t = curve.tangent_at(i / 200)
+        worst = max(worst, math.degrees(math.atan2(abs(t.X), abs(t.Z))))
+    return worst
+
+
+def vase_shell(profile: list, max_lean: float = 45.0) -> Part:
+    """A solid body of revolution for vase mode: the smooth curve through `profile`
+    [(radius, z), ...] (z rising from 0) turned about Z, flat bottom on Z=0, flat top. Solid on
+    purpose: in vase mode the slicer makes the one-line wall and leaves the top open. Raises
+    ValueError when the curve leans more than `max_lean` from vertical (pass the printer's
+    max_overhang), which a single wall cannot print."""
+    if len(profile) < 2 or abs(profile[0][1]) > 1e-9 or any(b[1] <= a[1] for a, b in zip(profile, profile[1:])):
+        raise ValueError("vase_shell: at least two (radius, z) points, z from 0 rising")
+    if any(r <= 0 for r, _ in profile):
+        raise ValueError("vase_shell: every radius > 0")
+    lean = vase_lean(profile)
+    if lean > max_lean:
+        raise ValueError(f"vase_shell: the wall leans {lean:.0f} deg from vertical (limit {max_lean:g}); in vase mode "
+                         "a single wall cannot print that: add points or make the curve steeper")
+    r0, h = profile[0][0], profile[-1][1]
+    side = Spline(*[Vector(r, 0, z) for r, z in profile])
+    outline = [Line((0, 0, 0), (r0, 0, 0)), side, Line(side @ 1, (0, 0, h)), Line((0, 0, h), (0, 0, 0))]
+    face = make_face(outline)
+    return revolve(face, Axis.Z)
+
+
+def demo_vase_shell() -> Part:
+    return vase_shell([(30, 0), (40, 30), (34, 75), (24, 110), (27, 125)])
+
+
+# ---------------------------------------------------------------------------------------------
 # Registry
 
 
@@ -961,6 +1064,49 @@ RECIPES = {r.name: r for r in [
   bed.
 """, ["[DS-O5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) print organic parts with a flat base",
       "[BP-B1, B2](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) first layer and bed edges"]),
+    Recipe("twisted_loft", "Twisted loft (spiral body)", [twisted_loft, star_section], demo_twisted_loft, """
+- A star or polygon section lofted with a twist and a taper: the corners become spiral ridges that
+  read from across the room (DS-D5). Few strong features: 5-8 points, ridges several line widths
+  apart; fine detail blurs at 0.2 mm layers.
+- A twist tilts the flanks and a taper tilts the whole wall: keep both within the printer's
+  overhang limit; `check` measures the outside. In vase mode the wall leans inward too (DS-D3):
+  `design_metrics(..., style="decorative")` reports the steepest lean (M16).
+- More `steps` follow the twist more closely; 4-8 are enough for up to ~90 degrees.
+- `round_r` (1 mm by default) rounds the star's points and valleys: a sharp point is a knife
+  edge the nozzle cannot draw (BP-R3), and the thin-feature check warns on it.
+- For vase mode, keep it solid and say so in the script: `PRINT = {"vase": True, "why": ...}`
+  (the print sheet then gives the slicer settings).
+""", ["[DS-D1, D3, D5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) vase mode, lean, pattern size",
+      "[BP-O1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs: design to 45 degrees",
+      "build123d `loft` (smooth B-spline loft through the sections)"]),
+    Recipe("patterned_surface", "Fluted (patterned) surface", [patterned_surface, fluted_section], demo_patterned_surface, """
+- Flutes on a revolved-looking body, made as a loft of fluted sections so they follow the
+  profile (a cut of straight grooves would not). `twist` spirals them.
+- Size the pattern to print and to read: grooves at least 2 line widths wide (with 12-24 flutes on
+  a 60 mm body they are 8-15 mm) and 1-3 mm deep (DS-D5, BP-X2). Vertical flutes hide layer lines
+  and give a seam its corner when not in vase mode (DS-S3, DS-S5).
+- The profile is the outline at the ridges; the grooves are `depth` inside it.
+- One closed contour per layer: it prints in vase mode as it is (DS-D1).
+""", ["[DS-D5, DS-S3, DS-S5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) pattern size, seams, texture",
+      "[BP-X2](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) features >= 2 line widths"]),
+    Recipe("vase_shell", "Vase-mode body", [vase_shell, vase_lean], demo_vase_shell, """
+- **A solid, not a shell: the slicer makes the wall.** In vase mode ("Spiral vase" in PrusaSlicer,
+  OrcaSlicer and Bambu Studio; "Spiralize Outer Contour" in Cura) it prints one continuous wall,
+  no top, no infill and no supports, with only the bottom layers solid (DS-D1). Modeling a hollow
+  makes the slicer print an inside and an outside wall, or fail.
+- Declare it in the script: `PRINT = {"vase": True, "why": "a vase: one wall, open top"}`; the
+  print sheet then gives the slicer settings and flags layers that are not one contour.
+- Every layer one closed contour: no handle, no second body, nothing inside (DS-D1).
+- The wall is one line: the outer wall's line width. Widen it (0.45 to 0.6 mm at a 0.4 mm nozzle)
+  or use a bigger nozzle for a stiffer or more watertight vase; a vase for water still wants a
+  liner (DS-D2). A planter's drain hole cannot be modeled in vase mode.
+- No supports: the curve must stay within the overhang limit both ways, inward as well as
+  outward (DS-D3); `vase_lean` measures it and `vase_shell` refuses more than `max_lean`.
+- Lamp shades: see DS-D6, DS-D7 (thin even walls, LED only, an air gap to the bulb).
+""", ["[DS-D1..D4, D6, D7](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) vase mode, wall, lean, lamp shades",
+      "[BP-O1, W1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs to 45 degrees; one line is the thinnest wall",
+      "[PrusaSlicer: Layers and perimeters, Spiral vase](https://help.prusa3d.com/article/layers-and-perimeters_1748)",
+      "[Cura: magic_spiralize](https://github.com/Ultimaker/Cura/blob/main/resources/definitions/fdmprinter.def.json)"]),
 ]}
 
 

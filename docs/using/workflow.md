@@ -42,7 +42,7 @@ rules ([Workflow rules](../scripts/rules.md)). An illustrative, shortened exchan
    joint and assembly notes.
 6. **A design review and the orientation, before export.** Once the checks pass, the model
    reviews the part for the style you chose (functional, modern, least cost, rugged, soft,
-   structural, organic, or your own) and suggests changes with rough filament and time numbers, then
+   structural, organic, decorative, or your own) and suggests changes with rough filament and time numbers, then
    checks the print orientation with `suggest_orientation`. It changes nothing without your OK.
    See [Design review](design-review.md).
 

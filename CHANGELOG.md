@@ -32,6 +32,24 @@
 - **Fix: a 0.00 mm "knife edge" where two curved faces meet in a section.** A section's edges meet
   within about 1e-5 mm, not exactly; the loop's closing point duplicated its first, and the
   near-zero segment between them read as a knife edge at a collar or at the end of a bed strip.
+- **New `decorative` design style** (#152) for vases, planters, lamp shades and ornaments
+  (aliases `vase`, `planter`, `lamp_shade`, `ornamental`). Its rubric asks for a form that reads
+  from a step back (a twist, a taper, a few strong pattern features at least 2 line widths
+  across), the vase-mode rules, and for lamp shades thin even walls, LED bulbs and an air gap to
+  the bulb. New rules DS-D1..D7 in the design guide, from the PrusaSlicer, OrcaSlicer and Cura
+  documentation and lithophane guides (the bulb-gap figure is provisional: one source).
+- **Vase mode:** `design_metrics` measures whether every layer is one closed contour and how far
+  the wall leans from vertical, inward as well as outward (M16); the decorative style notes
+  whether the part can print in vase mode (new style field `vase_mode_note`). A part script says
+  it prints in vase mode with `PRINT = {"vase": True, "why": ...}`: the print sheet then gives
+  the slicer switch ("Spiral vase" / "Spiralize Outer Contour"), the one-line wall and how to
+  widen it, estimates for one wall with no infill and no top, and the layers or the lean that
+  cannot print that way. `vase` with `walls`, `infill` or supports is an error.
+- **Recipes `twisted_loft`** (a star or polygon section lofted with a twist and a taper;
+  `star_section`), **`patterned_surface`** (flutes that follow a revolved profile, straight or
+  spiralling; `fluted_section`) and **`vase_shell`** (a solid body of revolution for vase mode
+  that refuses a wall leaning past the overhang limit; `vase_lean`).
+- New CC0 example **`twisted_vase`**: a six-pointed star with a quarter turn, printed in vase mode.
 
 ## 0.3.16 — 2026-10-28
 

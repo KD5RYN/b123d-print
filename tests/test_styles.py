@@ -23,7 +23,7 @@ def write(folder, name, text):
 
 def test_builtins_load_and_cover_every_threshold():
     names = S.available()
-    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft", "structural", "organic"} and set(names.values()) == {"built-in"}
+    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft", "structural", "organic", "decorative"} and set(names.values()) == {"built-in"}
     used = set()
     for n in names:
         st = S.load_style(n)
@@ -37,6 +37,7 @@ def test_builtins_load_and_cover_every_threshold():
     assert st.min_symmetry is None and st.max_sharp_edge_share == 0.05 and st.curved_supports_note
     assert all(f"DS-O{i}" in st.review for i in range(1, 6))
     assert S.load_style("").name == "functional"
+    assert S.load_style("vase").vase_mode_note and S.load_style("decorative").max_screw_sizes is None
 
 
 def test_user_style_based_on(dirs):
@@ -110,6 +111,8 @@ def test_aliases():
     assert S.normalize("least cost") == "least_cost"
     assert {S.normalize(n) for n in ("strong", "load_bearing", "Load-Bearing", "heavy_duty", "heavy duty")} == {"structural"}
     assert {S.normalize(n) for n in ("organic", "Natural", "sculpted", "figurine", "organic/natural")} == {"organic"}
+    assert {S.normalize(n) for n in ("vase", "Planter", "lamp_shade", "lamp shade", "Lamp-Shade", "lampshade",
+                                     "ornamental")} == {"decorative"}
     with pytest.raises(S.StyleError):
         S.normalize("../etc/passwd")
 

@@ -1,6 +1,6 @@
 """Design styles: small TOML files that say what the design review looks for.
 
-The built-in styles (functional, modern, least_cost, rugged, soft, structural, organic) ship as the same
+The built-in styles (functional, modern, least_cost, rugged, soft, structural, organic, decorative) ship as the same
 kind of file a user writes. Lookup, first found wins:
 
   1. the workspace:  <workspace>/styles/<name>.toml
@@ -29,7 +29,9 @@ ALIASES = {"minimal": "modern", "modern/minimal": "modern", "least cost": "least
            "strong": "structural", "load_bearing": "structural", "load-bearing": "structural",
            "load bearing": "structural",
            "natural": "organic", "sculpted": "organic", "figurine": "organic", "organic/natural": "organic",
-           "heavy_duty": "structural", "heavy-duty": "structural", "heavy duty": "structural", "structural/load-bearing": "structural"}
+           "heavy_duty": "structural", "heavy-duty": "structural", "heavy duty": "structural", "structural/load-bearing": "structural",
+           "vase": "decorative", "planter": "decorative", "lamp_shade": "decorative", "lamp shade": "decorative", "lamp-shade": "decorative",
+           "lampshade": "decorative", "ornamental": "decorative", "decorative/vase": "decorative"}
 EDGE_PREFS = ("", "chamfer", "fillet")
 
 
@@ -65,6 +67,7 @@ class Style:
     min_inside_radius_ratio: float | None = None
     min_wall_lines: float | None = None
     max_z_slenderness: float | None = None
+    vase_mode_note: bool = False
     source: str = ""  # where it was loaded from (not a file field)
 
 
@@ -91,6 +94,7 @@ THRESHOLDS = {
     "min_inside_radius_ratio": ("suggest", "DS-T3", "smallest inside fillet radius / the thinner wall it joins"),
     "min_wall_lines": ("suggest", "DS-T4", "thinnest wall in line widths (knife edges apart)"),
     "max_z_slenderness": ("note", "DS-T1", "run standing on a small XY section / sqrt(its area)"),
+    "vase_mode_note": ("note", "DS-D1", "whether every layer is one closed contour with nothing to support (vase mode)"),
 }
 _TEXT = ("label", "description", "based_on", "edges", "review")
 _BOOLS = {f.name for f in fields(Style) if f.type == "bool"}

@@ -40,7 +40,7 @@ MODES = ("warn", "required", "off")
 STATE_FILE = "review.json"
 MAX_BYTES = 64_000  # the file is small; a bigger one was not written by the server
 KEEP = 5  # versions remembered per part (a restore of a recent version finds its steps again)
-STYLES = "functional, modern, least_cost, rugged, soft, structural, organic"
+STYLES = "functional, modern, least_cost, rugged, soft, structural, organic, decorative"
 
 
 def script_hash(script: Path) -> str:

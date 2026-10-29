@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from build123d import Align, Box, Pos
+from build123d import Align, Box, Cone, Cylinder, Location, Pos
 
 import b123d_print
 from b123d_print import checks as ck
@@ -55,6 +55,17 @@ def test_typo_is_an_error_listing_the_keys():
 def test_bad_values(bad):
     with pytest.raises(ValueError):
         intent.validate(bad)
+
+
+def test_vase_vocabulary():
+    assert intent.validate({"vase": True, "supports": "none", "why": "a vase"}) == {"vase": True, "supports": "none",
+                                                                                   "why": "a vase"}
+    with pytest.raises(ValueError, match="vase"):
+        intent.validate({"vase": "yes", "why": "x"})
+    for clash in ({"walls": 2}, {"infill": 10}, {"supports": "tree"}):
+        with pytest.raises(ValueError, match="vase mode prints one wall"):
+            intent.validate({"vase": True, **clash, "why": "x"})
+    assert intent.validate({"vase": False, "walls": 2, "why": "x"})["walls"] == 2
 
 
 def test_why_required():
@@ -148,6 +159,34 @@ def test_walls_change_the_estimate():
                    for m in (SimpleNamespace(), SimpleNamespace(PRINT={"walls": 6, "infill": 50, "why": "x"})))
     grams = [float(t.split("| 30 × 30 × 30 |")[1].split("|")[1]) for t in (plain, more)]
     assert grams[1] > grams[0]
+
+
+def test_vase_sheet():
+    """PRINT vase: the slicer switch and the one-line wall instead of walls and infill, the estimates
+    for one wall and no infill, and the layers or lean that cannot print that way (DS-D1..D4)."""
+    solid = Cylinder(30, 60, align=A)
+    vase = SimpleNamespace(PRINT={"vase": True, "why": "a vase"})
+    text = printsheet.sheet(vase, None, {"": solid}, Settings(walls=4), "t")
+    assert "**Vase mode: on, set by the part**: a vase." in text and "Spiral vase" in text and "Spiralize" in text
+    assert "**Wall: one line**" in text and "**No seam:**" in text and "Walls and infill" not in text
+    assert "Supports:" not in text and "Not vase-ready" not in text and "leans" not in text
+    grams = [float(t.split("| 60 × 60 × 60 |")[1].split("|")[1])
+             for t in (text, printsheet.sheet(SimpleNamespace(), None, {"": solid}, Settings(), "t"))]
+    assert grams[0] < grams[1] / 2  # one wall, no infill, no top
+    hollow = solid - Cylinder(28, 60, align=A).moved(Location((0, 0, 2))) + shelf().moved(Location((50, 0, 0)))
+    bad = printsheet.sheet(vase, None, {"": hollow}, Settings(), "t")
+    assert "**Not vase-ready:**" in bad and "2 islands" in bad
+    steep = printsheet.sheet(vase, None, {"": Cone(40, 5, 20, align=A)}, Settings(), "t")
+    assert "**The wall leans up to" in steep
+
+
+def test_vase_example():
+    script = Path(b123d_print.__file__).parent / "examples" / "twisted_vase" / "twisted_vase.py"
+    mod = project.load(script)
+    d = project.dims(mod, "")
+    hash(d)
+    text = printsheet.sheet(mod, d, project.printables(mod, d), Settings(), "twisted_vase")
+    assert "**Vase mode: on, set by the part**" in text and "Not vase-ready" not in text and "leans" not in text
 
 
 # --- the overhang check -------------------------------------------------------------------------

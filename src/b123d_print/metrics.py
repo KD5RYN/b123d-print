@@ -3,7 +3,8 @@
 M1 size and proportions, M2 filament mass (and M4 cost), M3 print time, M5 supports, M6
 stair-stepping, M7 edge treatment, M8 mirror symmetry, M9 economy (parts, fastener sizes),
 M10 seam corners, M11 water traps, and for load-bearing parts M12 inside corners, M13 walls,
-M14 hole edge distance, M15 slenderness across the layers. Then the style findings: the
+M14 hole edge distance, M15 slenderness across the layers, and M16 vase-mode layers (one closed
+contour per layer). Then the style findings: the
 thresholds of the chosen style turned into "suggest" and "note" lines that cite their rule.
 Nothing here fails a build.
 
@@ -796,6 +797,44 @@ def seam_corners(faces_per_level: list, min_turn: float = 30.0) -> dict:
     return {"share": round(hit / total, 3) if total else 0.0, "layers_sampled": total}
 
 
+LEAN_AREA = 2.0  # mm2: M16's steepest lean is the one at least this much wall area reaches
+
+
+def vase_layers(part: Part, faces_per_level: list, mesh: Mesh | None = None) -> dict:
+    """M16 (DS-D1, DS-D3): can it print in vase mode (spiralize)? The slicer prints one closed
+    contour per layer, so every sampled layer (M10's sections) must be one face with no holes; the
+    first layers that are not are listed (islands: several faces; holes: something inside or an
+    opening). With the mesh, also the steepest lean of the wall from vertical, either way: a single
+    wall overhangs inward as much as outward (the top face is left out: the slicer drops it)."""
+    bb = bbox(part)
+    n = len(faces_per_level)
+    bad = []
+    for i, faces in enumerate(faces_per_level):
+        if not faces:
+            continue
+        holes = sum(len(f) - 1 for f in faces)
+        if len(faces) > 1 or holes:
+            bad.append({"z": round(bb.min.Z + (i + 0.5) * bb.size.Z / n, 2), "islands": len(faces), "holes": holes})
+    total = sum(1 for f in faces_per_level if f)
+    out = {"single_share": round(1 - len(bad) / total, 3) if total else 0.0, "layers_sampled": total,
+           "bad_count": len(bad), "bad": bad[:3], "max_lean": None}
+    if mesh is not None and len(mesh.area):
+        z = mesh.c[:, 2]
+        wall = (z > bb.min.Z + 0.01) & ~((z > bb.max.Z - 0.01) & (mesh.n[:, 2] > 0.999))
+        if wall.any():  # the steepest lean that covers LEAN_AREA: sliver triangles' normals are noise
+            lean = np.degrees(np.arcsin(np.clip(np.abs(mesh.n[wall, 2]), 0, 1)))
+            order = np.argsort(lean)[::-1]
+            k = min(int(np.searchsorted(np.cumsum(mesh.area[wall][order]), LEAN_AREA)), len(order) - 1)
+            out["max_lean"] = round(float(lean[order[k]]), 1)
+    return out
+
+
+def vase_problem(bad: dict) -> str:
+    """One vase_layers()["bad"] entry in words: "2 islands, 1 hole(s) inside"."""
+    return ", ".join(x for x in (f"{bad['islands']} islands" if bad["islands"] > 1 else "",
+                                 f"{bad['holes']} hole(s) inside" if bad["holes"] else "") if x)
+
+
 # rotations (axis, degrees) that turn each direction to +Z
 _TO_UP = {"+X": ((0, 1, 0), -90), "-X": ((0, 1, 0), 90), "+Y": ((1, 0, 0), 90), "-Y": ((1, 0, 0), -90),
           "-Z": ((1, 0, 0), 180)}
@@ -903,6 +942,7 @@ def part_metrics(part: Part, p: Params, show: list[str] | None = None, up: str =
     m["walls"] = walls(part, p)
     m["hole_edges"] = hole_edges(part, p, hole_list)
     m["slenderness"] = slenderness(part, faces)
+    m["vase"] = vase_layers(part, faces, mesh)
     return m
 
 
@@ -1012,6 +1052,22 @@ def findings(style: Style, m: dict, eco: dict, p: Params, show: list[str], edges
         add("max_z_slenderness", f"{sl['run_mm']:g} mm stands on a {sl['area_mm2']:g} mm2 section (z {sl['z']:g}; "
                                  f"slenderness {sl['value']:g} > {s.max_z_slenderness:g}): if it is pulled or bent "
                                  "there, it breaks along a layer; lay it down so the load runs along the layers")
+    v = m["vase"]
+    if s.vase_mode_note and v["layers_sampled"]:
+        if v["bad_count"]:
+            b = v["bad"][0]
+            add("vase_mode_note", f"not for vase mode: {v['bad_count']} of {v['layers_sampled']} sampled layers are not one "
+                                  f"closed contour (first at z {b['z']:g}: {vase_problem(b)}); vase mode prints one wall per layer"
+                                  + ("; a hollow modeled in: model the outside as a solid, the slicer makes the wall"
+                                     if b["islands"] == 1 else ""))
+        elif v["max_lean"] is not None and v["max_lean"] > p.max_overhang:
+            add("vase_mode_note", f"every layer is one contour, but the wall leans up to {v['max_lean']:g} deg from vertical "
+                                  f"(limit {p.max_overhang:g}): a single wall overhangs inward as well as outward and vase "
+                                  "mode prints no supports")
+        else:
+            lean = f" and the wall leans at most {v['max_lean']:g} deg" if v["max_lean"] is not None else ""
+            add("vase_mode_note", f"every layer is one closed contour{lean}: it can print in vase mode "
+                                  "(PRINT = {'vase': True, 'why': ...}: the slicer makes one wall, no top)")
     return out
 
 
@@ -1104,6 +1160,9 @@ def text(res: dict) -> str:
             f"  symmetry: x {m['symmetry']['x']}, y {m['symmetry']['y']}; seam corners on "
             f"{m['seam_corners']['share']:.0%} of layers; water traps {m['water']['cm3']} cm3 ({m['water']['up']} up)",
             _strength_line(m),
+            f"  vase mode: {m['vase']['single_share']:.0%} of layers one closed contour"
+            + (f" (first other at z {m['vase']['bad'][0]['z']:g})" if m["vase"]["bad"] else "")
+            + (f"; wall leans up to {m['vase']['max_lean']:g} deg" if m["vase"]["max_lean"] is not None else ""),
         ]
     eco = res["economy"]
     lines.append(f"\neconomy: {eco['parts']} part(s), {eco['faces']} faces, screw sizes "

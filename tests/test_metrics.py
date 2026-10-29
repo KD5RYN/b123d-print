@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from build123d import Align, Axis, Box, Cylinder, Location, Sphere, chamfer, fillet
+from build123d import Align, Axis, Box, Cone, Cylinder, Location, Sphere, chamfer, fillet
 
 from b123d_print import metrics as M
 from b123d_print.config import Settings
@@ -258,6 +258,32 @@ def test_findings_fire_at_the_thresholds():
     pin = Cylinder(3, 40, align=BED) + Box(30, 30, 3, align=BED)
     assert "DS-T1" in _rules(M.design_metrics(None, None, {"": pin}, s, style="structural"), "note")
     assert "DS-T1" not in _rules(M.design_metrics(None, None, {"": pin}, s, style="functional"))
+
+
+def test_vase_layers():
+    """M16: one closed contour per layer, and the wall's steepest lean either way (DS-D1, DS-D3)."""
+    def vase(part):
+        return M.vase_layers(part, M._sections(part, 0.2), M.Mesh(part))
+
+    cyl = vase(Cylinder(30, 80, align=BED))
+    assert cyl["single_share"] == 1.0 and cyl["bad_count"] == 0 and cyl["max_lean"] == pytest.approx(0, abs=0.5)
+    hollow = vase(cup())  # a modeled hollow: a hole in every layer above the floor
+    assert hollow["bad_count"] > 0 and hollow["bad"][0]["holes"] == 1 and hollow["bad"][0]["islands"] == 1
+    two = vase(Box(10, 10, 20, align=BED) + Box(10, 10, 20, align=BED).moved(Location((30, 0, 0))))
+    assert two["single_share"] == 0.0 and two["bad"][0]["islands"] == 2
+    inward = vase(Cone(40, 10, 60, align=BED))  # closes in: overhangs inward as a single wall
+    assert inward["max_lean"] == pytest.approx(math.degrees(math.atan(30 / 60)), abs=1.5)
+    s = Settings()
+    ok = M.design_metrics(None, None, {"": Cylinder(30, 80, align=BED)}, s, style="decorative")
+    assert "DS-D1" in _rules(ok, "note") and "it can print in vase mode" in [
+        f["message"] for f in ok["findings"] if f["rule"] == "DS-D1"][0]
+    assert "vase mode: 100% of layers" in M.text(ok)
+    no = M.design_metrics(None, None, {"": cup()}, s, style="decorative")
+    msg = [f["message"] for f in no["findings"] if f["rule"] == "DS-D1"][0]
+    assert msg.startswith("not for vase mode") and "model the outside as a solid" in msg
+    steep = M.design_metrics(None, None, {"": Cone(40, 5, 20, align=BED)}, s, style="decorative")
+    assert "leans up to" in [f["message"] for f in steep["findings"] if f["rule"] == "DS-D1"][0]
+    assert "DS-D1" not in _rules(M.design_metrics(None, None, {"": cup()}, s, style="functional"))
 
 
 def test_edges_preference():

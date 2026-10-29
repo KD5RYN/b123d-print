@@ -17,7 +17,9 @@ lean on the sourced rules of [BEST_PRACTICES](BEST_PRACTICES.md) (fetched earlie
 they add were first read as search-result text only; on 2026-10-19 the reachable ones were
 fetched and each cited claim checked against the page (four were corrected). Those still
 unreachable (bot protection or 403) stay marked *(search, not fetched)*: they only support a
-claim another source already makes, or the claim is labeled provisional.
+claim another source already makes, or the claim is labeled provisional. The decorative rules
+(§3.6, 2026-10-29) were checked against the fetched slicer pages and lithophane guides; the one
+lamp-shade heat source could not be fetched and its numbers are provisional.
 
 ## 1. How to read this
 
@@ -86,7 +88,7 @@ Source keys are listed under [Sources](#sources).
 
 ---
 
-## 3. Cost, rugged, handheld, structural and organic rules
+## 3. Cost, rugged, handheld, structural, organic and decorative rules
 
 ### 3.1 Least cost (filament and time)
 
@@ -163,11 +165,27 @@ primitives.
 | DS-O4 | **A few defining features and a little asymmetry, not lots of small detail.** The curve, the ridges, the stem and the tip make a banana; small detail below a few line widths does not print and clutters the form; a perfect mirror looks manufactured. | Definition (ours). DS-G7: symmetry is a style choice, not a quality. DS-G2: economy. Detail size: BP-X2 (strokes >= 2 line widths). | definition | **r** | Rubric. Symmetry (M8) is reported, never judged for this style (no `min_symmetry`). |
 | DS-O5 | **Print an organic part so its curves print well**: lay the long curve along the layers, cut a flat base for bed contact (`flat_base`), tree (organic) supports under the curves, variable layer height for gently domed tops. | DS-H2 (domed tops, organic supports: CURVI19, LIV17, 3DJAKE-VLH, PRUSA-ORG), DS-S1 (stepping on shallow slopes), DS-T1 (a long thin part across the layers breaks on a layer line), BP-B1 (first layer). | evidence | **r** | Rubric; M5 supports and M6 stepping as usual; the curved-supports note (DS-H2). |
 
+### 3.6 Decorative / vase
+
+Parts that are looked at more than handled: vases, planters, lamp shades, ornaments. Twisted and
+spiral bodies, surface patterns, and single-wall **vase mode** (PrusaSlicer, OrcaSlicer and
+Bambu Studio call it "Spiral vase", Cura "Spiralize Outer Contour"), which has rules of its own.
+
+| # | Rule | Evidence | Kind | Class | Proposed behavior |
+|---|---|---|---|---|---|
+| DS-D1 | **Vase mode prints a solid model as one continuous wall**: one perimeter climbing in a spiral, no top layers, 0 % infill, no supports; only the bottom layers are solid. So the model is the solid outside shape (a modeled hollow makes the slicer try an inside and an outside wall), and **every layer must be one closed contour**: no second island (a handle, a foot), nothing inside, no opening. One object per print, or sequential printing. | PRUSA-LP ("a continuous single outline container, gradually increasing the Z height"; one perimeter, 0 % infill, no top, supports off; model the outside only; one object at a time). CURA-DEF `magic_spiralize`: turns "a solid model into a single walled print with a solid bottom", only "when each layer only contains a single part". ORCA-SPECIAL: "a single-walled print with solid bottom layers". | evidence | **m** + **r** | Metric: M16, the share of layers that are one closed contour; the decorative style notes whether the part can print in vase mode. A script says it does with `PRINT = {"vase": True}`: the print sheet then gives the slicer settings and lists the layers that cannot. |
+| DS-D2 | **The vase-mode wall is one line**: its thickness is the outer wall's line width, set in the slicer, not in the model. Widen that line (PrusaSlicer's example: 0.45 → 0.6 mm at a 0.4 mm nozzle) or use a larger nozzle for a thicker, stiffer, more watertight vase. Prints are not reliably watertight: a vase for water wants a liner. | PRUSA-LP (a wider external perimeter for "a thicker/stronger/watertight vase", "e.g. from 0.45 to 0.6") **(1 src for the numbers)**. PRUSA-WATER (prints are not watertight). QIDI-LAMP *(vendor; search, not fetched)*: larger nozzles for vase-mode shades. | evidence | **r** | The print sheet names the line width; rubric for vases that hold water. |
+| DS-D3 | **No supports in vase mode, so the wall must stay within the overhang limit both ways.** A single wall leaning inward (a shoulder that closes in) has nothing under it, just like a flare; a flat ledge or a closed top cannot print. A twist tilts the flanks, a taper the whole wall. | PRUSA-LP (supports and top layers off in vase mode). BP-O1 (design to 45°). *Synthesis (ours):* the inward lean follows from a one-line wall with nothing inside to rest on. | evidence | **m** + **r** | M16 reports the steepest lean of the wall from vertical, either way (the top face apart); the `vase_shell` recipe refuses a curve past the limit. |
+| DS-D4 | **Vase mode leaves no layer-change seam**: the Z rise is spread around the spiral. The slicers' smoothing hides the rest, also on sloped walls, and blurs fine surface detail. Outside vase mode a round decorative part needs a corner for its seam (DS-S3): a flute or a ridge. | PRUSA-LP (no point where the layer changes "except the first N bottom solid layers"). ORCA-SPECIAL (Smooth Spiral: "no visible seams even on non-vertical walls"). CURA-DEF `smooth_spiralized_contours` ("smoothing will tend to blur fine surface details"). | evidence | **r** | Print-sheet note; rubric. |
+| DS-D5 | **Decorative form reads from a step back: a few strong features** (a twist, a taper, flutes, ribs, facets) rather than fine detail; pattern features at least 2 line widths across and deep enough to cast a shadow. Texture and grooves also hide layer lines. | *Definition (ours)* for what reads from print distance. Size: BP-X2 (strokes ≥ 2 line widths, for text). Texture: the DS-S5 sources (STR-SURF, HACKADAY-LINES, PRUSA-FUZZY). Blur: CURA-DEF (DS-D4). | definition + evidence | **r** | Rubric: name a pattern's width and depth in line widths; 1–3 mm deep is a starting value *(proposed, ours)*. |
+| DS-D6 | **Lamp shades: the light through a wall follows its thickness.** Thin areas glow, thick ones are dark, so an even wall glows evenly and uneven thickness shows as bands; a lithophane uses it on purpose (thinnest ~0.4–0.8 mm, thickest ~2–3.2 mm; white or natural filament, calibrated per filament). One wall (vase mode) passes more light than several walls, which reflect it inside. | LITHO-MAKER (0.8 / 3.0 mm defaults; white or natural PLA). JLC-LITHO (total ~2–3 mm, thinnest near 0.4 mm; "Dark pixel, thick plastic"). ITSLITHO (3.2 mm maximum in its example; white and grey work best; a calibration print per filament). Several walls: QIDI-LAMP *(vendor; search, not fetched)* **(1 src)**. | evidence | **r** | Rubric for lamp shades: thin, even walls, or a deliberate lithophane. |
+| DS-D7 | **Heat: LED bulbs only, an air gap to the bulb, and the material by temperature.** PLA softens at 52–60 °C (DS-R1); in a closed shade an LED's driver can raise the air to ~50 °C; keep ≥ 20 mm between the bulb and the shade, else PETG (Tg ~75–80 °C), ASA or PC; filament-style LED bulbs run hot at the base. | PLA: the DS-R1 sources (BAMBU-PLA, PM-PLA, PRUSA-MAT). The rest: QIDI-LAMP *(vendor; search, not fetched)* **(1 src)**. | evidence | **i** | Provisional note for lamp shades: ask the bulb type and wattage, name the gap and the material in the report. |
+
 ---
 
 ## 4. The styles
 
-A **style** is a short name the user picks for a part; there are seven. It decides which metrics the review
+A **style** is a short name the user picks for a part; there are eight. It decides which metrics the review
 highlights, which rubric questions it asks and which thresholds produce a **suggest**. All
 styles also apply the general rules (§2) at **note** level. The definitions are ours (§1); the
 rules they cite are sourced.
@@ -322,7 +340,27 @@ primitives; the `banana` example is the reference.
   in the middle, taper the ends"; "it rests on a line: `flat_base` 3 mm"; "print it lying down with
   tree supports and variable layer height".
 
-### 4.9 Where the style lives
+### 4.9 decorative / vase
+
+*Looked at more than handled: vases, planters, lamp shades, ornaments.* Not `soft` (held in the
+hand) and not `modern` (few elements): this style is about a form that reads from a step back
+and about vase mode. `vase`, `planter`, `lamp_shade` and `ornamental` are accepted too.
+
+- **Looks for:** a few strong features that read from print distance (DS-D5); shallow slopes
+  on show faces (DS-S1); vase mode: one closed contour per layer, the lean of the wall both ways,
+  the one-line wall, no seam (DS-D1..D4); a seam corner when not in vase mode (DS-S3); lamp
+  shades: thin even walls (DS-D6), bulb, air gap and material (DS-D7, DS-R1).
+- **Metrics:** M16 vase-mode layers and lean, M6 stepping, M10 seam corners, M5 supports.
+- **Suggest when** *(proposed, ours)*: > 20 % of the up-facing area in the stepping band (as
+  functional). **Note** whether the part can print in vase mode (M16: every layer one closed
+  contour and the wall within the overhang limit), a missing seam corner (M10 < 0.1), and supports
+  on curved faces.
+- **Typical suggestions:** "The 0.6 mm ribs vanish at 0.2 mm layers: make them 2 mm wide and
+  1.5 mm deep"; "The handle is a second island: drop it or print without vase mode"; "The
+  shoulder closes in at 55° from vertical: keep it under 45° in vase mode"; "6 mm from the bulb:
+  leave 20 mm (provisional) and print it in PETG".
+
+### 4.10 Where the style lives
 
 1. **Part script:** `STYLE` in `Dims` (a variant can override it:
    `VARIANTS = {"outdoor": dict(STYLE="rugged")}`). The template has `STYLE: str = ""`, which
@@ -330,9 +368,10 @@ primitives; the `banana` example is the reference.
 2. **Workspace:** `style = "modern"` in `b123d-print.toml` for a project whose parts share a look.
 3. **Default:** `functional`.
 
-Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic` (also
-accepted: `minimal`, `least cost`, `outdoor`, `handheld`, `strong`, `load_bearing`, `heavy_duty`,
-`natural`, `sculpted`, `figurine`, and `industrial`, which means functional). Anything else
+Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic`,
+`decorative` (also accepted: `minimal`, `least cost`, `outdoor`, `handheld`, `strong`,
+`load_bearing`, `heavy_duty`, `natural`, `sculpted`, `figurine`, `vase`, `planter`, `lamp_shade`,
+`ornamental`, and `industrial`, which means functional). Anything else
 is an error that lists them. When a user starts a new part and has said nothing about looks,
 the AI asks **once**; a blank answer means functional. One style per part, no modifiers; the
 cost numbers are always shown (decision 2).
@@ -363,7 +402,7 @@ design_metrics(name, variant=None, style="", up="", as_json=False)     # MCP
 b123d-print metrics [parts...] [--variant K] [--style S] [--up +Y] [--json]   # CLI
 ```
 
-It builds the part (in the sandbox, over MCP), computes M1–M15 for each printable part, then
+It builds the part (in the sandbox, over MCP), computes M1–M16 for each printable part, then
 the findings the style's thresholds trigger (§4), each citing its rule. It never fails and
 changes nothing.
 
@@ -488,7 +527,16 @@ in mind for remixes.
   bigger than 1.5 × its area, divided by the square root of its area. A round post of height H
   and diameter D scores 1.13 H / D; a tapering tip scores low.
 
-### 5.9 Tests
+### 5.9 M16: vase-mode layers
+
+**M16 vase mode** (DS-D1, DS-D3): at M10's XY sections, the share of layers that are one closed
+contour (one face, no holes), with the first ones that are not (their height, islands and
+holes); and from the mesh, the steepest lean of the wall from vertical, inward or outward (the
+bed face and a flat top face apart: the slicer drops the top). The decorative style notes
+whether the part can print in vase mode; the print sheet repeats the check for a part whose
+`PRINT` says `vase`.
+
+### 5.10 Tests
 
 `tests/test_metrics.py`, on shapes with known answers: a 60 × 40 × 20 box is all sharp,
 symmetric, with seam corners on every layer; filleted vertical edges give exactly their 80 mm
@@ -498,7 +546,8 @@ with a drain hole or turned over; a T on a post has the analytic support column;
 estimate equals the shell formula for a cube and grows with infill; the time rule is the stated
 formula; the findings fire at the thresholds; styles and directions parse; an L has one inside edge, and its sharp, filleted and wall
 measurements are exact; a hole 5 mm from an end and a boss; a post on a plate has the analytic
-slenderness. Sanity tests only:
+slenderness; a cylinder is one contour on every layer, a cup and two posts are not, and a cone's
+lean is its half-angle. Sanity tests only:
 no slicer fixtures.
 
 ---
@@ -545,7 +594,7 @@ carries is `src/b123d_print/data/design_review.md`.
 
 ## 8. Implementation
 
-- `src/b123d_print/metrics.py`: M1–M15, the style findings and the text report (cites `DS-*`).
+- `src/b123d_print/metrics.py`: M1–M16, the style findings and the text report (cites `DS-*`).
 - `src/b123d_print/styles.py` and `data/styles/*.toml`: the style files, their lookup
   (workspace, user, built-in), `based_on`, and errors for unknown fields; `b123d-print styles`.
 - Settings: `style`, `filament_price`, `print_flow`; `density` in material profiles. Printer
@@ -559,8 +608,9 @@ carries is `src/b123d_print/data/design_review.md`.
 ## 9. Decisions (review of 2026-10-18)
 
 1. **Industrial** is folded into functional as `EDGES = "chamfer"` with exposed standard
-   fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19, and a seventh,
-   `organic`, on 2026-10-29: how a natural object is modeled, not a taste for curves, §4).
+   fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19, a seventh,
+   `organic`, on 2026-10-29: how a natural object is modeled, not a taste for curves, §4, and an
+   eighth, `decorative`, the same day).
 2. **One style per part**, no modifiers; the cost numbers are always shown.
 3. **STYLE lives in `Dims`** (variants can override it), then the workspace, then functional.
 4. **No speed classes**, and printer profiles stay as they come from OrcaSlicer; one optional
@@ -721,6 +771,16 @@ FICTIV-SNAP, …) are listed on that page.
 - PRUSA-INFPAT *(primary; fetched 2026-10-19)*: Prusa, "Infill patterns", https://help.prusa3d.com/article/infill-patterns_177130
 - 3ERP *(vendor; fetched 2026-10-19)*: living hinges, https://www.3erp.com/design-tips/how-to-design-living-hinges-for-injection-molding-or-3d-printing/
 - BAMBU-STRUCT *(vendor; search, not fetched)*: Bambu Lab "Structural Parts" filament collection (the style's name), https://bambulab.com/en/filament/collections/structural-parts
+
+**Decorative / vase** (2026-10-29). PRUSA-LP and CURA-DEF are listed above and in
+BEST_PRACTICES; both were fetched again for their vase-mode text (CURA-DEF from the raw
+definitions file).
+
+- ORCA-SPECIAL *(primary; fetched 2026-10-29)*: OrcaSlicer wiki, special mode (spiral vase, smooth spiral), https://github.com/SoftFever/OrcaSlicer/wiki/others_settings_special_mode
+- LITHO-MAKER *(community tool docs; fetched 2026-10-29)*: Lithophane Maker settings, https://superhivemarket.com/products/lithophane-maker/docs
+- JLC-LITHO *(vendor; fetched 2026-10-29)*: JLC3DP, "Lithophane 3D print", https://jlc3dp.com/blog/lithophane-3d-print
+- ITSLITHO *(vendor; fetched 2026-10-29)*: ItsLitho, slicer settings for lithophanes, https://itslitho.com/?p=3848
+- QIDI-LAMP *(vendor; search, not fetched: 429)*: QIDI, "Choosing translucent filaments for heat-safe lamp shades", https://qidi3d.com/blogs/print-lab/translucent-filaments-heat-safe-lampshades
 
 **Unreachable or gated** (not used): Thompson et al. 2016 full text (403); Diegel, Nordin &
 Motte book (login); Kumke et al. 2016 (not found); Markowsky 1992 and Green 1995 (bot check /
