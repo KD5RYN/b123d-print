@@ -21,6 +21,7 @@ from build123d import Part
 from . import checks as ck
 from . import intent
 from . import metrics as mt
+from .render import bbox
 
 STRUCTURAL_WALLS = "4-6 walls, 15-30 % gyroid infill"  # structural style review, DS-T2 / DS-T4
 SCREW_WALLS = "3-4 or more walls"  # around screw holes and bosses, BP-W3 / DS-T6
@@ -145,7 +146,7 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
     named = {(k or "part"): v for k, v in parts.items()}
     per = {n: piece_numbers(v, p, settings.tip_speed) for n, v in named.items()}
     for n, m in per.items():  # supports right at the bed are bed-edge flares, listed apart
-        zmin = named[n].bounding_box().min.Z
+        zmin = bbox(named[n]).min.Z
         m["high"] = [f for f in m["supports"]["faces"] if f["center"][2] >= zmin + NEAR_BED]
         m["low"] = [f for f in m["supports"]["faces"] if f["center"][2] < zmin + NEAR_BED]
     many = len(per) > 1

@@ -21,8 +21,9 @@ import inspect
 import math
 from dataclasses import dataclass, field
 
-from build123d import (Align, Axis, Box, Compound, Cone, Cylinder, Face, FontStyle, Part, Plane, Polygon, Pos, Rectangle,
-                       RegularPolygon, Rot, Text, extrude, fillet, make_face, offset)
+from build123d import (Align, Axis, Bezier, Box, Circle, Compound, Cone, Cylinder, Edge, Face, FontStyle, GeomType, Keep,
+                       Part, Plane, Polygon, Pos, Rectangle, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere, Spline, Text,
+                       Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, scale, section, split, sweep)
 
 from .pcb import pcb_board, pcb_mounting_pattern, pcb_standoff
 
@@ -504,6 +505,212 @@ def demo_gusset() -> Part:
 
 
 # ---------------------------------------------------------------------------------------------
+# Organic shapes: sections along a curve, blends, a flat base
+
+
+def _frames(path: Edge | Wire, us, x_dir=(0, 0, 1), samples: int = 64) -> list[Plane]:
+    """Planes perpendicular to `path` at the length fractions `us` (0 = start, 1 = end). Their x
+    axes are carried along the path without twisting (parallel transport), starting from x_dir
+    (made perpendicular to the path's start; Z by default, X when the path starts along Z)."""
+    t = (path % 0).normalized()
+    x = Vector(x_dir)
+    if abs(x.normalized().dot(t)) > 0.95:
+        x = Vector(1, 0, 0) if abs(t.X) < 0.95 else Vector(0, 1, 0)
+    x = (x - t * x.dot(t)).normalized()
+    out = {}
+    for u in sorted({i / samples for i in range(samples + 1)} | {float(u) for u in us}):
+        t = (path % u).normalized()
+        x = (x - t * x.dot(t)).normalized()  # short steps: projecting the last x keeps it twist-free
+        out[u] = Plane(origin=path @ u, x_dir=x, z_dir=t)
+    return [out[float(u)] for u in us]
+
+
+def _sections(sections) -> list[tuple[float, Face | Sketch]]:
+    """(length fraction, profile) pairs from what spine_loft and tapered_sweep take: (u, profile)
+    pairs, or bare profiles spread evenly from 0 to 1. A number is a circle of that diameter; 0 is a
+    point (None), allowed first or last."""
+    items = list(sections)
+    if len(items) < 2:
+        raise ValueError("give at least two sections")
+    if not all(isinstance(s, tuple) for s in items):
+        items = [(i / (len(items) - 1), s) for i, s in enumerate(items)]
+    out = []
+    for u, s in items:
+        if not 0 <= u <= 1:
+            raise ValueError(f"section position {u}: a fraction of the spine's length, 0 to 1")
+        out.append((float(u), (Circle(s / 2) if s > 0 else None) if isinstance(s, (int, float)) else s))
+    out.sort(key=lambda p: p[0])
+    if any(s is None for _, s in out[1:-1]):
+        raise ValueError("a point (0) can only be the first or the last section")
+    return out
+
+
+def spine_loft(spine: Edge | Wire, sections, x_dir=(0, 0, 1)) -> Part:
+    """A body lofted through cross-sections placed perpendicular to a curved `spine` (a Spline or
+    Bezier through the middle of the shape): fruit, bodies, limbs, handles that bulge. sections:
+    (u, profile) pairs, u the fraction of the spine's length (0 = start, 1 = end); a profile is a
+    Face or Sketch drawn on XY around the origin (its +X lands on the section's x axis, which
+    follows x_dir down the spine without twisting), or a number: a circle of that diameter. The
+    surface passes through every section and is smooth between them: give each section a
+    different size or shape so the body varies along its length. A 0 first or last closes the
+    end to a point; a few small sections close together before it make a blunt, rounded end (a
+    fruit's tip) instead of a flat cap with a sharp rim. Sections closer than their own size on
+    a tight bend make the loft fold: space them out or ease the bend."""
+    items = _sections(sections)
+    planes = _frames(spine, [u for u, _ in items], x_dir)
+    return loft([Vertex(pl.origin) if s is None else pl * s for pl, (_, s) in zip(planes, items)])
+
+
+def tapered_sweep(path: Edge | Wire, sections, x_dir=(0, 0, 1)) -> Part:
+    """A profile swept along `path` while it changes size or shape (build123d's
+    sweep(multisection=True)): stems, tentacles, horns, tails, curled handles. Unlike spine_loft
+    the body follows the path exactly, so use it for long thin shapes with few sections. sections
+    as in spine_loft: (u, profile) pairs or bare profiles spread evenly; a number is a circle of
+    that diameter. Give the first and last at u = 0 and 1. A tip should keep a little size (a
+    0.8 mm end is two lines wide and prints; a point does not)."""
+    items = _sections(sections)
+    if items[0][0] != 0 or items[-1][0] != 1:
+        raise ValueError("tapered_sweep: the first section at u = 0 and the last at u = 1")
+    if items[0][1] is None or items[-1][1] is None:
+        raise ValueError("tapered_sweep: a sweep cannot end in a point; give the tip a small size, or use spine_loft")
+    planes = _frames(path, [u for u, _ in items], x_dir)
+    return sweep([pl * s for pl, (_, s) in zip(planes, items)], path=path, multisection=True)
+
+
+def _outline(face: Face, plane: Plane, n: int) -> list[Vector]:
+    """n points evenly spaced along the outer outline of `face`, in `plane`'s local coordinates,
+    counter-clockwise, starting at the outline's own start (its seam, where a loft joins it)."""
+    w = face.outer_wire()
+    pts = [plane.to_local_coords(w @ (i / (4 * n))) for i in range(4 * n)]
+    area = sum(a.X * b.Y - b.X * a.Y for a, b in zip(pts, pts[1:] + pts[:1]))
+    if area < 0:
+        pts = pts[:1] + pts[:0:-1]
+    # resample by length so both ends of a blend pair up point for point
+    seg = [(b - a).length for a, b in zip(pts, pts[1:] + pts[:1])]
+    total, out, acc, j = sum(seg), [], 0.0, 0
+    for i in range(n):
+        target = total * i / n
+        while acc + seg[j] < target:
+            acc += seg[j]
+            j += 1
+        f = (target - acc) / seg[j] if seg[j] else 0.0
+        a, b = pts[j], pts[(j + 1) % len(pts)]
+        out.append(a + (b - a) * f)
+    return out
+
+
+def _cut_face(body: Part, plane: Plane) -> Face:
+    """The face a split left on `plane` (the largest, if the plane cut the body in several places)."""
+    on = [f for f in body.faces() if f.geom_type == GeomType.PLANE and abs(f.normal_at().dot(plane.z_dir)) > 0.999
+          and abs((f.center() - plane.origin).dot(plane.z_dir)) < 1e-4]
+    if not on:
+        raise ValueError(f"organic_blend: the plane at {tuple(round(v, 2) for v in plane.origin)} misses the body")
+    return max(on, key=lambda f: f.area)
+
+
+def organic_blend(a: Part, b: Part, at_a: Plane, at_b: Plane, bulge: float = 0.0, steps: int = 4,
+                  points: int = 48) -> Part:
+    """Join two bodies with a smooth lofted collar instead of a fillet (OpenCascade fillets on
+    curved bodies often fail): a body to a stem, a head to a neck, a limb to a torso. at_a and
+    at_b are planes across each body where the collar starts; each one's +Z points out of its
+    body, towards the other. Each body is cut there (the part beyond its plane is dropped), and a
+    loft through `steps` sections joins the two cuts. The collar leaves each cut along its plane's
+    +Z and goes on tapering or swelling as the body did there, so the join has no crease. bulge:
+    how much the middle of the collar swells (0.2 = 20 %; negative pinches it, like a neck).
+    Returns one solid. The cut outlines should be roughly convex (round or soft-cornered)."""
+    a_cut = split(a, at_a, keep=Keep.BOTTOM)
+    b_cut = split(b, at_b, keep=Keep.BOTTOM)
+    p0, p1 = at_a.origin, at_b.origin
+    gap = (p1 - p0).length
+    if gap < 1e-6:
+        raise ValueError("organic_blend: at_a and at_b are at the same point")
+    t0, t1 = at_a.z_dir * gap, -at_b.z_dir * gap  # Hermite end tangents: leave a, enter b
+    path = Bezier(p0, p0 + t0 / 3, p1 - t1 / 3, p1)
+    us = [i / (steps + 1) for i in range(steps + 2)]
+    planes = _frames(path, us, at_a.x_dir)
+    start, end = planes[0], planes[-1]
+    fa, fb = _cut_face(a_cut, at_a), _cut_face(b_cut, at_b)
+    pa, pb = _outline(fa, start, points), _outline(fb, end, points)
+    # how each body's outline changes per mm towards the collar, from a section `h` behind its cut,
+    # scaled to the collar's length: the Hermite tangents of the outline
+    h = min(1.0, gap / 4)
+    back_a = section(a_cut, Plane(origin=p0 - at_a.z_dir * h, x_dir=start.x_dir, z_dir=start.z_dir)).faces()
+    back_b = section(b_cut, Plane(origin=p1 - at_b.z_dir * h, x_dir=end.x_dir, z_dir=end.z_dir)).faces()
+    ma = mb = [Vector(0, 0, 0)] * points
+    if back_a:
+        qa = _outline(max(back_a, key=lambda f: f.area), Plane(origin=start.origin - start.z_dir * h, x_dir=start.x_dir,
+                                                               z_dir=start.z_dir), points)
+        ma = [(p - q) * (path.length / h) for p, q in zip(pa, qa)]
+    if back_b:
+        qb = _outline(max(back_b, key=lambda f: f.area), Plane(origin=end.origin + end.z_dir * h, x_dir=end.x_dir,
+                                                               z_dir=end.z_dir), points)
+        mb = [(q - p) * (path.length / h) for p, q in zip(pb, qb)]
+    faces = [fa]
+    for u, pl in zip(us[1:-1], planes[1:-1]):
+        h00, h10, h01, h11 = 2 * u**3 - 3 * u**2 + 1, u**3 - 2 * u**2 + u, 3 * u**2 - 2 * u**3, u**3 - u**2
+        s = 1 + bulge * math.sin(math.pi * u)
+        pts = [p * h00 + m * h10 + q * h01 + n * h11 for p, m, q, n in zip(pa, ma, pb, mb)]
+        cx, cy = sum(p.X for p in pts) / points, sum(p.Y for p in pts) / points
+        loc = [pl.from_local_coords(((p.X - cx) * s + cx, (p.Y - cy) * s + cy, 0)) for p in pts]
+        faces.append(Face(Wire([Spline(*loc, periodic=True)])))
+    collar = loft(faces + [fb])
+    # The collar meets each body tangentially along the cut's edge: a boolean fuse spends tens of
+    # seconds on that near-tangent intersection. The collar was lofted from the cuts' own edges,
+    # so sewing the faces into one shell (dropping the cut faces) joins them exactly, at once.
+    caps = [_cut_face(collar, at_a), _cut_face(collar, Plane(origin=p1, z_dir=-at_b.z_dir))]
+    skin = [f for f in a_cut.faces() if not f.is_same(fa)] + [f for f in b_cut.faces() if not f.is_same(fb)]
+    skin += [f for f in collar.faces() if not any(f.is_same(c) for c in caps)]
+    try:
+        out = Solid(Shell(skin))
+        if out.is_valid and out.volume > 0 and abs(out.volume - (a_cut.volume + collar.volume + b_cut.volume)) < 1e-3 * out.volume:
+            return Part(Compound([out]).wrapped)
+    except Exception:  # noqa: BLE001 - the faces did not close into one solid: fuse them instead
+        pass
+    return a_cut + collar + b_cut
+
+
+def flat_base(part: Part, depth: float) -> Part:
+    """Cut a flat underside `depth` mm above the part's lowest point and put it on Z=0, so a
+    rounded part stands and sticks to the bed. A deeper cut gives more bed contact and less
+    overhang around it; about a quarter of the section's height is a good start on a round body.
+    Check the contact with section(Z=0.1): a strip under ~5 mm wide may need a brim."""
+    if depth <= 0:
+        raise ValueError("flat_base: depth must be > 0")
+    from b123d_print.render import bbox  # the true lowest point: OCCT's box of a cut lofted body can be lower
+
+    z = bbox(part).min.Z + depth
+    kept = split(part, Plane.XY.offset(z), keep=Keep.TOP)
+    return Pos(0, 0, -z) * kept
+
+
+def demo_spine_loft() -> Part:
+    """An eggplant lying on its side: five sections of different sizes along a spine that bends
+    up at the stem end, cut flat underneath so it stands."""
+    spine = Spline((0, 0, 0), (40, 0, -3), (70, 0, 8), tangents=((1, 0, -0.1), (1, 0, 0.6)))
+    body = spine_loft(spine, [(0, 10), (0.2, 26), (0.5, 30), (0.85, 18), (1, 8)])
+    return flat_base(body, 4)
+
+
+def demo_tapered_sweep() -> Part:
+    """A horn standing on its base, curling over: 18 mm across at the bed, 2 mm at the tip."""
+    path = Spline((0, 0, 0), (4, 0, 20), (18, 0, 36), tangents=((0, 0, 1), (1, 0, 0.6)))
+    return tapered_sweep(path, [(0, 18), (0.6, 9), (1, 2)])
+
+
+def demo_organic_blend() -> Part:
+    """A stem joined to a round body by a collar that flows into both: no fillet, no corner."""
+    body = flat_base(scale(Sphere(15), (1.0, 1.0, 0.8)), 3)
+    stem = Pos(0, 0, 30) * Cylinder(3, 14)
+    top = body.bounding_box().max.Z
+    return organic_blend(body, stem, Plane.XY.offset(top - 3), Plane(origin=(0, 0, 26), z_dir=(0, 0, -1)), bulge=0.1)
+
+
+def demo_flat_base() -> Part:
+    """An egg on its side, cut flat 2.5 mm up so it stands."""
+    return flat_base(scale(Sphere(15), (1.3, 1.0, 1.0)), 2.5)
+
+
+# ---------------------------------------------------------------------------------------------
 # Registry
 
 
@@ -702,6 +909,58 @@ RECIPES = {r.name: r for r in [
   bracket takes the bending load off the corner. Fillet the corner too (BP-R1).
 - No source gives rib height or spacing for FDM; the defaults here are a starting point.
 """, ["[BP-R1, R4, R5](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"]),
+    Recipe("spine_loft", "Body lofted along a curved spine", [spine_loft], demo_spine_loft, """
+- For natural shapes (fruit, bodies, limbs, horns that bulge): model them from cross-sections along
+  a curve, not from boxes, cylinders and spheres fused together (DS-O1). Give each section its own
+  size and shape so the body changes along its length (DS-O2).
+- Five to ten sections are usually enough: each one adds faces and build time, and sections closer
+  than their own size on a tight bend fold the loft. A 0 at the start or end closes it to a point;
+  a few small sections close together before that make a blunt, rounded tip (DS-O3).
+- Lay the long curve along the layers (a long thin part across them breaks on a layer line,
+  BP-S4), cut a flat base under it (flat_base) and expect tree supports under the curves that
+  overhang past 45 degrees (BP-O1, DS-O5, DS-H2).
+""", ["[DS-O1, O2, O3, O5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) organic design style",
+      "[BP-O1, S4](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs, strength across the layers",
+      "[build123d loft](https://build123d.readthedocs.io/en/latest/operations.html) (OpenCascade BRepOffsetAPI_ThruSections)"],
+           helpers=[_frames, _sections]),
+    Recipe("tapered_sweep", "Tapered sweep along a path", [tapered_sweep], demo_tapered_sweep, """
+- Stems, tentacles, horns, tails, curled handles: one profile changing size or shape along a
+  path that the body follows exactly (build123d `sweep(multisection=True)`).
+- Keep the tip printable: about 0.8 mm across or more (two lines at a 0.4 mm nozzle, BP-W1); a
+  sweep cannot end in a point (spine_loft can). A curl that leans more than 45 deg from vertical
+  needs supports (BP-O1), or lay it down (DS-O5). A tall thin horn standing up is weak across the
+  layers and wobbles: 5 x its diameter at most (BP-W6), or lay it down.
+""", ["[DS-O1, O5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) organic design style",
+      "[BP-W1, W6, O1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) thin features, posts, overhangs",
+      "[build123d sweep](https://build123d.readthedocs.io/en/latest/operations.html) (OpenCascade BRepOffsetAPI_MakePipeShell)"],
+           helpers=[_frames, _sections]),
+    Recipe("organic_blend", "Smooth lofted join of two bodies", [organic_blend], demo_organic_blend, """
+- Joins a stem to a body, a head to a neck, a limb to a torso with a lofted collar that carries on
+  each body's own taper, instead of a fillet: OpenCascade fillets on lofted and swept bodies often
+  fail, and a sharp corner where two bodies meet reads as two parts stuck together (DS-O3).
+- Put each plane a little way into its body, across it, +Z pointing out towards the other body;
+  the collar spans the gap. Wider gaps give gentler joins. `bulge` swells (+) or pinches (-) its
+  middle.
+- The faces are sewn, not fused, so it is quick; it falls back to a boolean fuse when they do not
+  close.
+- A thin stem joined to a body is weak across the layers: lay it in the layers where it can
+  (BP-S4), and keep the collar at least as thick as the stem.
+""", ["[DS-O3](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) blended joins",
+      "[BP-S4](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) strength across the layers",
+      "[build123d loft](https://build123d.readthedocs.io/en/latest/operations.html), OpenCascade BRepBuilderAPI_Sewing"],
+           helpers=[_frames, _outline, _cut_face]),
+    Recipe("flat_base", "Flat base cut under a rounded part", [flat_base], demo_flat_base, """
+- A rounded part rests on a point or a line; cut a flat underside so it stands and the first layer
+  holds (DS-O5). About a quarter of the section's height is a good start; deeper gives more contact
+  and less overhang at the edge of the cut.
+- Check the contact with a section at Z = 0.1: a strip under ~5 mm wide may need a brim. The rim of
+  the cut is a rounded bed edge (the bed-edge check warns): the slicer's elephant-foot compensation
+  helps.
+- The part comes back on Z=0. OpenCascade's own bounding box of a cut lofted body still reaches
+  under the bed; b123d-print measures it from the faces (render.bbox), so the checks see it on the
+  bed.
+""", ["[DS-O5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) print organic parts with a flat base",
+      "[BP-B1, B2](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) first layer and bed edges"]),
 ]}
 
 

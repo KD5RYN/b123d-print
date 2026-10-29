@@ -1,6 +1,6 @@
 """Design styles: small TOML files that say what the design review looks for.
 
-The built-in styles (functional, modern, least_cost, rugged, soft, structural) ship as the same
+The built-in styles (functional, modern, least_cost, rugged, soft, structural, organic) ship as the same
 kind of file a user writes. Lookup, first found wins:
 
   1. the workspace:  <workspace>/styles/<name>.toml
@@ -28,6 +28,7 @@ ALIASES = {"minimal": "modern", "modern/minimal": "modern", "least cost": "least
            "industrial": "functional",  # industrial = functional with EDGES = "chamfer"
            "strong": "structural", "load_bearing": "structural", "load-bearing": "structural",
            "load bearing": "structural",
+           "natural": "organic", "sculpted": "organic", "figurine": "organic", "organic/natural": "organic",
            "heavy_duty": "structural", "heavy-duty": "structural", "heavy duty": "structural", "structural/load-bearing": "structural"}
 EDGE_PREFS = ("", "chamfer", "fillet")
 

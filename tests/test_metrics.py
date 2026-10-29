@@ -308,3 +308,30 @@ def test_design_metrics_memory_on_a_lofted_part():
     assert r.returncode == 0, r.stderr[-2000:]
     grew_mb, secs = map(float, r.stdout.split()[-2:])
     assert grew_mb < 200 and secs < 5, (grew_mb, secs)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="measured with resource.getrusage")
+def test_design_metrics_stays_light_on_the_banana_example():
+    """#151: the bundled organic example (lofted, swept, blended, cut flat) through every metric,
+    in a fresh process: well under the server's memory cap. The time bound is a hang guard."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(M.__file__).parent / "examples" / "banana" / "banana.py"
+    code = "\n".join([
+        "import resource, sys, time",
+        "from b123d_print.project import load, dims, printables",
+        "from b123d_print.config import Settings",
+        "from b123d_print import metrics",
+        f"m = load({str(script)!r}); d = dims(m, ''); part = printables(m, d)['']",
+        "before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss",
+        "t = time.time(); metrics.design_metrics(m, d, {'': part}, Settings()); dt = time.time() - t",
+        "after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss",
+        "scale = 1 if sys.platform == 'darwin' else 1024",
+        "print((after - before) * scale / 2**20, dt)",
+    ])
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr[-2000:]
+    grew_mb, secs = map(float, r.stdout.split()[-2:])
+    assert grew_mb < 300 and secs < 60, (grew_mb, secs)

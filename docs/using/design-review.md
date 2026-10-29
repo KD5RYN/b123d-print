@@ -18,10 +18,15 @@ The rules it applies, with their sources, are on [Design styles and review](../D
 | `rugged` | outdoors, in a car, dropped | ASA (or PETG in shade) instead of PLA, no water traps, rounded corners, inserts and stainless screws |
 | `soft` | held in the hand | rounded edges, grips 30-40 mm across, no gently domed tops that show layer steps |
 | `structural` | brackets, mounts, clamps, hooks, hinges, gears, tool holders | the load along the layers, filleted inside corners (r ≥ half the wall), walls ≥ 3 lines and 4-6 walls in the slicer, gussets, inserts and washers |
+| `organic` | fruit, plants, animals, figurines, shells, sculpture | modeled from sections along curves (not boxes and cylinders), sections that vary along the length, joins blended with big lofted collars, a few features and a little asymmetry; printed lying along its curve on a flat base, tree supports, variable layer height |
 
 The industrial look (chamfers and exposed standard screws) is `functional` with
 `EDGES = "chamfer"`. `structural` is about the load path; `rugged` about sun, water and heat:
 a bracket outdoors may need both, so pick the one that matters more and ask about the other.
+`organic` (also `natural`, `sculpted`, `figurine`) is about how a natural object is modeled, not a
+taste for curves: start it from the [organic recipes](recipes.md#organic-shapes) (`spine_loft`,
+`tapered_sweep`, `organic_blend`, `flat_base`); the [`banana`](../scripts/examples.md#banana)
+example shows them together.
 You can also [write your own styles](#custom-styles).
 
 Pick one per part, in the script's `Dims`:

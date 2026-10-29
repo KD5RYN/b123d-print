@@ -47,6 +47,10 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `bed_chamfer` | Fillet-safe chamfer on bed edges | `bed_chamfer` | Chamfer every edge on the bed (Z=0) by `size` at 45 degrees, holes included, by cutting a |
 | `zip_tie_slot` | Cable and zip-tie slots | `zip_tie_slot`, `cable_slot` | A rectangular tunnel along X for a zip tie (width tie_w, thickness tie_t, + clearance per |
 | `gusset` | Ribs and gussets | `gusset`, `ribs` | A triangular gusset in the XZ plane for an inside corner between a floor (Z=0, extending to |
+| `spine_loft` | Body lofted along a curved spine | `spine_loft` | Cross-sections placed perpendicular to a curved spine and lofted: fruit, bodies, limbs |
+| `tapered_sweep` | Tapered sweep along a path | `tapered_sweep` | A profile swept along a path while it changes size or shape: stems, tentacles, horns |
+| `organic_blend` | Smooth lofted join of two bodies | `organic_blend` | Two bodies joined by a lofted collar that carries on each one's taper, instead of a fillet |
+| `flat_base` | Flat base cut under a rounded part | `flat_base` | A flat underside cut at the lowest point, the part put back on Z=0 so it stands |
 
 ## PCB supports and board stand-ins
 
@@ -187,6 +191,50 @@ standoff height, component clearance, full enclosure fit or long-term screw stre
 and physically validate the fit before printing the full enclosure or publishing it as a
 printed example.
 
+## Organic shapes
+
+For a natural object (fruit, plant, animal, figurine, shell, sculpture) use the `organic`
+[design style](design-review.md) and start from these four recipes, not from boxes, cylinders and
+spheres fused together ([DS-O1..O5](../DESIGN_GUIDE.md#35-organic-natural)). The
+[`banana`](../scripts/examples.md#banana) example uses all four.
+
+```python
+from build123d import Spline
+from b123d_print.recipes import flat_base, organic_blend, spine_loft, tapered_sweep
+
+spine = Spline((0, 0, 8), (45, 19, 1.5), (90, 24, 0), (150, 5, 5))   # the middle of the body
+body = spine_loft(spine, [(0, 11), (0.25, 31), (0.5, 36), (0.85, 26), (0.97, 9), (1, 0)])
+stem = tapered_sweep(stem_path, [(0, 9), (1, 7.5)])                  # follows its path exactly
+part = organic_blend(body, stem, neck_plane, stem_plane, bulge=-0.05)
+part = flat_base(part, 4)                                            # stands, on Z=0
+```
+
+- **`spine_loft(spine, sections, x_dir=(0, 0, 1))`**: `sections` are `(u, profile)` pairs, `u` the
+  fraction of the spine's length; a profile is a Face or Sketch drawn on XY around the origin, or a
+  number (a circle of that diameter). Each one is placed perpendicular to the spine, its +X along
+  an axis carried down the spine without twisting (from `x_dir`: up, by default). A `0` first or
+  last closes the end to a point; a few small sections close together before it make a blunt,
+  rounded tip with no rim. Vary the sections: size, and shape too (ridges that sharpen).
+- **`tapered_sweep(path, sections, x_dir=(0, 0, 1))`**: the same sections, swept with
+  `sweep(multisection=True)`: the body follows the path exactly. For stems, tentacles, horns,
+  tails. Sections at `u = 0` and `1` are required, and a sweep cannot end in a point: keep tips
+  at least ~0.8 mm across.
+- **`organic_blend(a, b, at_a, at_b, bulge=0, steps=4, points=48)`**: `at_a` and `at_b` are planes
+  across each body where the join starts, +Z pointing out of that body towards the other. Each
+  body is cut there and a lofted collar joins the cuts, leaving each one as its body was tapering,
+  so there is no crease. `bulge` swells (+) or pinches (-) the middle of the collar. The faces are
+  sewn into one solid (a boolean fuse along a tangent join takes tens of seconds), with a fuse as
+  the fallback. The cut outlines should be roughly convex.
+- **`flat_base(part, depth)`**: cuts the part `depth` mm above its lowest point and puts the cut on
+  Z=0. A quarter of the section's height is a good start; deeper means more bed contact and less
+  overhang round the edge. Check the contact with a section at Z = 0.1.
+
+Print it lying along its long curve, with tree (organic) supports under the curves and variable
+layer height for the gently domed top ([DS-O5](../DESIGN_GUIDE.md#35-organic-natural)). A flat
+cut through a lofted surface leaves OpenCascade's own bounding box reaching under the bed (it
+bounds each face by its whole parameter rectangle); the checks and metrics measure such faces
+from their mesh instead, so the part is seen on the bed.
+
 ## Sources
 
 The printing numbers come from the [sourced design rules](../BEST_PRACTICES.md) (holes BP-H,
@@ -196,7 +244,8 @@ BP-R, bed edges BP-B), and for screw and nut sizes from ISO 273 (clearance holes
 hole recipe reads its sizes from bd_warehouse's fastener tables (see
 [Threads, fasteners and gears](threads-fasteners-gears.md)). The snap-arm
 strain formulas are from Bayer MaterialScience's *Snap-Fit Joints for Plastics* design guide;
-the allowable strains are provisional (one source, BP-N4): say they are estimates.
+the allowable strains are provisional (one source, BP-N4): say they are estimates. The organic
+recipes follow the organic style's rules (DS-O1..O5 in the [design guide](../DESIGN_GUIDE.md#35-organic-natural)).
 
 
 ## Wall mounts and adjustable screw slots

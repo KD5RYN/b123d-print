@@ -61,9 +61,79 @@ def tessellate(shape, tol: float, angular: float = 0.1) -> tuple[np.ndarray, np.
     return np.array(verts, dtype=np.float64).reshape(-1, 3), np.array(tris, dtype=np.int64).reshape(-1, 3)
 
 
+_FREEFORM = {"BSPLINE", "BEZIER", "OFFSET", "REVOLUTION", "EXTRUSION", "OTHER"}
+
+
+def _uv_rectangle(face) -> bool:
+    """True when the face covers a whole (u, v) rectangle of its surface: no holes, and every
+    edge runs along a u or v line (a loft between its end sections, not a cut across it)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve2d
+    from OCP.GeomAbs import GeomAbs_Line
+
+    if face.inner_wires():
+        return False
+    for e in face.edges():
+        c = BRepAdaptor_Curve2d(e.wrapped, face.wrapped)
+        if c.GetType() != GeomAbs_Line:
+            return False
+        d = c.Line().Direction()
+        if min(abs(d.X()), abs(d.Y())) > 1e-9:
+            return False
+    return True
+
+
+_BBOX: dict = {}  # (id, hash) -> (shape, box): the last few shapes measured; a moved shape hashes anew
+
+
+def bbox(shape, tol: float = 0.02):
+    """shape.bounding_box(), tight on cut freeform faces. OpenCascade bounds a face by the whole
+    (u, v) rectangle of its surface that the face spans, so a lofted or swept face cut inside that
+    rectangle still counts what the cut removed: a lofted body with a flat base cut into it
+    (recipes.flat_base) reports its old lowest point, under the bed. Such faces are bounded by their
+    mesh instead (at most `tol` inside the true box); every other face keeps OpenCascade's box."""
+    key = (id(shape), hash(shape), tol)
+    hit = _BBOX.get(key)
+    if hit is not None and hit[0] is shape:
+        return hit[1]
+    box = _bbox(shape, tol)
+    if len(_BBOX) >= 32:
+        _BBOX.pop(next(iter(_BBOX)))
+    _BBOX[key] = (shape, box)
+    return box
+
+
+def _bbox(shape, tol: float):
+    faces = shape.faces()
+    loose = [f for f in faces if f.geom_type.name in _FREEFORM and not _uv_rectangle(f)]
+    if not loose:
+        return shape.bounding_box()
+    from build123d import BoundBox
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepBndLib import BRepBndLib
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+    from OCP.TopLoc import TopLoc_Location
+
+    box = Bnd_Box()
+    ids = {id(f) for f in loose}
+    for f in faces:
+        poly = None
+        if id(f) in ids:
+            BRepMesh_IncrementalMesh(f.wrapped, tol, False, 0.2, False)
+            loc = TopLoc_Location()
+            poly = BRep_Tool.Triangulation_s(f.wrapped, loc)
+        if poly is None:
+            BRepBndLib.AddOptimal_s(f.wrapped, box, False, False)
+            continue
+        trsf = loc.Transformation()
+        for i in range(1, poly.NbNodes() + 1):
+            box.Add(poly.Node(i).Transformed(trsf))
+    return BoundBox(box)
+
+
 def report(part: Part) -> dict:
     """Bounding box (mm), volume (mm^3) and validity."""
-    bb = part.bounding_box()
+    bb = bbox(part)
     return {
         "x": round(bb.size.X, 3),
         "y": round(bb.size.Y, 3),

@@ -25,7 +25,7 @@ from itertools import combinations
 import numpy as np
 from build123d import Part
 
-from .render import AXES, section_faces, tessellate
+from .render import AXES, bbox, section_faces, tessellate
 
 FAIL, WARN, OK = "fail", "warn", "ok"
 CORNER = 4.0  # see wall_thickness
@@ -308,7 +308,7 @@ def overhang_faces(part: Part, max_angle: float = 45.0, bed_tol: float = 0.05, t
     far it "hangs"), "hole" (the top of a horizontal round hole) or the surface type.
     Faces lying on the bed are ignored. angle_tol absorbs tessellation noise on surfaces designed
     at exactly max_angle. ignore_below: skip triangles lying entirely within this height above the bed."""
-    zmin = part.bounding_box().min.Z
+    zmin = bbox(part).min.Z
     found = []
     edge_faces = inside = None
     hole_faces = None
@@ -377,21 +377,24 @@ def bed_fillets(part: Part, max_angle: float = 45.0, bed_tol: float = 0.05, min_
                 angle_tol: float = 0.5) -> list[dict]:
     """Curved faces that start on the bed and face down steeper than max_angle: a fillet (or any
     rounding) on a bed edge. Its lowest band is a near-flat overhang that flares and lifts."""
-    zmin = part.bounding_box().min.Z
+    zmin = bbox(part).min.Z
     out = []
     for f in part.faces():
         if f.geom_type.name == "PLANE" or f.bounding_box().min.Z > zmin + bed_tol:
+            continue
+        fb = bbox(f)
+        if fb.min.Z > zmin + bed_tol:  # OCCT's box was loose: the face was cut above the bed
             continue
         t = _down_tris(f)
         if t is None:
             continue
         tri, n, area, ang = t
-        flag = (n[:, 2] < 0) & (ang > max_angle + angle_tol) & (tri[:, :, 2].min(1) < zmin + 0.5 * f.bounding_box().size.Z + bed_tol)
+        flag = (n[:, 2] < 0) & (ang > max_angle + angle_tol) & (tri[:, :, 2].min(1) < zmin + 0.5 * fb.size.Z + bed_tol)
         if area[flag].sum() < min_area:
             continue
         c = f.center()
         out.append({"kind": f.geom_type.name.lower(), "area": round(float(area[flag].sum()), 2),
-                    "max_angle": round(float(ang[flag].max()), 1), "height": round(f.bounding_box().size.Z, 2),
+                    "max_angle": round(float(ang[flag].max()), 1), "height": round(fb.size.Z, 2),
                     "center": [round(c.X, 2), round(c.Y, 2), round(c.Z, 2)]})
     return out
 
@@ -495,7 +498,7 @@ def bed_footprint(part: Part, speed: float = 200.0, layer: float = 0.2, slicer=N
     """footprint() of `part` as it sits (bed at its lowest point): the section half a layer up."""
     from build123d import CenterOf
 
-    bb = part.bounding_box()
+    bb = bbox(part)
     sl = slicer or MeshSlicer(part)
     c = part.center(CenterOf.MASS)
     return footprint(sl.section("XY", bb.min.Z + layer / 2, 1e9), bb.size.Z, speed, (c.X, c.Y))
@@ -553,7 +556,7 @@ def section_levels(part: Part, plane: str, step: float = 2.0, cap: int = 80, fla
     cuts every `step` mm in between (curved and sloped parts); at most `cap` cuts. flats: the
     part's flat_faces, when already known."""
     axis = AXES[plane]
-    bb = part.bounding_box()
+    bb = bbox(part)
     lo, hi = (bb.min.X, bb.min.Y, bb.min.Z)[axis], (bb.max.X, bb.max.Y, bb.max.Z)[axis]
     stops = {round(lo, 4), round(hi, 4)}
     for n, c in flat_faces(part) if flats is None else flats:
@@ -693,6 +696,8 @@ def _loops(face, plane: str, step: float) -> list[np.ndarray]:
             if pts and np.hypot(xy[0][0] - pts[-1][0], xy[0][1] - pts[-1][1]) > np.hypot(xy[-1][0] - pts[-1][0], xy[-1][1] - pts[-1][1]):
                 xy.reverse()  # edge stored against the wire direction
             pts.extend(xy if not pts else xy[1:])
+        if len(pts) > 1 and np.hypot(pts[-1][0] - pts[0][0], pts[-1][1] - pts[0][1]) < 1e-4:
+            pts.pop()  # the loop's last point is its first (edges meet within ~1e-5, not exactly)
         p = np.array(pts)
         if len(p) < 3:
             continue
@@ -1455,7 +1460,7 @@ class Fit:
         from .profiles import fits, load_printer
 
         pr = load_printer(settings.printer)
-        size = _get(parts, self.part).bounding_box().size
+        size = bbox(_get(parts, self.part)).size
         ok, why = fits(pr, (size.X, size.Y, size.Z), self.margin)
         level = OK if ok else FAIL
         if ok and "turned" in why:

@@ -61,6 +61,9 @@ calls reuse them (fresh=True rebuilds). build_part reports each piece's time and
 Pieces with an assembly(d): check_fit (overlaps, gaps, hole alignment). A flat outline from a scan
 or grid photo: upload_reference, then trace_outline. Common features (teardrop holes, nut traps,
 snap arms, hinges, lids, text, bed chamfers): read the recipe tool before improvising one.
+A natural object (fruit, plant, animal, figurine, shell, sculpture): the organic style, and start
+from a recipe (spine_loft, tapered_sweep, organic_blend, flat_base; the banana example), not from
+boxes, cylinders and spheres.
 When this server is remote (HTTP or SSH), it is a workbench, not storage: what it writes is a
 temporary working copy, deleted after some days unused. Use ONLY these MCP tools and the links they
 return; the server gives no shell, ssh or scp access. Last step, before reporting: download_part
@@ -85,7 +88,7 @@ ESSENTIALS = """\
 Rules (all of them: read_guide):
 1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation. For a hole, say whether its size is the printed hole or what goes in it (then + clearance per side); holes are drawn true to size, plus hole_comp only if the user opted in.
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
-3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural); set STYLE in Dims.
+3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural, organic); set STYLE in Dims. A natural object (fruit, plant, animal, figurine, shell, sculpture): STYLE organic, and start from a recipe (spine_loft, tapered_sweep, organic_blend, flat_base; example banana), not from boxes and cylinders.
 4. The order, every part: build_part -> render_preview + section through holes and pockets -> check (fix every FAIL) -> design_metrics(name, style=...) -> suggest_orientation(name) -> export. The results end with "Before printing": make the calls it lists. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
 5. On a remote server bring the files home after export: download_part(name) (embed=True if your shell has no network).
 6. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own."""
@@ -1029,7 +1032,7 @@ async def design_metrics(name: str, variant: str | None = None, style: str = "",
     corners, hole edge distance and slenderness across the layers (and the thinnest walls for a
     style that asks); then the suggestions the part's style triggers, each citing its DS-* rule.
     ALWAYS before export, after check passes; report its suggestions to the user. style: override the part's STYLE (functional, modern, least_cost,
-    rugged, soft, structural, or a style file of the user's: list_parts shows them). up: the
+    rugged, soft, structural, organic, or a style file of the user's: list_parts shows them). up: the
     direction that points up in use for the water-trap check (+X, -Y, ...; default the script's UP,
     else +Z). as_json: the full numbers as JSON instead of the text report. Changes nothing."""
     if style:
@@ -2037,7 +2040,8 @@ Work in these steps:
    each value is; for a large or curved part propose a table of offsets (stations at a fixed
    spacing along a datum line), and ask for a scale reference in photos. If I have said
    nothing about how it should look, ask once for a style: functional (default), modern/minimal, least cost, rugged/outdoor,
-   soft/handheld or structural/load-bearing (it goes in Dims as STYLE). Then STOP and wait for my confirmation. Do not
+   soft/handheld, structural/load-bearing or organic/natural (it goes in Dims as STYLE; organic for a fruit, plant,
+   animal, figurine, shell or sculpture, modeled from the organic recipes, not from primitives). Then STOP and wait for my confirmation. Do not
    model yet.
 2. After I confirm: new_part, then write_part with every dimension as a named UPPER_CASE field
    of the Dims dataclass (mm, with a comment on its source and accuracy). Mating features get CLEARANCE (0.2 mm
@@ -2142,7 +2146,7 @@ def design_review(name: str, style: str = "") -> str:
     pick = f"Use the style '{style}'." if style else (
         "Use the part's STYLE (design_metrics reports it and where it came from). If it came from the default "
         "and I never chose one, ask me once: functional (default), modern/minimal, least cost, rugged/outdoor, "
-        "soft/handheld, structural/load-bearing, or one of my own styles (list_parts shows them).")
+        "soft/handheld, structural/load-bearing, organic/natural, or one of my own styles (list_parts shows them).")
     return f"""Review the design of the part '{name}'. {pick}
 
 1. check('{name}') first. If anything FAILs, stop and report the failures: the design review
@@ -2208,7 +2212,7 @@ and keep my answers; skip a question I have already answered.
    previews, print for a print sheet, hardware for declared BOM JSON, bom / bom_csv for the
    shopping list. Default: step,stl,3mf,png.
 5. Default style for parts that set none: functional (default), modern/minimal, least_cost,
-   rugged/outdoor, soft/handheld or structural/load-bearing.
+   rugged/outdoor, soft/handheld, structural/load-bearing or organic/natural.
 6. Holes: parts are modeled true to size and the SLICER corrects holes. Ask whether my slicer
    has X-Y hole compensation, X-Y contour compensation or elephant-foot compensation set, and
    whether I have measured the hole coupon. Its result goes into the slicer's X-Y hole
