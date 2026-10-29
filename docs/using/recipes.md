@@ -51,6 +51,9 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `tapered_sweep` | Tapered sweep along a path | `tapered_sweep` | A profile swept along a path while it changes size or shape: stems, tentacles, horns |
 | `organic_blend` | Smooth lofted join of two bodies | `organic_blend` | Two bodies joined by a lofted collar that carries on each one's taper, instead of a fillet |
 | `flat_base` | Flat base cut under a rounded part | `flat_base` | A flat underside cut at the lowest point, the part put back on Z=0 so it stands |
+| `twisted_loft` | Twisted loft (spiral body) | `twisted_loft`, `star_section` | A star or polygon section lofted up Z with a twist and a taper: spiral ridges |
+| `patterned_surface` | Fluted (patterned) surface | `patterned_surface`, `fluted_section` | Flutes that follow a revolved profile, straight or spiralling |
+| `vase_shell` | Vase-mode body | `vase_shell`, `vase_lean` | A solid body of revolution for vase mode; refuses a wall that leans past the overhang limit |
 
 ## PCB supports and board stand-ins
 
@@ -348,3 +351,39 @@ covers inch-series socket cap/shoulder/set screws and includes related drill/cou
 Those fastener dimensions are distinct from this recipe's head entry, travel, spacing and lip.
 The recipes do not claim a universal ISO/ASME keyhole-mount layout or an ASME inch-size table;
 use explicitly measured dimensions for unsupported hardware.
+
+## Decorative bodies and vase mode
+
+For the [`decorative` style](design-review.md) (vases, planters, lamp shades, ornaments). The
+rules are [DS-D*](../DESIGN_GUIDE.md#36-decorative-vase).
+
+```python
+from b123d_print.recipes import star_section, twisted_loft, patterned_surface, vase_shell
+
+body = twisted_loft(star_section(6, d.R_OUT, d.R_IN), d.HEIGHT, twist=d.TWIST, scale=d.TOP_SCALE)
+flutes = patterned_surface([(30, 0), (38, 35), (34, 70), (26, 100)], flutes=16, depth=2.0, twist=20)
+vase = vase_shell([(30, 0), (40, 30), (34, 75), (24, 110)], max_lean=s.max_overhang)
+```
+
+- **All three return a solid, bottom on Z=0.** For vase mode that is what the slicer wants: it
+  prints one continuous wall from the outside of the solid, with no top, no infill and no
+  supports. Say so in the script with `PRINT = {"vase": True, "why": "..."}` (see
+  [print intent](../scripts/convention.md#print-intent)); the print sheet then gives the slicer
+  switch ("Spiral vase" in PrusaSlicer, OrcaSlicer and Bambu Studio, "Spiralize Outer Contour"
+  in Cura) and flags any layer that is not one closed contour. Without vase mode, shell it
+  yourself or let the slicer fill it.
+- **One contour per layer:** a handle, a second body or anything inside does not print in vase
+  mode. `design_metrics(name, style="decorative")` says whether every layer is one contour and
+  how far the wall leans (M16).
+- **The wall leans both ways:** a single wall overhangs on a shoulder that closes in just as on a
+  flare. `vase_shell` refuses a curve that leans more than `max_lean` (pass the printer's
+  `max_overhang`); `vase_lean(profile)` measures it.
+- **Patterns that read:** a few strong features (5-8 star points, 12-24 flutes, 1-3 mm deep), at
+  least two line widths across; fine detail blurs at 0.2 mm layers and in the slicer's spiral
+  smoothing.
+- **The wall is one line:** widen the outer wall's line width (0.45 to 0.6 mm at a 0.4 mm
+  nozzle) or use a bigger nozzle for a stiffer vase. Lamp shades: even walls, LED bulbs only, an
+  air gap to the bulb ([DS-D6, DS-D7](../DESIGN_GUIDE.md#36-decorative-vase)).
+
+The bundled [`twisted_vase` example](../scripts/examples.md) uses `twisted_loft` with
+`PRINT = {"vase": True, ...}`.

@@ -143,7 +143,7 @@ override them) or at module level:
 
 | Name | Example | What |
 | --- | --- | --- |
-| `STYLE` | `STYLE: str = "modern"` | `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` or `organic`; `""` (the template's) uses the workspace's `style`, else functional |
+| `STYLE` | `STYLE: str = "modern"` | `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic` or `decorative`; `""` (the template's) uses the workspace's `style`, else functional |
 | `SHOW` | `SHOW = ["+Y", "+Z"]` | the sides seen in use, in print orientation; surface findings are limited to them |
 | `UP` | `UP = "+Y"` | the side that points up in use (print orientation), for the water-trap check; default `+Z` |
 | `EDGES` | `EDGES = "chamfer"` | the edge language: `chamfer` or `fillet`; functional with `chamfer` is the industrial look |
@@ -178,6 +178,7 @@ PRINT = {
 | `brim` | `True` / `False`, or a width in mm | the sheet's brim advice (and its tip-over line) |
 | `orientation` | `"locked"` | don't re-orient: the sheet says so and `suggest_orientation` ranks for information only; the [review checklist](../using/design-review.md#the-review-checklist) counts the orientation as done |
 | `review` | `"exempt"` | a calibration coupon or test print: no [review checklist](../using/design-review.md#the-review-checklist) in the results, and `export` never asks for the design review |
+| `vase` | `True` / `False` | vase mode (spiral vase / spiralize): the print sheet gives the slicer switch and the one-line wall, assumes one wall, no infill and no top in its estimates, and lists layers that are not one closed contour and a wall that leans past the overhang limit ([DS-D1..D4](../DESIGN_GUIDE.md#36-decorative-vase)); model the part as a solid. Not with `walls`, `infill`, `infill_pattern` or `supports` other than `"none"` |
 | `why` | free text | **required** whenever anything else is set; shown next to every setting it overrides |
 
 - An unknown key or a bad value is an error that lists the valid keys (a typo such as

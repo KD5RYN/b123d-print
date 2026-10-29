@@ -93,6 +93,21 @@ down, the curve in the layers, with tree supports under the lifted ends and the 
 printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/banana/banana.py)
 
+## `twisted_vase`
+
+![Twisted vase: a six-pointed star lofted with a quarter turn and a taper](../images/twisted_vase.png)
+
+The [`decorative` style](../using/design-review.md) and vase mode in one part: a six-pointed
+star with rounded points, lofted 150 mm up with a quarter turn and a taper to 80 % (the
+[`twisted_loft` recipe](../using/recipes.md#decorative-bodies-and-vase-mode)), so the points
+become spiral ridges that read from across a room. It is a solid on purpose: its
+`PRINT = {"vase": True, ...}` tells the print sheet to give the slicer's vase-mode switch, and the
+slicer prints one continuous wall from the outside, with no top. `b123d-print metrics
+twisted_vase` notes that every layer is one closed contour and how far the wall leans
+([DS-D*](../DESIGN_GUIDE.md#36-decorative-vase)). For dry flowers: a vase for water wants a liner.
+CC0. An example with chosen sizes: not printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/twisted_vase/twisted_vase.py)
+
 ## `split_trim`
 
 ![The split trim's joint, pulled apart: two pieces, a bowtie key and two square pins](../images/split_trim.png)

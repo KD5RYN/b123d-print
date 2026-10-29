@@ -154,7 +154,7 @@ It is not a general CAD framework.
   ([fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/)).
 - **Design review** — after the print checks pass, the assistant reviews the part for a style
   you pick (functional, modern, least cost, rugged/outdoor, soft/handheld, structural/load-bearing,
-  organic/natural):
+  organic/natural, decorative/vase):
   rough filament and time estimates, supports, edge treatment, layer steps, water traps, inside
   corners and walls, and concrete suggestions
   from [sourced design rules](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). It changes

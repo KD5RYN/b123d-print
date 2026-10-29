@@ -772,7 +772,7 @@ def cmd_setup(args) -> int:
             given["formats"] = _ask("Export formats (3mf for Bambu/Orca/Prusa, step to edit in other CAD, png, stl, glb, print, hardware)",
                                     ",".join(s.formats))
         if args.style is None:
-            given["style"] = _ask("Default style (functional, modern, least_cost, rugged, soft, structural, organic)", s.style or "functional")
+            given["style"] = _ask("Default style (functional, modern, least_cost, rugged, soft, structural, organic, decorative)", s.style or "functional")
         if args.hole_comp is None:
             given["hole_comp"] = _ask("Measured hole compensation in mm (blank if not measured yet)")
     elif args.printer and args.printer not in ("generic", "none"):
@@ -966,7 +966,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("metrics", help="design metrics and the style's suggestions (filament, time, edges, ...)")
     p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
     p.add_argument("--variant")
-    p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft, structural, organic")
+    p.add_argument("--style", help="override the part's STYLE: functional, modern, least_cost, rugged, soft, structural, organic, decorative")
     p.add_argument("--up", help="the side that points up in use, for water traps: +X, -Y, ... (default: UP, else +Z)")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("orient", help="rank the ways to put each part on the bed (supports, contact, time, tip-over, load)")
@@ -1097,7 +1097,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--printer", help="a printer profile name or search words ('generic' for none)")
     p.add_argument("--material", help="pla, petg, asa, abs, tpu or your own")
     p.add_argument("--formats", help=f"comma-separated, from {','.join(FORMATS)} or all")
-    p.add_argument("--style", help="functional, modern, least_cost, rugged, soft, structural, organic or your own")
+    p.add_argument("--style", help="functional, modern, least_cost, rugged, soft, structural, organic, decorative or your own")
     p.add_argument("--hole-comp", help="measured hole compensation, mm (with a printer: stored for it and the material)")
     p.add_argument("--hole-comp-h", help="the same for horizontal holes")
     p.add_argument("--workspace", action="store_true", help="write to this workspace's b123d-print.toml (default: your user config)")

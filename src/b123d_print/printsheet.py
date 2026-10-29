@@ -5,8 +5,9 @@ volume, filament and time (rough estimates, design_metrics' rules), the supports
 overhang rule finds, tip-over advice (the tip-over check's measure), then the settings the part
 was designed for (material, printer, clearance, hole compensation), walls and infill (the style's
 guidance), screw holes that want more perimeters, the Wall checks the script declares, and the
-script's PRINT_NOTES (assembly order, glue, inserts). The script's PRINT intent (intent.py) and
-your settings override the recommendations (supports, walls, infill, brim, orientation), never the
+script's PRINT_NOTES (assembly order, glue, inserts). A part whose PRINT says `vase` gets the
+vase-mode settings instead of walls and infill, and the layers that cannot print that way. The
+script's PRINT intent (intent.py) and your settings override the recommendations (supports, walls, infill, brim, orientation), never the
 facts: each recommendation names its source, the part, your settings or the geometry/style. It uses only the cheap metrics, not the full
 design review, so the format costs a second or two per piece. Off by default (not in
 DEFAULT_FORMATS); `all` includes it. Nothing here changes the part.
@@ -25,12 +26,14 @@ from .render import bbox
 
 STRUCTURAL_WALLS = "4-6 walls, 15-30 % gyroid infill"  # structural style review, DS-T2 / DS-T4
 SCREW_WALLS = "3-4 or more walls"  # around screw holes and bosses, BP-W3 / DS-T6
+VASE_SLICERS = '"Spiral vase" in PrusaSlicer, OrcaSlicer and Bambu Studio, "Spiralize Outer Contour" in Cura'
 NEAR_BED = 1.0  # mm: overhangs centred lower than this over the bed are bed-edge flares, listed apart
 
 
-def piece_numbers(part: Part, p: mt.Params, speed: float) -> dict:
+def piece_numbers(part: Part, p: mt.Params, speed: float, vase: bool = False) -> dict:
     """Size, volume, filament, time, supports, tip-over and holes of one printable piece. Screw
-    sizes are guessed from the holes as printed (the cut diameter less hole_comp)."""
+    sizes are guessed from the holes as printed (the cut diameter less hole_comp). vase: also
+    whether every layer is one closed contour (M16), for a part that prints in vase mode."""
     mesh = mt.Mesh(part)
     m = {"size": mt.size(part), "volume": round(part.volume, 1), "mass": mt.mass(part, mesh, p)}
     m["supports"] = mt.supports(part, mesh, p)
@@ -45,6 +48,7 @@ def piece_numbers(part: Part, p: mt.Params, speed: float) -> dict:
     m["horizontal_holes"] = sum(1 for h in hs if not h.get("vertical"))
     m["screw_holes"] = sorted({c[0] for h in hs
                                if (c := mt.fastener_class(h["d"] - (p.hole_comp if h.get("vertical") else p.hole_comp_h)))})
+    m["vase"] = mt.vase_layers(part, mt._sections(part, p.layer), mesh) if vase else None
     return m
 
 
@@ -119,6 +123,34 @@ def _walls_lines(want: dict, style: str, p: mt.Params) -> list[str]:
     return out
 
 
+def _vase_lines(why: str, p: mt.Params, per: dict) -> list[str]:
+    """Vase mode (the part's PRINT says vase): the slicer switch, the one-line wall, and the layers
+    or overhangs that cannot print that way (DS-D1..D4)."""
+    out = [f"- **Vase mode: on, {intent.PART}**: {why}. Turn on {VASE_SLICERS}. The slicer prints one continuous "
+           "wall that climbs in a spiral: one wall, no top layers, 0 % infill, supports off; only the "
+           f"{p.bottom_layers} bottom layers are solid. The model is the solid outside shape: the slicer makes the "
+           "wall (DS-D1).",
+           f"- **Wall: one line**, the outer wall's line width ({p.line_width:g} mm here). For a stiffer or more "
+           "watertight vase widen that line (PrusaSlicer's example: 0.45 to 0.6 mm at a 0.4 mm nozzle) or use a bigger "
+           "nozzle; a vase that holds water still wants a liner (DS-D2).",
+           "- **No seam:** the layer change runs along the spiral; the slicers' smoothing options hide the rest, and "
+           "blur fine surface detail (DS-D4)."]
+    many = len(per) > 1
+    for n, m in per.items():
+        who, v = (f"**{n}**: " if many else ""), m["vase"]
+        if v and v["bad_count"]:
+            b = v["bad"][0]
+            out.append(f"- {who}**Not vase-ready:** {v['bad_count']} of {v['layers_sampled']} sampled layers are not one "
+                       f"closed contour (first at z {b['z']:g}: {mt.vase_problem(b)}). Vase mode prints one wall per layer: make it one "
+                       "solid with nothing inside or apart, or print it normally (DS-D1).")
+        if v and v["max_lean"] is not None and v["max_lean"] > p.max_overhang:
+            out.append(f"- {who}**The wall leans up to {v['max_lean']:g} deg from vertical** (limit {p.max_overhang:g}): a "
+                       "single wall overhangs inward as well as outward, and vase mode prints no supports; keep it "
+                       f"within {p.max_overhang:g} deg (DS-D3).")
+    out.append("- The estimates assume vase mode: one wall, no infill, no top.")
+    return out
+
+
 def _notes(mod, d) -> list[str]:
     v = mt.script_attr(mod, d, "PRINT_NOTES", None)
     if not v:
@@ -143,8 +175,11 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
         p.walls = int(want["walls"][0])
     if "infill" in want:
         p.infill = want["infill"][0] / 100
+    vase = bool(want.get("vase", (False,))[0])
+    if vase:  # the slicer prints one wall, no infill, no top (DS-D1)
+        p.walls, p.infill, p.top_layers = 1, 0.0, 0
     named = {(k or "part"): v for k, v in parts.items()}
-    per = {n: piece_numbers(v, p, settings.tip_speed) for n, v in named.items()}
+    per = {n: piece_numbers(v, p, settings.tip_speed, vase) for n, v in named.items()}
     for n, m in per.items():  # supports right at the bed are bed-edge flares, listed apart
         zmin = bbox(named[n]).min.Z
         m["high"] = [f for f in m["supports"]["faces"] if f["center"][2] >= zmin + NEAR_BED]
@@ -213,8 +248,11 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
                  f"{printer.layer_height:g} mm layers")
     else:
         L.append(f"- **Printer:** generic profile; the estimates assume a {p.nozzle:g} mm nozzle and {p.layer:g} mm layers")
-    L.append(_supports_line(want, any(m["high"] for m in per.values())))
-    L += _walls_lines(want, style, p)
+    if vase:
+        L += _vase_lines(why, p, per)
+    else:
+        L.append(_supports_line(want, any(m["high"] for m in per.values())))
+        L += _walls_lines(want, style, p)
     if brim:
         L.append(f"- **Brim: {_brim(brim[0])}, {brim[1]}**" + (f": {why}" if brim[1] == intent.PART else ""))
     screws = sorted({s for m in per.values() for s in m["screw_holes"]})
