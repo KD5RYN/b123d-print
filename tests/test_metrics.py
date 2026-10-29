@@ -310,6 +310,7 @@ def test_design_metrics_memory_on_a_lofted_part():
     assert grew_mb < 200 and secs < 5, (grew_mb, secs)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="measured with resource.getrusage")
 def test_design_metrics_stays_light_on_the_banana_example():
     """#151: the bundled organic example (lofted, swept, blended, cut flat) through every metric,
     in a fresh process: well under the server's memory cap. The time bound is a hang guard."""
