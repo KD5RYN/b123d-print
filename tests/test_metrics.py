@@ -203,6 +203,46 @@ def test_slenderness():
     assert M.slenderness(dome, M._sections(dome, 0.2))["value"] < 2
 
 
+# --- M16-M18 toys ------------------------------------------------------------------------------
+
+
+def _hull(shape):
+    return M.Mesh(shape).tri.reshape(-1, 3)
+
+
+def test_small_parts_cylinder():
+    assert M.small_parts(_hull(Box(20, 20, 20)))["fits"]  # a die: 28.3 mm across its diagonal
+    assert M.small_parts(_hull(Sphere(15)))["fits"]  # a 30 mm ball sinks into the slanted floor
+    assert not M.small_parts(_hull(Sphere(16.2)))["fits"]  # wider than the 31.7 mm bore
+    rod = M.small_parts(_hull(Cylinder(2, 50)))
+    assert rod["fits"] and rod["slack_mm"] >= 57.1 - 4 - 50 - 0.2  # standing at the deep side, or leaning: more
+    assert not M.small_parts(_hull(Cylinder(2, 70)))["fits"]
+    assert not M.small_parts(_hull(box()))["fits"]
+
+
+def test_necks():
+    body = Box(60, 40, 30, align=BED)
+    part = body + Cylinder(1.5, 15, align=BED).moved(Location((0, 0, 30)))  # a 3 mm horn 15 mm tall
+    w = M.necks(part, M._grid(part))["worst"]
+    assert w["end"] == "+Z" and w["area_mm2"] == pytest.approx(math.pi * 1.5 ** 2, rel=0.05) and w["safety"] < 0.2
+    fat = body + Cylinder(6, 10, align=BED).moved(Location((0, 0, 30)))
+    assert M.necks(fat, M._grid(fat))["worst"]["safety"] > 3
+    assert M.necks(box(), M._grid(box()))["worst"] is None and M.necks(part, None)["worst"] is None
+    dome = Sphere(15)  # a tip that widens towards the rest is not a neck
+    assert M.necks(dome, M._grid(dome))["worst"] is None
+
+
+def test_finger_holes():
+    plate = Box(60, 40, 4, align=BED) - Cylinder(4, 10)  # 8 mm through: a finger goes in
+    plate -= Cylinder(1.5, 10).moved(Location((20, 0, 0)))  # 3 mm: too small for a finger
+    plate -= Cylinder(7.5, 10).moved(Location((-20, 0, 0)))  # 15 mm: lets it out again
+    assert [(h["d"], h["through"]) for h in M.finger_holes(plate, P)] == [(8.0, True)]
+    blind = Box(60, 40, 20, align=BED) - Cylinder(4, 6, align=BED).moved(Location((0, 0, 14)))  # 6 mm deep
+    assert M.finger_holes(blind, P) == []
+    deep = Box(60, 40, 20, align=BED) - Cylinder(4, 12, align=BED).moved(Location((0, 0, 8)))  # 12 mm deep
+    assert [(h["through"], h["depth_mm"]) for h in M.finger_holes(deep, P)] == [(False, pytest.approx(12))]
+
+
 # --- M9 economy, styles and findings -----------------------------------------------------------
 
 
@@ -258,6 +298,14 @@ def test_findings_fire_at_the_thresholds():
     pin = Cylinder(3, 40, align=BED) + Box(30, 30, 3, align=BED)
     assert "DS-T1" in _rules(M.design_metrics(None, None, {"": pin}, s, style="structural"), "note")
     assert "DS-T1" not in _rules(M.design_metrics(None, None, {"": pin}, s, style="functional"))
+    die = M.design_metrics(None, None, {"": Box(20, 20, 20, align=BED)}, s, style="kid-safe")
+    assert die["style"] == "toy" and {"DS-K1", "DS-G8"} <= set(_rules(die, "suggest")) and "DS-K6" in _rules(die, "note")
+    horn = Box(60, 40, 30, align=BED) + Cylinder(1.5, 15, align=BED).moved(Location((0, 0, 30)))
+    assert "DS-K2" in _rules(M.design_metrics(None, None, {"": horn}, s, style="toy"), "suggest")
+    holed = fillet(Box(60, 40, 6, align=BED).edges(), 2) - Cylinder(4, 20)
+    toy = M.design_metrics(None, None, {"": holed}, s, style="toy")
+    assert "DS-K4" in _rules(toy, "suggest") and "DS-K1" not in _rules(toy)
+    assert not {"DS-K1", "DS-K2", "DS-K4"} & set(_rules(M.design_metrics(None, None, {"": horn}, s, style="functional")))
 
 
 def test_vase_layers():

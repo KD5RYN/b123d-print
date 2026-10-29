@@ -3,8 +3,9 @@
 M1 size and proportions, M2 filament mass (and M4 cost), M3 print time, M5 supports, M6
 stair-stepping, M7 edge treatment, M8 mirror symmetry, M9 economy (parts, fastener sizes),
 M10 seam corners, M11 water traps, and for load-bearing parts M12 inside corners, M13 walls,
-M14 hole edge distance, M15 slenderness across the layers, and M16 vase-mode layers (one closed
-contour per layer). Then the style findings: the
+M14 hole edge distance, M15 slenderness across the layers, M16 vase-mode layers (one closed
+contour per layer), and for toys M17 small parts, M18 weak necks, M19 finger holes. Then the
+style findings: the
 thresholds of the chosen style turned into "suggest" and "note" lines that cite their rule.
 Nothing here fails a build.
 
@@ -663,14 +664,7 @@ def slenderness(part: Part, faces_per_level: list) -> dict:
     bb = bbox(part)
     n = len(faces_per_level)
     dz = (bb.max.Z - bb.min.Z) / n if n else 0.0
-    areas = []
-    for faces in faces_per_level:
-        area = 0.0
-        for loops in faces:
-            for j, lp in enumerate(loops):
-                a = 0.5 * abs(float(np.sum(lp[:, 0] * np.roll(lp[:, 1], -1) - np.roll(lp[:, 0], -1) * lp[:, 1])))
-                area += a if j == 0 else -a
-        areas.append(area)
+    areas = [_loops_area(faces) for faces in faces_per_level]
     best = {"value": 0.0, "z": None, "area_mm2": None, "run_mm": None}
     for i, a in enumerate(areas):
         if a <= 1e-6:
@@ -722,21 +716,233 @@ def _occupancy(part: Part, n: int = SYMMETRY_GRID) -> np.ndarray | None:
     return grid
 
 
-def symmetry(part: Part) -> dict:
+def _grid(part: Part) -> np.ndarray | None:
+    try:
+        return _occupancy(part)
+    except Exception:  # noqa: BLE001 - a section the mesh cannot give: unknown
+        return None
+
+
+def symmetry(part: Part, grid: np.ndarray | None = None) -> dict:
     """M8 (DS-G7): vol(part & mirror) / vol(part) for the YZ (x), XZ (y) and XY (z) planes through
     the bounding-box centre; best of x and y (z reported, rarely meaningful). Measured on an
     occupancy grid of the part (_occupancy), not with OCC booleans: on a lofted or other curved
     part the three booleans took seconds and over a gigabyte, enough to crash a job under the
     server's memory cap (#150)."""
-    try:
-        g = _occupancy(part)
-    except Exception:  # noqa: BLE001 - a section the mesh cannot give: unknown
-        g = None
+    g = _grid(part) if grid is None else grid
     if g is None or not g.any():
         return {"x": None, "y": None, "z": None, "best": None}
     total = int(g.sum())
     out = {k: round(min(1.0, int((g & np.flip(g, axis=i)).sum()) / total), 3) for i, k in enumerate("xyz")}
     out["best"] = max(out["x"], out["y"])
+    return out
+
+
+# ---------------------------------------------------------------------------------------------
+# M17 small parts, M18 necks, M19 finger holes (toys, DS-K*). They flag likely problems; they are
+# not the standards' tests and certify nothing.
+
+# The small parts cylinder (16 CFR 1501.4 Fig. 1, ASTM F963 Fig. 3): 1.25 in (31.7 mm) across, its
+# floor slanted from 1.00 in (25.4 mm) to 2.25 in (57.1 mm) deep.
+SPC_D, SPC_MIN, SPC_MAX = 31.7, 25.4, 57.1
+# Use-and-abuse loads on a part a child can grip, the larger of the US and EU tests: a 90 N pull (EN 71-1
+# 8.4.2.1, a part over 6 mm; US: 15 lbf = 66.7 N for 18-96 months, 16 CFR 1500.52 / 1500.53) and a
+# 4 in-lbf = 0.45 Nm twist (16 CFR 1500.53, 36-96 months; EN 71-1 8.3: 0.34 Nm).
+PULL_N, TWIST_NMM = 90.0, 452.0
+# PLA tensile strength along and across the layers (DS-T1: CNCK-45, 63 vs 31 MPa).
+UTS_XY, UTS_Z = 63.0, 31.0
+# ASTM F963 4.18.1 / 4.18.2: an opening that admits a 3/16 in (5 mm) rod must also admit a 1/2 in
+# (12.7 mm) one; for a hole in rigid material, a 1/4 in rod 3/8 in (9.5 mm) deep.
+FINGER_MIN, FINGER_MAX, FINGER_DEPTH = 5.0, 12.7, 9.5
+
+
+def _circle3(a, b, c) -> tuple[np.ndarray, float]:
+    d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
+    if abs(d) < 1e-12:  # collinear: the farthest pair
+        p, q = max(((a, b), (a, c), (b, c)), key=lambda pq: float(np.linalg.norm(pq[0] - pq[1])))
+        return (p + q) / 2, float(np.linalg.norm(p - q)) / 2
+    sa, sb, sc = a @ a, b @ b, c @ c
+    ux = (sa * (b[1] - c[1]) + sb * (c[1] - a[1]) + sc * (a[1] - b[1])) / d
+    uy = (sa * (c[0] - b[0]) + sb * (a[0] - c[0]) + sc * (b[0] - a[0])) / d
+    u = np.array([ux, uy])
+    return u, float(np.linalg.norm(a - u))
+
+
+def _mec(pts: np.ndarray) -> tuple[np.ndarray, float]:
+    """Centre and diameter of the smallest circle around 2D points (Welzl's incremental algorithm,
+    on the convex hull)."""
+    pts = np.unique(np.round(np.asarray(pts, float), 4), axis=0)
+    if len(pts) < 2:
+        return (pts[0] if len(pts) else np.zeros(2)), 0.0
+    if len(pts) > 3:
+        try:
+            from scipy.spatial import ConvexHull
+
+            pts = pts[ConvexHull(pts).vertices]
+        except Exception:  # noqa: BLE001 - collinear points: keep them all
+            pass
+    P = pts[np.random.default_rng(0).permutation(len(pts))]
+    c, r = P[0], 0.0
+    for i in range(1, len(P)):
+        if np.linalg.norm(P[i] - c) > r + 1e-9:
+            c, r = P[i], 0.0
+            for j in range(i):
+                if np.linalg.norm(P[j] - c) > r + 1e-9:
+                    c, r = (P[i] + P[j]) / 2, float(np.linalg.norm(P[i] - P[j])) / 2
+                    for k in range(j):
+                        if np.linalg.norm(P[k] - c) > r + 1e-9:
+                            c, r = _circle3(P[i], P[j], P[k])
+    return c, 2 * r
+
+
+def _spc_fit(length: float, across: float) -> bool:
+    """Might a piece `length` long and `across` wide fit the cylinder: standing at its deep side
+    (the floor under a flat footprint `across` wide is 57.1 - across deep), or leaning across it
+    (a rough bound)? For the pieces M18 looks at; M17 tests the whole part's shape."""
+    return across <= SPC_D and length <= max(SPC_MAX - across, math.hypot(SPC_D - across, SPC_MAX - across))
+
+
+def _directions(n: int = 48) -> np.ndarray:
+    """n directions spread evenly over the sphere (a Fibonacci lattice)."""
+    i = np.arange(n) + 0.5
+    phi, th = np.arccos(1 - 2 * i / n), np.pi * (1 + 5 ** 0.5) * i
+    return np.column_stack([np.cos(th) * np.sin(phi), np.sin(th) * np.sin(phi), np.cos(phi)])
+
+
+def small_parts(points: np.ndarray) -> dict:
+    """M17 (DS-K1): does the whole part fit the small parts cylinder? The part's convex hull is put
+    in the cylinder in many orientations (X, Y, Z, its principal axes and 48 directions spread over
+    the sphere, each turned in 24 steps about itself): its footprint's smallest circle against the
+    31.7 mm bore, pushed to the deep side, then lowered onto the slanted floor; it fits when its
+    top is below the rim. `slack_mm` is the room left (negative: how much it sticks out). Flags
+    likely problems; the test itself puts the part in "any orientation" without compressing it."""
+    pts = np.asarray(points, float)
+    if len(pts) > 4:
+        try:
+            from scipy.spatial import ConvexHull
+
+            pts = pts[ConvexHull(pts).vertices]
+        except Exception:  # noqa: BLE001 - flat: keep the points
+            pass
+    pts = pts - pts.mean(0)
+    dirs = [np.eye(3), -np.eye(3), _directions()]
+    if len(pts) > 3:
+        ev = np.linalg.eigh(np.cov(pts.T))[1].T
+        dirs += [ev, -ev]
+    R = SPC_D / 2
+    turns = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    e2 = np.column_stack([np.cos(turns), np.sin(turns)])
+    best = None
+    for a in np.vstack(dirs):
+        a = a / np.linalg.norm(a)
+        u = np.cross(a, (1, 0, 0) if abs(a[0]) < 0.9 else (0, 1, 0))
+        u /= np.linalg.norm(u)
+        p2 = np.column_stack([pts @ u, pts @ np.cross(a, u)])
+        c, D = _mec(p2)
+        z = pts @ a
+        if D <= SPC_D:  # footprint against the deep side; x towards it; floor at -(25.4 + R + x)
+            x = (p2 - c) @ e2.T + (R - D / 2)
+            slack = float(SPC_MIN + R - np.min(z.max() - (z[:, None] + x).min(0)))  # the best turn
+        else:
+            slack = -float(D - SPC_D) - float(z.max() - z.min())  # too wide: only for ranking
+        if best is None or slack > best[0]:
+            best = (slack, float(z.max() - z.min()), D, a)
+    slack, L, D, a = best
+    return {"fits": slack >= 0, "slack_mm": round(slack, 1), "length_mm": round(L, 1), "across_mm": round(D, 1),
+            "axis": [round(float(x), 3) + 0.0 for x in a]}
+
+
+def _loops_area(faces: list) -> float:
+    """Area of a section: outer loops minus their holes."""
+    area = 0.0
+    for loops in faces:
+        for j, lp in enumerate(loops):
+            a = 0.5 * abs(float(np.sum(lp[:, 0] * np.roll(lp[:, 1], -1) - np.roll(lp[:, 0], -1) * lp[:, 1])))
+            area += a if j == 0 else -a
+    return area
+
+
+def _neck_safety(area: float, lever: float, k: int) -> float:
+    """PLA's strength over the stress the use-and-abuse loads put in a section of `area` (taken as
+    round) with the load `lever` mm away: bending under the pull at the far end, or the twist
+    (taken as a bending moment, rough), plus the pull itself. Across the layers when the section
+    is horizontal (k = Z)."""
+    if area <= 0:
+        return 0.0
+    d = math.sqrt(4 * area / math.pi)
+    stress = 32 * max(PULL_N * lever, TWIST_NMM) / (math.pi * d ** 3) + PULL_N / area
+    return (UTS_Z if k == 2 else UTS_XY) / stress
+
+
+def necks(part: Part, grid: np.ndarray | None) -> dict:
+    """M18 (DS-K2): a feature that would fit the small parts cylinder if it broke off, joined to the
+    rest by a section too weak for the use-and-abuse pull and twist. From the occupancy grid: walk
+    the slices in from each end of X, Y and Z while the piece beyond still fits the cylinder; each
+    slice is a neck for that piece (the slice's whole area: features side by side count together,
+    which can hide one). The weakest neck per walk is measured again on an exact section. Rough by
+    design: a likely problem to look at, not a test."""
+    if grid is None or not grid.any():
+        return {"worst": None}
+    bb = bbox(part)  # the grid's box (_occupancy)
+    lo = np.array([bb.min.X, bb.min.Y, bb.min.Z])
+    n = grid.shape[0]
+    cs = np.array([bb.size.X, bb.size.Y, bb.size.Z]) / n
+    found = []
+    for k in range(3):
+        o = [i for i in range(3) if i != k]
+        g = np.moveaxis(grid, k, 0)
+        areas = g.sum((1, 2)) * cs[o[0]] * cs[o[1]]
+        for rev in (False, True):
+            gg, aa = (g[::-1], areas[::-1]) if rev else (g, areas)
+            best = None
+            piece = np.zeros(gg.shape[1:], bool)
+            for i in range(1, n - 1):
+                piece |= gg[i - 1]
+                if aa[i] <= 0:
+                    break  # nothing joins it in this slice
+                L = float(i * cs[k])
+                D = _mec((np.argwhere(piece) + 0.5) * cs[o])[1] + float(np.hypot(cs[o[0]], cs[o[1]]))
+                if not _spc_fit(L, D):
+                    break
+                if aa[i + 1:].sum() < aa[:i].sum() or aa[i] > 1.001 * aa[:i].max() or 1.25 * aa[i] > aa[i + 1:].max():
+                    continue  # not a neck: the "piece" is most of the part, it widens towards the rest (a tip, a
+                    # dome), or the rest is no wider (a ball's equator)
+                s = _neck_safety(aa[i], L, k)
+                if best is None or s < best[0]:
+                    best = (s, i, L)
+            if best:
+                i = n - 1 - best[1] if rev else best[1]
+                found.append((k, rev, float(lo[k] + (i + 0.5) * cs[k]), best[2], float(aa[best[1]])))
+    if not found:
+        return {"worst": None}
+    sl = ck.MeshSlicer(part)
+    rows = []
+    for k, rev, at, L, grid_area in found:
+        try:
+            area = _loops_area(sl.section(("YZ", "XZ", "XY")[k], at, 1e9)) or grid_area
+        except Exception:  # noqa: BLE001 - keep the grid's estimate
+            area = grid_area
+        rows.append({"safety": round(_neck_safety(area, L, k), 2), "area_mm2": round(area, 1), "piece_mm": round(L, 1),
+                     "axis": "XYZ"[k], "at": round(at, 2), "end": ("+" if rev else "-") + "XYZ"[k]})
+    rows.sort(key=lambda r: r["safety"])
+    return {"worst": rows[0]}
+
+
+def finger_holes(part: Part, p: Params, hole_list: list | None = None) -> list[dict]:
+    """M19 (DS-K4): round holes 5 to 12.7 mm across (as printed) that a finger can go into: open at
+    both ends, or at least 9.5 mm deep. ASTM F963 4.18 writes the rule for thin rigid material and
+    gaps between moving parts; a deeper printed hole of that size can still trap a finger."""
+    inside = None
+    out = []
+    for h in ck.holes(part) if hole_list is None else hole_list:
+        d = h["d"] - (p.hole_comp if h["vertical"] else p.hole_comp_h)
+        if not FINGER_MIN <= d < FINGER_MAX:
+            continue
+        inside = inside or _Inside(part)
+        c, a = np.array(h["center"], float), np.array(h["axis"], float)
+        through = not any(inside(c + s * (h["length"] / 2 + 0.5) * a) for s in (1, -1))
+        if through or h["length"] >= FINGER_DEPTH:
+            out.append({"d": round(d, 2), "depth_mm": h["length"], "through": through, "at": h["center"]})
     return out
 
 
@@ -935,7 +1141,8 @@ def part_metrics(part: Part, p: Params, show: list[str] | None = None, up: str =
     m["stepping"] = stepping(mesh, p, show)
     info, hole_list = _edge_info(part), ck.holes(part)
     m["edges"] = edges(part, p.max_overhang, info)
-    m["symmetry"] = symmetry(part)
+    grid = _grid(part)
+    m["symmetry"] = symmetry(part, grid)
     m["seam_corners"] = seam_corners(faces)
     m["water"] = water_traps(part, up)
     m["inside_corners"] = inside_corners(part, info, hole_list)
@@ -943,6 +1150,9 @@ def part_metrics(part: Part, p: Params, show: list[str] | None = None, up: str =
     m["hole_edges"] = hole_edges(part, p, hole_list)
     m["slenderness"] = slenderness(part, faces)
     m["vase"] = vase_layers(part, faces, mesh)
+    m["small_parts"] = small_parts(mesh.tri.reshape(-1, 3))
+    m["necks"] = {"worst": None} if m["small_parts"]["fits"] else necks(part, grid)  # the whole part is K1's
+    m["finger_holes"] = finger_holes(part, p, hole_list)
     return m
 
 
@@ -1068,6 +1278,36 @@ def findings(style: Style, m: dict, eco: dict, p: Params, show: list[str], edges
             lean = f" and the wall leans at most {v['max_lean']:g} deg" if v["max_lean"] is not None else ""
             add("vase_mode_note", f"every layer is one closed contour{lean}: it can print in vase mode "
                                   "(PRINT = {'vase': True, 'why': ...}: the slicer makes one wall, no top)")
+    sp = m["small_parts"]
+    if s.small_parts_check and sp["fits"]:
+        add("small_parts_check", f"the whole part fits the small parts cylinder ({SPC_D} mm bore, floor {SPC_MIN}-{SPC_MAX} mm "
+                                 f"deep): in it, it stands {sp['length_mm']:g} mm tall on a {sp['across_mm']:g} mm footprint "
+                                 f"with {sp['slack_mm']:g} mm to spare. A choking hazard: not allowed in a toy for children "
+                                 "under 3; a toy for 3-6 needs the small-parts warning. Make it wider than 31.7 mm every "
+                                 "way, or longer than about 66 mm, or keep it from under-3s")
+    elif s.small_parts_check and sp["slack_mm"] > -3:
+        out.append({"level": "note", "rule": "DS-K1", "message": f"it misses the small parts cylinder by only "
+                    f"{-sp['slack_mm']:g} mm (best of the orientations tried): check with a printed gauge (31.7 mm bore, "
+                    "floor 25.4-57.1 mm deep)"})
+    nk = m["necks"]["worst"]
+    if s.min_neck_safety is not None and nk and nk["safety"] < s.min_neck_safety:
+        layers = "across" if nk["axis"] == "Z" else "along"
+        add("min_neck_safety", f"the {nk['piece_mm']:g} mm at the {nk['end']} end hangs on a {nk['area_mm2']:g} mm2 section "
+                               f"({nk['axis']} {nk['at']:g}): PLA's strength {layers} the layers is only {nk['safety']:g} x "
+                               f"the stress of a child's pull (90 N) or twist (0.45 Nm) there (target >= "
+                               f"{s.min_neck_safety:g}). Broken off, it fits the small parts cylinder: thicken and fillet "
+                               "the root, shorten it, or make it part of the body")
+    fh = m["finger_holes"]
+    if s.finger_holes_check and fh:
+        where = "; ".join(f"d {h['d']:g} " + ("through" if h["through"] else f"{h['depth_mm']:g} deep")
+                          + f" at {tuple(h['at'])}" for h in fh[:3])
+        add("finger_holes_check", f"{len(fh)} round hole(s) a finger can get stuck in ({where}): make them under 5 mm "
+                                  "or 13 mm and over, shallower than 9.5 mm, or filled in use (an axle)")
+    if s.toy_material_note:
+        add("toy_material_note", "material " + (p.material.upper() or "not set") + ": filament makers do not certify "
+                                 "printed toys (heavy metals, colorants); keep it out of the mouth and away from food "
+                                 "(layer lines hold bacteria), print it solid enough to drop, and treat this review "
+                                 "as a check for likely problems, not a toy-safety certification")
     return out
 
 
@@ -1136,6 +1376,15 @@ def _strength_line(m: dict) -> str:
             + f"; slenderness {sl['value']:g}")
 
 
+def _toy_line(m: dict) -> str:
+    sp, nk, fh = m["small_parts"], m["necks"]["worst"], m["finger_holes"]
+    fit = "fits" if sp["fits"] else "does not fit"
+    return (f"  small parts cylinder: {fit} (room {sp['slack_mm']:g} mm)"
+            + (f"; weakest neck {nk['area_mm2']:g} mm2 under {nk['piece_mm']:g} mm at {nk['end']} (strength/stress "
+               f"{nk['safety']:g})" if nk else "; no small feature on a neck")
+            + f"; finger holes {len(fh)}")
+
+
 def text(res: dict) -> str:
     """The metrics as a short readable report."""
     a = res["assumptions"]
@@ -1163,6 +1412,7 @@ def text(res: dict) -> str:
             f"  vase mode: {m['vase']['single_share']:.0%} of layers one closed contour"
             + (f" (first other at z {m['vase']['bad'][0]['z']:g})" if m["vase"]["bad"] else "")
             + (f"; wall leans up to {m['vase']['max_lean']:g} deg" if m["vase"]["max_lean"] is not None else ""),
+            _toy_line(m),
         ]
     eco = res["economy"]
     lines.append(f"\neconomy: {eco['parts']} part(s), {eco['faces']} faces, screw sizes "

@@ -23,7 +23,7 @@ def write(folder, name, text):
 
 def test_builtins_load_and_cover_every_threshold():
     names = S.available()
-    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft", "structural", "organic", "decorative"} and set(names.values()) == {"built-in"}
+    assert set(names) == {"functional", "modern", "least_cost", "rugged", "soft", "structural", "organic", "decorative", "toy"} and set(names.values()) == {"built-in"}
     used = set()
     for n in names:
         st = S.load_style(n)
@@ -113,6 +113,7 @@ def test_aliases():
     assert {S.normalize(n) for n in ("organic", "Natural", "sculpted", "figurine", "organic/natural")} == {"organic"}
     assert {S.normalize(n) for n in ("vase", "Planter", "lamp_shade", "lamp shade", "Lamp-Shade", "lampshade",
                                      "ornamental")} == {"decorative"}
+    assert {S.normalize(n) for n in ("kid_safe", "Kid-Safe", "kids", "child_safe", "children", "toys")} == {"toy"}
     with pytest.raises(S.StyleError):
         S.normalize("../etc/passwd")
 

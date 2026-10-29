@@ -1,6 +1,6 @@
 """Design styles: small TOML files that say what the design review looks for.
 
-The built-in styles (functional, modern, least_cost, rugged, soft, structural, organic, decorative) ship as the same
+The built-in styles (functional, modern, least_cost, rugged, soft, structural, organic, decorative, toy) ship as the same
 kind of file a user writes. Lookup, first found wins:
 
   1. the workspace:  <workspace>/styles/<name>.toml
@@ -31,7 +31,9 @@ ALIASES = {"minimal": "modern", "modern/minimal": "modern", "least cost": "least
            "natural": "organic", "sculpted": "organic", "figurine": "organic", "organic/natural": "organic",
            "heavy_duty": "structural", "heavy-duty": "structural", "heavy duty": "structural", "structural/load-bearing": "structural",
            "vase": "decorative", "planter": "decorative", "lamp_shade": "decorative", "lamp shade": "decorative", "lamp-shade": "decorative",
-           "lampshade": "decorative", "ornamental": "decorative", "decorative/vase": "decorative"}
+           "lampshade": "decorative", "ornamental": "decorative", "decorative/vase": "decorative",
+           "kid_safe": "toy", "kid-safe": "toy", "kid safe": "toy", "kids": "toy", "child_safe": "toy", "child-safe": "toy",
+           "child safe": "toy", "children": "toy", "toys": "toy", "toy/kid-safe": "toy"}
 EDGE_PREFS = ("", "chamfer", "fillet")
 
 
@@ -68,6 +70,10 @@ class Style:
     min_wall_lines: float | None = None
     max_z_slenderness: float | None = None
     vase_mode_note: bool = False
+    small_parts_check: bool = False
+    min_neck_safety: float | None = None
+    finger_holes_check: bool = False
+    toy_material_note: bool = False
     source: str = ""  # where it was loaded from (not a file field)
 
 
@@ -95,6 +101,10 @@ THRESHOLDS = {
     "min_wall_lines": ("suggest", "DS-T4", "thinnest wall in line widths (knife edges apart)"),
     "max_z_slenderness": ("note", "DS-T1", "run standing on a small XY section / sqrt(its area)"),
     "vase_mode_note": ("note", "DS-D1", "whether every layer is one closed contour with nothing to support (vase mode)"),
+    "small_parts_check": ("suggest", "DS-K1", "the whole part fits the small parts cylinder"),
+    "min_neck_safety": ("suggest", "DS-K2", "PLA strength / stress at a small feature's root under a child's pull or twist"),
+    "finger_holes_check": ("suggest", "DS-K4", "round holes 5-12.7 mm a finger can go into"),
+    "toy_material_note": ("note", "DS-K6", "material and food contact; not a certification"),
 }
 _TEXT = ("label", "description", "based_on", "edges", "review")
 _BOOLS = {f.name for f in fields(Style) if f.type == "bool"}
