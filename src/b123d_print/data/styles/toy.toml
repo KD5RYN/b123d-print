@@ -1,0 +1,26 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Toy / kid-safe"
+description = "For toys and children's things: nothing small enough to swallow or to break off, all rounded, sturdy when dropped. Flags likely problems; certifies nothing."
+edges = "fillet"
+review = """
+Ask the age first: under 3 (mouths everything), 3-6, older. Look for: any piece, or any piece
+that could break off, small enough to fit the small parts cylinder (31.7 mm across, 25.4-57.1 mm
+deep): not allowed under 3, a warning label for 3-6; loose balls under 44.5 mm [DS-K1]; thin
+features a child can grip (ears, horns, antennas, axles, pegs) joined by a small root: a 90 N
+pull or 0.45 Nm twist must not snap them; drop it from a table onto a hard floor [DS-K2]; every
+edge and point rounded, bed edges chamfered, no support scars, strings or brim left on, no rigid
+spike a child could fall on [DS-K3]; round holes and gaps of 5-12.7 mm that trap a finger, and
+pinch points in moving parts [DS-K4]; 3+ line walls, 4+ walls and 20 %+ infill, the thin features
+lying along the layers [DS-K5]; the material and food contact: not for mouthing, food or drink
+[DS-K6]. Say plainly that this is not a safety certification [DS-K7].
+Typical: "the 6 mm horn on a 3 mm root breaks under a child's pull and fits the cylinder: make the
+root 10 mm and fillet it r 3"; "the 8 mm hole traps a finger: 4 mm or 14 mm".
+"""
+small_parts_check = true
+min_neck_safety = 2.0
+finger_holes_check = true
+toy_material_note = true
+max_sharp_edge_share = 0.0
+max_sharp_inside_share = 0.25
+min_wall_lines = 3

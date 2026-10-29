@@ -59,7 +59,7 @@ An unknown key is an error, so typos don't pass silently.
 | `printer` | `""` (generic) | optional [printer profile](printer-profiles.md) |
 | `material` | `""` | optional material profile: `pla`, `petg`, `asa`, `abs`, `tpu` or your own |
 | `formats` | `step`, `stl`, `3mf`, `png` | what export writes: `step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware` ([formats](formats.md)) |
-| `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic`, `decorative` or [your own](design-review.md#custom-styles) |
+| `style` | `""` (functional) | the [design review](design-review.md) style for parts whose script sets no `STYLE`: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic`, `decorative`, `toy` or [your own](design-review.md#custom-styles) |
 | `review` | `"warn"` | what `export` does when the [design steps](design-review.md#the-review-checklist) (a passing check, preview and section, `design_metrics`, `suggest_orientation`, a style) did not run on this version of the part: `warn` exports and says what was skipped (in the result and on the print sheet), `required` refuses unless called with `skip_review="<the user's reason>"` (recorded on the print sheet), `off` says nothing and ends no result with the checklist |
 | `filament_price` | none | price per kg of filament; `design_metrics` then shows a cost next to the filament estimate |
 | `print_flow` | `10` | mm³/s the printer sustains, for `design_metrics`' rough print-time estimate (standard hotend 8-12, high-flow 20 and more) |

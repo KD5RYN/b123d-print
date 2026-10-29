@@ -20,6 +20,7 @@ The rules it applies, with their sources, are on [Design styles and review](../D
 | `structural` | brackets, mounts, clamps, hooks, hinges, gears, tool holders | the load along the layers, filleted inside corners (r ≥ half the wall), walls ≥ 3 lines and 4-6 walls in the slicer, gussets, inserts and washers |
 | `organic` | fruit, plants, animals, figurines, shells, sculpture | modeled from sections along curves (not boxes and cylinders), sections that vary along the length, joins blended with big lofted collars, a few features and a little asymmetry; printed lying along its curve on a flat base, tree supports, variable layer height |
 | `decorative` | vases, planters, lamp shades, ornaments | a twist, a taper or a few strong pattern features that read from a step back; whether it can print in vase mode (one closed contour per layer, no lean past the overhang limit); thin even walls and an air gap to the bulb for lamp shades |
+| `toy` | toys and children's things | nothing that fits the small parts cylinder or breaks off small, every edge rounded, no 5-12.7 mm finger holes, walls ≥ 3 lines; material and food notes. [Flags likely problems, certifies nothing](#toys-and-kid-safe-parts) |
 
 The industrial look (chamfers and exposed standard screws) is `functional` with
 `EDGES = "chamfer"`. `structural` is about the load path; `rugged` about sun, water and heat:
@@ -113,10 +114,49 @@ which field.
 | `min_wall_lines` | number | suggest when a wall is thinner than this many line widths (DS-T4); turns on the wall measurement |
 | `max_z_slenderness` | number | note when a run standing on a small XY section is more slender than this (DS-T1; 5.6 = a round post 5 diameters tall) |
 | `vase_mode_note` | true/false | note whether the part can print in vase mode: every layer one closed contour, the wall within the overhang limit both ways (DS-D1, DS-D3) |
+| `small_parts_check` | true/false | suggest when the whole part fits the small parts cylinder (DS-K1) |
+| `min_neck_safety` | number | suggest when PLA's strength at the root of a feature that would fit the cylinder is less than this × the stress of a child's pull or twist (DS-K2) |
+| `finger_holes_check` | true/false | suggest for round holes 5-12.7 mm across that go through or are 9.5 mm deep (DS-K4) |
+| `toy_material_note` | true/false | note the material, food and mouth contact, and that the review certifies nothing (DS-K6) |
 
 Shares are fractions (0.9 = 90 %). The built-in files are in
 [`src/b123d_print/data/styles/`](https://github.com/KD5RYN/b123d-print/tree/main/src/b123d_print/data/styles):
 copy one as a starting point.
+
+## Toys and kid-safe parts
+
+`STYLE = "toy"` (or `kid_safe`, `kids`, `child_safe`, `children`) is for toys and other things
+for children. Its rules come from the toy-safety rules: the US small parts and use-and-abuse
+regulations (16 CFR 1501, 16 CFR 1500.48-.53) and ASTM F963, the EU's EN 71-1 and Canada's Toys
+Regulations. The rules, the numbers and the sources are in
+[Design styles and review §3.7](../DESIGN_GUIDE.md#37-toy-kid-safe).
+
+!!! warning "It flags likely problems. It does not make a toy safe."
+    b123d-print does not test or certify anything. A toy sold in the US needs testing by a
+    CPSC-accepted laboratory and a Children's Product Certificate; in the EU, conformity with
+    EN 71. The standards' tests use the finished toy, real fixtures and loads, and the age it is
+    for. A part with no findings is not a safe toy. A printed toy is not for mouthing, food or
+    drink.
+
+What it looks at, first asking the age it is for (under 3, 3 to 6, older):
+
+- **Small parts** (DS-K1): no piece may fit, in any orientation, in the small parts cylinder
+  (31.7 mm across, its floor sloping from 25.4 to 57.1 mm deep), and nothing that breaks off may
+  either. That is the rule for children under 3; toys for 3 to 6 with small parts need a choking
+  warning. `design_metrics` tries the part in the cylinder in many orientations (a 20 mm cube and
+  a 30 mm ball fit; a print a hair too big gets a note: check it with a printed gauge).
+- **Breaking off** (DS-K2): the tests drop the toy, twist and pull anything a child can grip
+  (EU: 90 N; US: 15 lbf after 18 months, a 4 in-lbf twist). The metric looks for a small feature
+  on a thin root, estimates the stress there and compares it with PLA's strength across or along
+  the layers; it suggests when there is less than a factor of 2.
+- **Rounded** (DS-K3): every outside edge rounded (`max_sharp_edge_share = 0`), points and rigid
+  projections reviewed from the renders, supports, brims and strings cleaned off.
+- **Finger traps** (DS-K4): round holes 5 to 12.7 mm across that a finger can go into, and gaps in
+  hinges and moving parts (an opening a 5 mm rod enters must also admit 12-13 mm).
+- **Sturdy** (DS-K5): walls of 3 lines or more, filleted inside corners; 4 walls and 20 %+ infill
+  in the slicer.
+- **Material and food** (DS-K6): a note every time: filament makers do not certify printed toys,
+  layer lines hold bacteria, brass nozzles can shed lead.
 
 ## The review checklist
 
@@ -213,6 +253,9 @@ findings:
 | walls | the thinnest walls in line widths, for a style with `min_wall_lines` (the ThinFeature sections; takes seconds) |
 | hole edge distance | for each screw hole, axis to the nearest edge of the material, in hole diameters (reported only) |
 | slenderness | how tall a run stands on a small XY section: the run over the square root of the section's area |
+| small parts | whether the part fits the small parts cylinder (31.7 mm bore, 25.4-57.1 mm deep), tried in many orientations, and the room left |
+| weak necks | a feature that would fit the cylinder if it broke off, on a root too thin for a child's pull (90 N) or twist (0.45 Nm); rough |
+| finger holes | round holes 5-12.7 mm across that go through or are 9.5 mm deep |
 
 Use the estimates to compare two versions of a part and to see what dominates (supports,
 infill, layer count), not as a quote: a slicer gives the real numbers.

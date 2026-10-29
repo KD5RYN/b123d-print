@@ -3,14 +3,14 @@
 The rules, their sources and the reasoning are in DESIGN_GUIDE
 (https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). IDs: [DS-G*] general, [DS-S*] FDM
 surfaces, [DS-C*] cost, [DS-R*] rugged, [DS-H*] handheld, [DS-T*] structural, [DS-O*] organic,
-[DS-D*] decorative. Thresholds marked
+[DS-D*] decorative, [DS-K*] toys. Thresholds marked
 "proposed" are the project's starting values, not sourced numbers. The review never fails a part: findings are
 **suggest** (worth changing for this style) or **note** (information, a trade-off).
 
 ## In the part script
 
 - `STYLE` in `Dims`: `"functional"` (default), `"modern"`, `"least_cost"`, `"rugged"`, `"soft"`,
-  `"structural"`, `"organic"`, `"decorative"` or a style file's name. A variant can override it. Else the workspace `style` setting, else
+  `"structural"`, `"organic"`, `"decorative"`, `"toy"` or a style file's name. A variant can override it. Else the workspace `style` setting, else
   functional.
 - `EDGES` (optional, `Dims` or module): `"chamfer"` or `"fillet"`, the edge language the part
   should use. Functional with `EDGES = "chamfer"` and exposed standard screws is the
@@ -49,7 +49,9 @@ radius language), `least_cost` (least filament and time), `rugged` (sun, water, 
 inside corners, walls and screws), `organic` (natural objects: modeled from sections along
 curves, blended joins, a few features, a flat base; DS-O1..O5) and `decorative` (vases,
 planters, lamp shades: patterns that read from a step back; vase mode: one closed contour per
-layer, a one-line wall, no lean past the overhang limit). The user's own styles live in `~/.config/b123d-print/styles/` or the
+layer, a one-line wall, no lean past the overhang limit) and `toy` (for children: no small parts or
+features that break off small, all rounded, no finger traps, sturdy; ask the age; it flags likely
+problems and is not a safety certification, say so [DS-K7]). The user's own styles live in `~/.config/b123d-print/styles/` or the
 workspace's `styles/` folder (`list_parts` lists them); `based_on` starts one from another, and a
 file with a built-in's name replaces it.
 

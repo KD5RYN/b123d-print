@@ -154,9 +154,9 @@ It is not a general CAD framework.
   ([fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/)).
 - **Design review** — after the print checks pass, the assistant reviews the part for a style
   you pick (functional, modern, least cost, rugged/outdoor, soft/handheld, structural/load-bearing,
-  organic/natural, decorative/vase):
+  organic/natural, decorative/vase, toy/kid-safe):
   rough filament and time estimates, supports, edge treatment, layer steps, water traps, inside
-  corners and walls, and concrete suggestions
+  corners and walls, small parts for toys, and concrete suggestions
   from [sourced design rules](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). It changes
   nothing without your OK ([design review](https://kd5ryn.github.io/b123d-print/using/design-review/)).
 - **The workflow, model-neutral** — MCP prompts plus an [`AGENTS.md`](AGENTS.md) any agent can

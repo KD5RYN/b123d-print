@@ -50,6 +50,19 @@
   spiralling; `fluted_section`) and **`vase_shell`** (a solid body of revolution for vase mode
   that refuses a wall leaning past the overhang limit; `vase_lean`).
 - New CC0 example **`twisted_vase`**: a six-pointed star with a quarter turn, printed in vase mode.
+- **A `toy` design style for toys and children's things** (#153; also `kid_safe`, `kids`,
+  `child_safe`, `children`). Its rules (DS-K1..K7 in the
+  [design guide](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/#37-toy-kid-safe)) come from the
+  toy-safety rules themselves: 16 CFR 1501 and 1500.48-.53, ASTM F963, EN 71-1 and Canada's Toys
+  Regulations: no piece that fits the small parts cylinder (31.7 mm across, 25.4-57.1 mm deep),
+  nothing a child can grip that breaks off small under the use-and-abuse pull and twist, every edge
+  rounded, no 5-12.7 mm finger traps, sturdy walls, and a note on material and food contact. It
+  flags likely problems; it is not a safety certification, and every toy review says so.
+- **`design_metrics` measures three new things** (fast, from the mesh and the symmetry grid):
+  whether the whole part fits the small parts cylinder, tried in many orientations (M17); a small
+  feature on a root too thin for a child's 90 N pull or 0.45 Nm twist (M18); round holes a finger
+  can get stuck in (M19). New style-file fields: `small_parts_check`, `min_neck_safety`,
+  `finger_holes_check`, `toy_material_note`.
 
 ## 0.3.16 — 2026-10-28
 

@@ -496,10 +496,11 @@ The rules and their sources are in
 - Every part has a **style**: `STYLE` in `Dims`, else the workspace `style` setting, else
   `functional`. The styles are `functional`, `modern` (minimal), `least_cost`, `rugged`
   (outdoor), `soft` (handheld), `structural` (load-bearing: brackets, mounts, clamps, hooks),
-  `organic` (natural: fruit, plants, animals, figurines, shells, sculpture) and `decorative`
-  (vases, planters, lamp shades, ornaments).
+  `organic` (natural: fruit, plants, animals, figurines, shells, sculpture), `decorative`
+  (vases, planters, lamp shades, ornaments) and `toy` (kid-safe: small parts, breakable features,
+  finger traps; it flags likely problems and certifies nothing [DS-K7]).
   For a new part, if the user has said nothing about looks, ask once; for a part that carries
-  load, suggest `structural`. **For a natural object use `organic` and start from a recipe**
+  load, suggest `structural`; for a toy or a child's thing, `toy`. **For a natural object use `organic` and start from a recipe**
   (`spine_loft`, `tapered_sweep`, `organic_blend`, `flat_base`; the `banana` example), not from
   boxes, cylinders and spheres: sections along curves, blended joins, a flat base [DS-O1..O5].
   For a vase, planter or lamp shade use `decorative`: a vase-mode part is modeled as a solid (the

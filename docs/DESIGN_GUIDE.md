@@ -19,7 +19,8 @@ fetched and each cited claim checked against the page (four were corrected). Tho
 unreachable (bot protection or 403) stay marked *(search, not fetched)*: they only support a
 claim another source already makes, or the claim is labeled provisional. The decorative rules
 (§3.6, 2026-10-29) were checked against the fetched slicer pages and lithophane guides; the one
-lamp-shade heat source could not be fetched and its numbers are provisional.
+lamp-shade heat source could not be fetched and its numbers are provisional. The toy rules (§3.7,
+2026-10-29) come from the toy-safety regulations and standards themselves, fetched that day.
 
 ## 1. How to read this
 
@@ -88,7 +89,7 @@ Source keys are listed under [Sources](#sources).
 
 ---
 
-## 3. Cost, rugged, handheld, structural, organic and decorative rules
+## 3. Cost, rugged, handheld, structural, organic, decorative and toy rules
 
 ### 3.1 Least cost (filament and time)
 
@@ -181,11 +182,34 @@ Bambu Studio call it "Spiral vase", Cura "Spiralize Outer Contour"), which has r
 | DS-D6 | **Lamp shades: the light through a wall follows its thickness.** Thin areas glow, thick ones are dark, so an even wall glows evenly and uneven thickness shows as bands; a lithophane uses it on purpose (thinnest ~0.4–0.8 mm, thickest ~2–3.2 mm; white or natural filament, calibrated per filament). One wall (vase mode) passes more light than several walls, which reflect it inside. | LITHO-MAKER (0.8 / 3.0 mm defaults; white or natural PLA). JLC-LITHO (total ~2–3 mm, thinnest near 0.4 mm; "Dark pixel, thick plastic"). ITSLITHO (3.2 mm maximum in its example; white and grey work best; a calibration print per filament). Several walls: QIDI-LAMP *(vendor; search, not fetched)* **(1 src)**. | evidence | **r** | Rubric for lamp shades: thin, even walls, or a deliberate lithophane. |
 | DS-D7 | **Heat: LED bulbs only, an air gap to the bulb, and the material by temperature.** PLA softens at 52–60 °C (DS-R1); in a closed shade an LED's driver can raise the air to ~50 °C; keep ≥ 20 mm between the bulb and the shade, else PETG (Tg ~75–80 °C), ASA or PC; filament-style LED bulbs run hot at the base. | PLA: the DS-R1 sources (BAMBU-PLA, PM-PLA, PRUSA-MAT). The rest: QIDI-LAMP *(vendor; search, not fetched)* **(1 src)**. | evidence | **i** | Provisional note for lamp shades: ask the bulb type and wattage, name the gap and the material in the report. |
 
+### 3.7 Toy / kid-safe
+
+Toys and other things for children. The rules come from the toy-safety rules themselves: the US
+regulations (16 CFR 1500 and 1501) and ASTM F963 (mandatory in the US under the CPSIA, CPSC-F963),
+the EU's EN 71-1 and Canada's Toys Regulations. They agree on the main numbers; where they
+differ, the review uses the stricter one. **b123d-print does not certify anything.** A toy sold in
+the US needs testing by a CPSC-accepted laboratory and the maker's Children's Product Certificate
+(CPSC-CPC); the standards' tests use real fixtures and loads on the finished toy, graded by age.
+These rules and the metrics M17-M19 flag likely problems while the part is still CAD, so the
+design has a chance to pass; a part with no findings is not a safe toy. Age matters: under 3
+(everything goes in the mouth: no small parts at all), 3 to 6 (small parts need a warning), under
+8 (sharp edges and points). Ask the age first.
+
+| # | Rule | Evidence | Kind | Class | Proposed behavior |
+|---|---|---|---|---|---|
+| DS-K1 | **No small parts for children under 3: no toy, removable part, or piece that comes off in the use-and-abuse tests may fit entirely, uncompressed and in any orientation, in the small parts cylinder** (31.7 mm bore; its floor slopes from 25.4 to 57.1 mm deep). A toy for 3 to 6 that has small parts carries a choking warning. Loose balls for under-3s must not pass a 44.5 mm (1.75 in) hole. | CFR1501: an article fails if it "fits entirely within the cylinder, in any orientation"; pieces detached by the use-and-abuse tests are tested too. F963 4.6.1 and Fig. 3 (1.25 in / 31.7 mm across, 1.00 in / 25.4 mm to 2.25 in / 57.1 mm deep), 4.6.3 (3-6 years: the 16 CFR 1500.19 warning), 4.34 (small balls: the 1.75 in / 44.5 mm template). EN71-1 5.1 and 8.2 (the same cylinder, Fig. 18). CA-TOYS s. 7 and Schedule 1 (the same cylinder; pushed in with at most 4.45 N). CPSC-SP, CPSC-SP79 (the 1979 rule: 1-1/4 in by 2-1/4 in). | evidence | **m** + **r** | Metric M17: suggest when the whole part (each printed piece) fits; note when it misses by less than 3 mm (a printed gauge settles it). Rubric: ask the age; loose balls; pieces that could come off. |
+| DS-K2 | **Nothing a child can grip may come off or break under use and abuse.** The tests drop the toy (US: 10 times from 4.5 ft up to 18 months, 4 times from 3 ft for 18-96 months; EU: 5 times from 850 mm onto a hard plate), twist anything gripped between thumb and forefinger (US 2, 3, 4 in-lbf by age; EU 0.34 Nm) and pull it (US 10 lbf up to 18 months, then 15 lbf = 67 N; EU 90 N, 50 N for parts 6 mm or smaller); whatever comes off is then judged as a small part, sharp edge or point. On a print the weak spot is a small feature on a small root, worst when the root lies across the layers (DS-T1). | CFR1500-50 (ages), CFR1500-51, CFR1500-52, CFR1500-53 (drop, torque and tension values). F963 8.5-8.10 and Table 5 (the same values). EN71-1 8.3, 8.4.2.1, 8.5; 5.1 (no part from the tests may fit the cylinder or expose a sharp edge or point). Strength across the layers: DS-T1 (PLA 31 vs 63 MPa, CNCK-45). | evidence | **m** + **r** | Metric M18: suggest when PLA's strength is under 2 × the stress the larger pull (90 N) or twist (0.45 Nm) puts in the root of a feature that would fit the cylinder if it broke off. The factor 2 is *proposed, ours* (prints vary; the model is rough). Rubric: features a child can grip; drop it in the mind's eye. |
+| DS-K3 | **No sharp edges or points, and nothing rigid to fall on.** The US tests apply to toys for children under 8, before and after use and abuse: a sharp-point tester (a slot pressed with about 1 lbf) and a sharp-edge test (PTFE tape on a 9.35 mm mandrel pressed with 6 N and turned once; tape cut over 13 mm fails). EU: accessible edges and points "shall not present an unreasonable risk of injury". On a print: layer edges, the bed edge's elephant foot, support scars, brim, strings and seams; round every edge and clean the print. | CFR1500-48, CFR1500-49; F963 4.7 (edges), 4.8 (projections, puncture when a child falls on them), 4.9 (points); EN71-1 4.7, 4.8. | evidence | **r** | `max_sharp_edge_share = 0` (M7, cited as DS-G8); rubric for points, projections and clean-up. |
+| DS-K4 | **No finger traps: an opening a 5 mm rod enters must also admit a 12-13 mm rod**, so a finger slides out instead of swelling stuck. US: gaps between moving segments (under 96 months), and round holes in rigid material thinner than 1.58 mm that admit a 6 mm rod 10 mm deep (60 months and under). EU: gaps at hinges, folding and sliding mechanisms and winder keys; holes in keys must not admit a 5 mm rod. | F963 4.18.1 (3/16 in / 5 mm → 1/2 in / 13 mm), 4.18.2 (1/4 in rod 3/8 in deep → 1/2 in rod); EN71-1 4.10.1-4.10.3 (5 mm → 12 mm). Applying it to round holes in thicker printed walls is *ours*: a finger in a deep hole swells the same way. | evidence | **m** + **r** | Metric M19: suggest for round holes 5 to 12.7 mm across that go through or are 9.5 mm or deeper (unless an axle or peg fills them). Rubric: hinges and gaps in moving parts. |
+| DS-K5 | **Sturdy where it is dropped:** walls of 3 lines or more, 4 or more walls and 20 % or more infill in the slicer, thin features lying along the layers, filleted roots. | DS-T1, DS-T2, DS-T3, DS-T4 (sourced there); the drop, torque and tension tests (DS-K2) are why. The slicer values for toys are *proposed, ours* (the structural ones). | evidence | **r** | `min_wall_lines = 3` (M13, DS-T4) and `max_sharp_inside_share = 0.25` (M12, DS-T3; *proposed, ours*). |
+| DS-K6 | **Material and food contact: a printed toy is not a certified toy, and not for mouthing, food or drink.** The toy standards limit lead and other heavy elements in coatings and accessible materials; filament makers do not certify printed toys, and food-contact statements cover the raw filament (often not every colour), not the print. Layer lines hold residue and bacteria and are hard to clean; brass nozzles can shed lead. For a toddler's toy use a known, undyed or certified filament and a stainless nozzle; keep printed things out of food and drink, or seal them with a food-safe coating. | F963 4.3.5.1, 4.3.5.2 (heavy elements in coatings and substrates). PRUSA-FOOD *(vendor)*: layer lines hard to clean, colorant exceptions, brass nozzles, "We do not recommend using 3d-prints as food-containers". HACKADAY-FOOD *(press)*: crevices between layers hide germs, unknown pigments, lead in brass nozzles. No peer-reviewed study of cleaning printed toys was found. | evidence | **i** | A note with every toy review (material, mouth, food). |
+| DS-K7 | **Not a certification.** A children's product (12 and under) sold in the US needs testing by a CPSC-accepted laboratory and the maker's Children's Product Certificate; the review flags likely problems early and must say so. | CPSC-CPC, CPSC-F963. | normative | **i** | Rubric; the DS-K6 note says it. |
+
 ---
 
 ## 4. The styles
 
-A **style** is a short name the user picks for a part; there are eight. It decides which metrics the review
+A **style** is a short name the user picks for a part; there are nine. It decides which metrics the review
 highlights, which rubric questions it asks and which thresholds produce a **suggest**. All
 styles also apply the general rules (§2) at **note** level. The definitions are ours (§1); the
 rules they cite are sourced.
@@ -360,7 +384,31 @@ and about vase mode. `vase`, `planter`, `lamp_shade` and `ornamental` are accept
   shoulder closes in at 55° from vertical: keep it under 45° in vase mode"; "6 mm from the bulb:
   leave 20 mm (provisional) and print it in PETG".
 
-### 4.10 Where the style lives
+### 4.10 toy / kid-safe
+
+*Toys and children's things: nothing small enough to swallow, nothing that breaks off small,
+everything rounded, no finger traps, sturdy when dropped.* It flags likely problems; it is not a
+safety certification (DS-K7). `kid_safe`, `kids`, `child_safe` and `children` are accepted too.
+
+- **Looks for:** the age it is for (ask); whole pieces and breakable features against the small
+  parts cylinder, loose balls (DS-K1, DS-K2); sharp edges, points and projections, support scars
+  and brims (DS-K3); finger traps in holes and moving gaps (DS-K4); walls, infill and the layers
+  under thin features (DS-K5); material, mouthing and food contact (DS-K6).
+- **Metrics:** M17 small parts, M18 weak necks, M19 finger holes; M7 sharp edges, M12 inside
+  corners, M13 walls.
+- **Suggest when:** a printed piece fits the small parts cylinder (M17; sourced); PLA's strength at
+  the root of a feature that would fit the cylinder is under 2 × the stress of a 90 N pull or a
+  0.45 Nm twist (M18; the loads sourced, the factor *proposed, ours*); a round hole 5-12.7 mm
+  across goes through or is 9.5 mm deep (M19; sourced, applied to printed walls by us); any outside
+  edge is sharp (M7); more than 25 % of the inside corner length is sharp (M12, *proposed*); a wall
+  is under 3 lines (M13). **Note** the material and food contact every time (DS-K6), and when a
+  piece misses the cylinder by under 3 mm.
+- **Typical suggestions:** "The 6 mm horn stands on a 3 mm root across the layers: a child's
+  pull snaps it, and it fits the cylinder: make the root 10 mm, fillet it r 3, or print the head
+  lying down"; "The 8 mm hole traps a finger: 4 mm or 14 mm"; "The 25 mm figure fits the
+  cylinder: not for under-3s, or make it 35 mm"; "PLA, 4 walls, 25 % infill; not for teething".
+
+### 4.11 Where the style lives
 
 1. **Part script:** `STYLE` in `Dims` (a variant can override it:
    `VARIANTS = {"outdoor": dict(STYLE="rugged")}`). The template has `STYLE: str = ""`, which
@@ -369,9 +417,9 @@ and about vase mode. `vase`, `planter`, `lamp_shade` and `ornamental` are accept
 3. **Default:** `functional`.
 
 Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic`,
-`decorative` (also accepted: `minimal`, `least cost`, `outdoor`, `handheld`, `strong`,
+`decorative`, `toy` (also accepted: `minimal`, `least cost`, `outdoor`, `handheld`, `strong`,
 `load_bearing`, `heavy_duty`, `natural`, `sculpted`, `figurine`, `vase`, `planter`, `lamp_shade`,
-`ornamental`, and `industrial`, which means functional). Anything else
+`ornamental`, `kid_safe`, `kids`, `child_safe`, `children`, and `industrial`, which means functional). Anything else
 is an error that lists them. When a user starts a new part and has said nothing about looks,
 the AI asks **once**; a blank answer means functional. One style per part, no modifiers; the
 cost numbers are always shown (decision 2).
@@ -402,7 +450,7 @@ design_metrics(name, variant=None, style="", up="", as_json=False)     # MCP
 b123d-print metrics [parts...] [--variant K] [--style S] [--up +Y] [--json]   # CLI
 ```
 
-It builds the part (in the sandbox, over MCP), computes M1–M16 for each printable part, then
+It builds the part (in the sandbox, over MCP), computes M1–M19 for each printable part, then
 the findings the style's thresholds trigger (§4), each citing its rule. It never fails and
 changes nothing.
 
@@ -536,7 +584,31 @@ bed face and a flat top face apart: the slicer drops the top). The decorative st
 whether the part can print in vase mode; the print sheet repeats the check for a part whose
 `PRINT` says `vase`.
 
-### 5.10 Tests
+### 5.10 M17–M19: toys
+
+Rough by design: they flag likely problems for the toy style (§3.7), they are not the standards'
+tests, and the output says so.
+
+- **M17 small parts** (DS-K1): the part's convex hull is put in the small parts cylinder in many
+  orientations (X, Y, Z, its principal axes and 48 directions spread over the sphere, each turned
+  in 24 steps about itself). For each, the smallest circle around the footprint must fit the 31.7 mm
+  bore; pushed against the deep side and lowered onto the 45° floor (25.4 mm deep at the shallow
+  side, 57.1 at the deep side), the part fits when its top is below the rim. Output: fits, the room
+  left (negative: how far it sticks out), and the orientation. A 20 mm cube and a 30 mm ball fit; a
+  32.4 mm ball does not. Sampled orientations can miss the best one by a little, hence the
+  under-3 mm note.
+- **M18 weak necks** (DS-K2): on the occupancy grid M8 uses, slices are walked in from each end
+  of X, Y and Z while the piece beyond still fits the cylinder (flat-footprint and leaning
+  bounds); a slice that is no wider than the piece and clearly narrower than the rest is a neck.
+  Its stress: the pull (90 N, EN 71-1) at the piece's far end bending the section (taken as round),
+  or the twist (0.45 Nm, 16 CFR 1500.53) where larger, plus the pull itself; PLA's strength across
+  the layers (31 MPa) for a horizontal section, along them (63 MPa) otherwise (DS-T1). The weakest
+  neck per walk is measured again on an exact section. Features side by side in one slice are
+  counted together, which can hide one; the whole part fitting the cylinder is M17's.
+- **M19 finger holes** (DS-K4): round holes (as for M9) 5 to 12.7 mm across, after hole
+  compensation, that are open at both ends or 9.5 mm or deeper.
+
+### 5.11 Tests
 
 `tests/test_metrics.py`, on shapes with known answers: a 60 × 40 × 20 box is all sharp,
 symmetric, with seam corners on every layer; filleted vertical edges give exactly their 80 mm
@@ -547,7 +619,9 @@ estimate equals the shell formula for a cube and grows with infill; the time rul
 formula; the findings fire at the thresholds; styles and directions parse; an L has one inside edge, and its sharp, filleted and wall
 measurements are exact; a hole 5 mm from an end and a boss; a post on a plate has the analytic
 slenderness; a cylinder is one contour on every layer, a cup and two posts are not, and a cone's
-lean is its half-angle. Sanity tests only:
+lean is its half-angle; a die, a 30 mm ball and a 50 mm rod fit the small parts cylinder and a 32.4 mm ball does
+not; a 3 mm horn on a block is a weak neck and a 12 mm one is not, a dome is no neck; an 8 mm hole
+through a plate is a finger hole, 3 and 15 mm ones and a shallow blind one are not. Sanity tests only:
 no slicer fixtures.
 
 ---
@@ -594,7 +668,7 @@ carries is `src/b123d_print/data/design_review.md`.
 
 ## 8. Implementation
 
-- `src/b123d_print/metrics.py`: M1–M16, the style findings and the text report (cites `DS-*`).
+- `src/b123d_print/metrics.py`: M1–M19, the style findings and the text report (cites `DS-*`).
 - `src/b123d_print/styles.py` and `data/styles/*.toml`: the style files, their lookup
   (workspace, user, built-in), `based_on`, and errors for unknown fields; `b123d-print styles`.
 - Settings: `style`, `filament_price`, `print_flow`; `density` in material profiles. Printer
@@ -609,8 +683,8 @@ carries is `src/b123d_print/data/design_review.md`.
 
 1. **Industrial** is folded into functional as `EDGES = "chamfer"` with exposed standard
    fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19, a seventh,
-   `organic`, on 2026-10-29: how a natural object is modeled, not a taste for curves, §4, and an
-   eighth, `decorative`, the same day).
+   `organic`, on 2026-10-29: how a natural object is modeled, not a taste for curves, §4, an
+   eighth, `decorative`, the same day, and a ninth, `toy`, too).
 2. **One style per part**, no modifiers; the cost numbers are always shown.
 3. **STYLE lives in `Dims`** (variants can override it), then the workspace, then functional.
 4. **No speed classes**, and printer profiles stay as they come from OrcaSlicer; one optional
@@ -782,8 +856,28 @@ definitions file).
 - ITSLITHO *(vendor; fetched 2026-10-29)*: ItsLitho, slicer settings for lithophanes, https://itslitho.com/?p=3848
 - QIDI-LAMP *(vendor; search, not fetched: 429)*: QIDI, "Choosing translucent filaments for heat-safe lamp shades", https://qidi3d.com/blogs/print-lab/translucent-filaments-heat-safe-lampshades
 
+**Toy / kid-safe** (fetched 2026-10-29; the regulations and the two standards' texts read in full
+where cited). ASTM F963 is cited in its 2011 edition, the one published as incorporated by
+reference; the current edition is F963-23 (paywalled, https://store.astm.org/f0963-23.html). EN 71-1
+is cited in its 2011+A3:2014 edition, published by Public.Resource.Org.
+
+- CFR1501 *(primary, regulation)*: 16 CFR 1501.4, size requirements and test procedure (small parts), https://www.law.cornell.edu/cfr/text/16/1501.4
+- CFR1500-48 / CFR1500-49 *(primary, regulation)*: sharp points and sharp edges, https://www.law.cornell.edu/cfr/text/16/1500.48 , https://www.law.cornell.edu/cfr/text/16/1500.49
+- CFR1500-50..53 *(primary, regulation)*: use-and-abuse tests by age, https://www.law.cornell.edu/cfr/text/16/1500.50 , https://www.law.cornell.edu/cfr/text/16/1500.51 , https://www.law.cornell.edu/cfr/text/16/1500.52 , https://www.law.cornell.edu/cfr/text/16/1500.53
+- F963 *(primary, standard)*: ASTM F963-11, Standard Consumer Safety Specification for Toy Safety, https://law.resource.org/pub/us/cfr/ibr/003/astm.f963.2011.html
+- EN71-1 *(primary, standard)*: EN 71-1:2011+A3:2014, Safety of toys, Part 1: Mechanical and physical properties, https://law.resource.org/pub/eu/toys/en.71.1.2014.html
+- CA-TOYS *(primary, regulation)*: Canada, Toys Regulations SOR/2011-17, s. 7 and Schedule 1, https://laws-lois.justice.gc.ca/eng/regulations/SOR-2011-17/page-1.html , https://laws-lois.justice.gc.ca/eng/regulations/SOR-2011-17/page-3.html
+- CPSC-SP *(primary)*: CPSC, Small Parts for Toys and Children's Products, https://www.cpsc.gov/Business--Manufacturing/Business-Education/Business-Guidance/Small-Parts-for-Toys-and-Childrens-Products
+- CPSC-SP79 *(primary)*: CPSC, "Rules To Reduce Childhood Chokings Proposed" (1979), https://www.cpsc.gov/Newsroom/News-Releases/1979/Rules-To-Reduce-Childhood-Chokings-Proposed
+- CPSC-CPC *(primary)*: CPSC, Children's Product Certificate, https://www.cpsc.gov/Business--Manufacturing/Testing-Certification/Childrens-Product-Certificate-CPC
+- CPSC-F963 *(primary, staff presentation)*: Midgett, "U.S. Mandatory Toy Standard: ASTM F963" (2009), https://www.cpsc.gov/s3fs-public/toyweb2_en_0.pdf
+- PRUSA-FOOD *(vendor)*: Prusa Knowledge Base, "Food safe FDM printing", https://help.prusa3d.com/article/food-safety-3d-printing_112313
+- HACKADAY-FOOD *(press)*: Williams, "3D Prints and Food" (2017), https://hackaday.com/2017/10/17/3d-prints-and-food
+
 **Unreachable or gated** (not used): Thompson et al. 2016 full text (403); Diegel, Nordin &
 Motte book (login); Kumke et al. 2016 (not found); Markowsky 1992 and Green 1995 (bot check /
 403); Westerman et al. 2012 (403); Komineas 2018 and Hopkinson & Dickens (blocked); Bambu wiki
 seam page (402); All3DP (403); NN/g affordance article (404); MoMA Machine Art (403); NASA-STD-3000
-handle data (not found); MDPI impact studies (403).
+handle data (not found); MDPI impact studies (403); eCFR (bot check: the CFR text was read on
+Cornell LII and govinfo instead); the EU Toy Safety Directive on EUR-Lex (empty page); the Utah
+Valley University cleaning study cited by vendor blogs (not found).
