@@ -59,7 +59,7 @@ class Settings:
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
     formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps), print (the print sheet), hardware (declared BOM JSON), bom / bom_csv (the shopping list as Markdown / CSV)
-    style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural or your own
+    style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural, organic or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)
     tip_speed: float = 200.0  # mm/s, the slicer's fastest print speed: the tip-over check scales with it; 0 = off

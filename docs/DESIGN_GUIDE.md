@@ -86,7 +86,7 @@ Source keys are listed under [Sources](#sources).
 
 ---
 
-## 3. Cost, rugged, handheld and structural rules
+## 3. Cost, rugged, handheld, structural and organic rules
 
 ### 3.1 Least cost (filament and time)
 
@@ -146,19 +146,41 @@ top of them, which makes a sharp inside corner across the layers worse, not bett
 | DS-T10 | **Snap arms and living hinges bend in XY**, never along Z (a Z arm loses about half its elongation); hinges in nylon, PP or TPU. | BP-N1..N9 (FICTIV-SNAP, FORMLABS-SNAP, HUBS-SNAP, HUBS-HINGE, 3ERP, SOVOL; PP from BP-N8: MH, HUBS-HINGE, FACFOX). 3ERP: hinge width along Z, ~0.6 mm thick, nylon or TPU for printed hinges. | evidence | **r** | Rubric. |
 | DS-T11 | **Slicer for strength:** a nozzle near the top of the material's range bonds layers better, but too hot hurts as much as too cold (PLA layer strength 20 MPa at 190 °C, 40 at ~230 °C, 32 at 270 °C); wider lines (to ~150 % of the nozzle) are stronger; layers up to half the nozzle; ABS/ASA gain from a heated chamber (upright ABS 21 → 29 MPa at 65 °C), while PLA wants a cool chamber and part cooling. | CNCK-EW, CNCK-NOZ (BP-W4). CNCK-TEMP, CNCK-LAYERH ("layers thicker than half the nozzle, strength starts to suffer"), CNCK-CHAMBER (passive enclosure only 21 → 23 MPa). ADDMA18 *(search, abstract)*: higher nozzle temperature raised ABS bond strength. | evidence | **r** | Report the settings with the wall count (DS-T2). |
 
+### 3.5 Organic / natural
+
+Natural objects: fruit, plants, animals, figurines, shells, sculpture. These rules are about **how
+the part is modeled**, not about taste: a banana built from a cylinder and two spheres looks like
+a toy and fails to blend where they meet, whatever the user's taste. They are *definitions
+(ours)*: what the `organic` style asks for, leaning on the sourced rules they cite. None sets a
+number; they are rubric questions, plus the edge metric (M7) that catches a part still built from
+primitives.
+
+| # | Rule | Evidence | Kind | Class | Proposed behavior |
+|---|---|---|---|---|---|
+| DS-O1 | **Model a natural shape from cross-sections along curves, not from primitives.** Boxes, cylinders and spheres fused together leave flat faces, constant sections and sharp seams that read as a toy. Loft the sections along a spine (`spine_loft`) or sweep a changing profile along a path (`tapered_sweep`). | Definition (ours). build123d has `loft`, `sweep(multisection=True)`, `Spline`/`Bezier` for this. DS-G8: curved forms are liked on average. | definition | **r** | Rubric: is anything still a box or a cylinder? Sharp outside edges (M7) on an organic part usually mean a primitive. |
+| DS-O2 | **Sections vary along the length**: size, and the shape too (a banana's ridges sharpen towards the ends, a horn flattens). One profile pulled straight looks extruded. | Definition (ours). | definition | **r** | Rubric: compare two or three sections (`section`) along the part. |
+| DS-O3 | **Joins are blended with big lofted collars, not sharp corners or small fillets.** A collar that carries on each body's taper (`organic_blend`) reads as one form; OpenCascade fillets on lofted and swept bodies often fail, and a small radius where two bodies meet still reads as two parts stuck together. Rounded tips (closing a loft to a point after a few small sections) rather than flat caps. | Definition (ours); fillet failures on lofted bodies are observed in this project's own builds (#151), not a source. DS-H3: only G2 blends avoid a highlight break on finished parts. | definition | **r** | Rubric: look at each join in a render; M7's sharp share flags caps and seams left sharp. |
+| DS-O4 | **A few defining features and a little asymmetry, not lots of small detail.** The curve, the ridges, the stem and the tip make a banana; small detail below a few line widths does not print and clutters the form; a perfect mirror looks manufactured. | Definition (ours). DS-G7: symmetry is a style choice, not a quality. DS-G2: economy. Detail size: BP-X2 (strokes >= 2 line widths). | definition | **r** | Rubric. Symmetry (M8) is reported, never judged for this style (no `min_symmetry`). |
+| DS-O5 | **Print an organic part so its curves print well**: lay the long curve along the layers, cut a flat base for bed contact (`flat_base`), tree (organic) supports under the curves, variable layer height for gently domed tops. | DS-H2 (domed tops, organic supports: CURVI19, LIV17, 3DJAKE-VLH, PRUSA-ORG), DS-S1 (stepping on shallow slopes), DS-T1 (a long thin part across the layers breaks on a layer line), BP-B1 (first layer). | evidence | **r** | Rubric; M5 supports and M6 stepping as usual; the curved-supports note (DS-H2). |
+
 ---
 
 ## 4. The styles
 
-A **style** is a short name the user picks for a part; there are six. It decides which metrics the review
+A **style** is a short name the user picks for a part; there are seven. It decides which metrics the review
 highlights, which rubric questions it asks and which thresholds produce a **suggest**. All
 styles also apply the general rules (§2) at **note** level. The definitions are ours (§1); the
 rules they cite are sourced.
 
-**Organic / soft:** included, narrowly, as **soft / handheld**. The curvature-preference
-evidence (DS-G8) is too weak and fashion-dependent to justify a general "organic" style, but
-parts held in the hand have their own sourced rules (grip size, domed-top stepping, supports)
-that the other styles lack.
+**Soft and organic are two styles.** The 2026-10-18 review turned down a general "organic"
+style because the curvature-preference evidence (DS-G8) is too weak and fashion-dependent to
+make curves a matter of looks; parts held in the hand got **soft / handheld** instead, for their
+own sourced rules (grip size, domed-top stepping, supports). **Organic / natural** (2026-10-29,
+§4.8) is not that rejected style: it is not a taste for curves but how a natural object is
+*modeled*. A banana or a figurine has no flat faces and no constant sections whatever the user
+likes; built from boxes and cylinders it is wrong, not unfashionable. So the style asks how it
+was built (sections along curves, blended joins, a few features, a flat base) rather than how
+curved it is.
 
 ### 4.1 functional (default)
 
@@ -278,7 +300,29 @@ frames …", *search, not fetched*); `strong`, `load_bearing` and `heavy_duty` a
   and 20 % gyroid; 4 walls round the screw holes"; "Use heat-set inserts: a screw straight into
   PLA strips at about 1 Nm".
 
-### 4.8 Where the style lives
+### 4.8 organic / natural
+
+*Fruit, plants, animals, figurines, shells, sculpture: modeled from sections and curves, not
+boxes.* Also accepted: `natural`, `sculpted`, `figurine`. For a natural object the AI starts
+from a recipe (`spine_loft`, `tapered_sweep`, `organic_blend`, `flat_base`), not from
+primitives; the `banana` example is the reference.
+
+- **Looks for:** anything still a box or a cylinder (DS-O1); sections that vary along the length
+  (DS-O2); joins blended with big lofted collars, rounded tips (DS-O3); a few defining features
+  and a little asymmetry rather than small detail (DS-O4, DS-G7); the print: the long curve along
+  the layers, a flat base, tree supports, variable layer height (DS-O5, DS-H2, DS-S1).
+- **Metrics:** M7 (sharp outside edges: what is left of primitives and flat caps), M5 supports,
+  M6 stepping; M8 symmetry shown, never judged.
+- **Suggest when** *(proposed, ours)*: sharp outside edges > 5 % of the outside edge length (M7,
+  bed edges apart; as for soft). **Note** supports on a part (curved faces scar, DS-H2). No
+  symmetry threshold: organic parts are deliberately not symmetric, and no stepping threshold:
+  a domed top is the shape, the answer is variable layer height (the rubric says so).
+- **Typical suggestions:** "The stem is a cylinder on a sphere: sweep it with a taper
+  (`tapered_sweep`) and join it with `organic_blend`"; "every section is the same circle: swell it
+  in the middle, taper the ends"; "it rests on a line: `flat_base` 3 mm"; "print it lying down with
+  tree supports and variable layer height".
+
+### 4.9 Where the style lives
 
 1. **Part script:** `STYLE` in `Dims` (a variant can override it:
    `VARIANTS = {"outdoor": dict(STYLE="rugged")}`). The template has `STYLE: str = ""`, which
@@ -286,9 +330,9 @@ frames …", *search, not fetched*); `strong`, `load_bearing` and `heavy_duty` a
 2. **Workspace:** `style = "modern"` in `b123d-print.toml` for a project whose parts share a look.
 3. **Default:** `functional`.
 
-Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural` (also accepted:
-`minimal`, `least cost`, `outdoor`, `handheld`, `strong`, `load_bearing`, `heavy_duty`, and
-`industrial`, which means functional). Anything else
+Names: `functional`, `modern`, `least_cost`, `rugged`, `soft`, `structural`, `organic` (also
+accepted: `minimal`, `least cost`, `outdoor`, `handheld`, `strong`, `load_bearing`, `heavy_duty`,
+`natural`, `sculpted`, `figurine`, and `industrial`, which means functional). Anything else
 is an error that lists them. When a user starts a new part and has said nothing about looks,
 the AI asks **once**; a blank answer means functional. One style per part, no modifiers; the
 cost numbers are always shown (decision 2).
@@ -515,7 +559,8 @@ carries is `src/b123d_print/data/design_review.md`.
 ## 9. Decisions (review of 2026-10-18)
 
 1. **Industrial** is folded into functional as `EDGES = "chamfer"` with exposed standard
-   fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19).
+   fasteners. Five styles (a sixth, `structural`, was added on 2026-10-19, and a seventh,
+   `organic`, on 2026-10-29: how a natural object is modeled, not a taste for curves, §4).
 2. **One style per part**, no modifiers; the cost numbers are always shown.
 3. **STYLE lives in `Dims`** (variants can override it), then the workspace, then functional.
 4. **No speed classes**, and printer profiles stay as they come from OrcaSlicer; one optional

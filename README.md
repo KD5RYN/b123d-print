@@ -153,7 +153,8 @@ It is not a general CAD framework.
   (same holes and clearances) to check the hole pattern and the fits before the full print
   ([fit-test templates](https://kd5ryn.github.io/b123d-print/using/templates/)).
 - **Design review** — after the print checks pass, the assistant reviews the part for a style
-  you pick (functional, modern, least cost, rugged/outdoor, soft/handheld, structural/load-bearing):
+  you pick (functional, modern, least cost, rugged/outdoor, soft/handheld, structural/load-bearing,
+  organic/natural):
   rough filament and time estimates, supports, edge treatment, layer steps, water traps, inside
   corners and walls, and concrete suggestions
   from [sourced design rules](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/). It changes

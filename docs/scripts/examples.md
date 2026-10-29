@@ -76,6 +76,23 @@ the same L with sharp corners, or standing up, gets them ([DS-T*](../DESIGN_GUID
 An example with estimated sizes: not printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/shelf_bracket/shelf_bracket.py)
 
+## `banana`
+
+![A whole banana lying on its side, stem and all](../images/banana.png)
+
+The [`organic` style](../using/design-review.md) and the [organic recipes](../using/recipes.md#organic-shapes)
+in one part, CC0: a whole banana lying on its side. The body is `spine_loft`: soft five-ridged
+sections across a curved spine, full in the middle, a long taper to the neck and a quick one to
+a blunt, rounded blossom end; the ridges sharpen towards both ends. The stem is a
+`tapered_sweep` that bends on with the curve and curls up, its cut end eased by a small fillet;
+`organic_blend` joins it to the neck with a lofted collar, not a fillet. `flat_base` cuts a
+4 mm strip under the belly for the bed. Nothing is a box or a cylinder, the ends lift by
+different amounts, and `b123d-print metrics banana` has no suggestions for it. It prints lying
+down, the curve in the layers, with tree supports under the lifted ends and the stem
+([DS-O*](../DESIGN_GUIDE.md#35-organic-natural)). Sizes are estimates for a medium banana: not
+printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/banana/banana.py)
+
 ## `split_trim`
 
 ![The split trim's joint, pulled apart: two pieces, a bowtie key and two square pins](../images/split_trim.png)

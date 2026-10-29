@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.17 — unreleased
+
+- **An `organic` design style for natural objects** (#151; also `natural`, `sculpted`,
+  `figurine`): fruit, plants, animals, figurines, shells, sculpture. The review asks how the part
+  was modeled, not how curved it is: is anything still a box or a cylinder, do the sections vary
+  along the length, are the joins blended with big lofted collars, a few defining features and a
+  little asymmetry rather than small detail. Its print notes: lay the long curve along the layers,
+  a flat base, tree supports, variable layer height. It suggests on sharp outside edges (over 5 %)
+  and notes supports on curved faces; no symmetry threshold. The rules are DS-O1..O5 in the
+  design guide, whose §4 note that turned down a general "organic" style is rewritten: that was
+  about a taste for curves, this is about modeling.
+- **Four organic recipes**, tested: `spine_loft(spine, sections)` lofts cross-sections placed
+  across a curved spine (a 0 at an end closes it to a point, for a rounded tip);
+  `tapered_sweep(path, sections)` sweeps a changing profile along a path
+  (`sweep(multisection=True)`) for stems, tentacles and horns; `organic_blend(a, b, at_a, at_b)`
+  joins two bodies with a lofted collar that carries on each one's taper, sewn rather than fused
+  (a fuse along the tangent join took 30-45 s), instead of a fillet; `flat_base(part, depth)` cuts
+  a flat underside so a rounded part stands on the bed.
+- **A bundled `banana` example** (CC0): a whole banana lying on its side, body, stem, collar and
+  flat base from the four recipes, style `organic`, tree supports. `design_metrics` on it takes
+  about 1.5 s and 50 MB, and finds nothing to suggest.
+- The rules in the first results (ESSENTIALS), the server instructions, AGENTS.md and the prompts:
+  for a natural object, use the `organic` style and start from a recipe, not from primitives.
+- **Fix: a lofted body cut flat still reached under the bed for the checks.** OpenCascade
+  bounds a face by the whole parameter rectangle of its surface, so a lofted face with a cut
+  through it still reported the old lowest point, as deep as the cut: the bed face was flagged as
+  an overhang, tip-over found "nothing on the bed", and sizes and layer counts were off. The
+  checks, `design_metrics`, the print sheet and the size report now bound such faces from their
+  mesh (`render.bbox`).
+- **Fix: a 0.00 mm "knife edge" where two curved faces meet in a section.** A section's edges meet
+  within about 1e-5 mm, not exactly; the loop's closing point duplicated its first, and the
+  near-zero segment between them read as a knife edge at a collar or at the end of a bed strip.
+
 ## 0.3.16 — 2026-10-28
 
 - **`deploy/compose.yaml` passes `B123D_PRINT_LINK_TTL`** to the server, so how long download,

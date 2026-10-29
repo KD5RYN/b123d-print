@@ -1,0 +1,18 @@
+# Built-in design style. Copy it to ~/.config/b123d-print/styles/ (or <workspace>/styles/) to
+# change it; a file with this name there replaces it. Fields: docs/using/design-review.md.
+label = "Organic / natural"
+description = "Fruit, plants, animals, figurines, shells, sculpture: modeled from sections and curves, not boxes."
+review = """
+Look for: anything still built from boxes or cylinders: model it from cross-sections along a
+curve (spine_loft, tapered_sweep), not primitives [DS-O1]; sections that change size and shape
+along the length, not one profile pulled straight [DS-O2]; joins blended with big lofted collars
+(organic_blend), not sharp corners or small fillets [DS-O3]; a few defining features and a little
+asymmetry rather than lots of small detail or a perfect mirror [DS-O4, DS-G7]. Print: lay the
+long curve along the layers, a flat base cut for bed contact (flat_base), tree (organic) supports
+under the curves, variable layer height for gently domed tops [DS-O5, DS-H2, DS-S1].
+Typical: "the stem is a cylinder on a sphere: sweep it with a taper and blend it in with a
+collar"; "every section is the same circle: swell it in the middle, taper the ends"; "it rests
+on a line: cut a 3 mm flat base".
+"""
+max_sharp_edge_share = 0.05
+curved_supports_note = true

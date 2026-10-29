@@ -83,3 +83,114 @@ def test_pip_hinge_has_two_solids_with_the_clearance():
     assert gap(a, b) == pytest.approx(0.3, abs=0.02)
     with pytest.raises(ValueError, match="over the bore"):
         R.pip_hinge(knuckle_d=7)
+
+
+# --- organic shapes (#151) ----------------------------------------------------------------------
+
+
+def _bed(p):
+    from b123d_print.render import bbox
+
+    return bbox(p).min.Z
+
+
+def test_spine_loft_places_sections_across_the_spine():
+    from build123d import Spline
+
+    spine = Spline((0, 0, 0), (40, 10, 0), (80, 0, 0))
+    body = R.spine_loft(spine, [(0, 10), (0.5, 24), (1, 10)])
+    assert body.is_valid and len(body.solids()) == 1
+    mid = R._frames(spine, [0.5])[0]  # the middle section is a 24 mm circle across the spine there
+    from build123d import section
+
+    cut = section(body, mid).faces()[0]
+    assert cut.area == pytest.approx(3.1416 * 12**2, rel=0.01)
+    # a 0 at an end closes it to a point: no flat cap, no edge but the loft's seam
+    tip = R.spine_loft(spine, [(0, 0), (0.05, 8), (0.5, 24), (0.95, 8), (1, 0)])
+    assert tip.is_valid and len(tip.faces()) == 1
+    with pytest.raises(ValueError, match="first or the last"):
+        R.spine_loft(spine, [(0, 10), (0.5, 0), (1, 10)])
+
+
+def test_frames_do_not_twist():
+    from build123d import Spline
+
+    spine = Spline((0, 0, 0), (30, 20, 5), (60, 0, 10), (90, -20, 0))
+    planes = R._frames(spine, [i / 10 for i in range(11)])
+    for a, b in zip(planes, planes[1:]):
+        assert a.x_dir.dot(a.z_dir) == pytest.approx(0, abs=1e-9)
+        assert a.x_dir.dot(b.x_dir) > 0.9  # carried along, never flipped round the spine
+
+
+def test_tapered_sweep_follows_its_path():
+    from build123d import Spline
+
+    path = Spline((0, 0, 0), (2, 0, 20), (15, 0, 35), tangents=((0, 0, 1), (1, 0, 0.5)))
+    horn = R.tapered_sweep(path, [12, 6, 2])
+    assert horn.is_valid and len(horn.solids()) == 1
+    assert _bed(horn) == pytest.approx(0, abs=1e-3)
+    with pytest.raises(ValueError, match="cannot end in a point"):
+        R.tapered_sweep(path, [12, 0])
+
+
+def test_organic_blend_joins_in_one_smooth_solid():
+    from build123d import Align, Cylinder, Plane, Pos, Rot, Vector, split, Keep
+
+    a = Cylinder(10, 40, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    axis = Vector(0.866, 0, 0.5)
+    b = Pos(30, 0, 60) * Rot(0, 60, 0) * Cylinder(5, 40)
+    at_a = Plane(origin=(0, 0, 35), z_dir=(0, 0, 1))
+    at_b = Plane(origin=b.center() - axis * 10, z_dir=-axis)
+    j = R.organic_blend(a, b, at_a, at_b)
+    assert j.is_valid and len(j.solids()) == 1
+    kept = split(a, at_a, keep=Keep.BOTTOM).volume + split(b, at_b, keep=Keep.BOTTOM).volume
+    assert kept < j.volume < kept + 3.1416 * 10**2 * 30  # the cut bodies plus a collar no fatter than a
+    # sewn, not fused with slivers: two cylinders, their two outer ends and the collar
+    assert len(j.faces()) == 5 and min(f.area for f in j.faces()) > 50
+
+
+def test_flat_base_stands_on_the_bed():
+    from build123d import Sphere, Spline
+
+    egg = R.flat_base(Sphere(10), 2)
+    assert egg.is_valid and egg.bounding_box().min.Z == pytest.approx(0, abs=1e-6)
+    assert egg.bounding_box().size.Z == pytest.approx(18, abs=1e-3)
+    with pytest.raises(ValueError, match="depth"):
+        R.flat_base(Sphere(10), 0)
+    # a lofted body lying down: OpenCascade's own box still reaches under the bed (it bounds a face
+    # by its whole parameter rectangle); render.bbox does not, and flat_base uses it
+    body = R.spine_loft(Spline((0, 0, 0), (35, 8, -3), (70, 0, 6)), [(0, 10), (0.5, 30), (1, 10)])
+    cut = R.flat_base(body, 4)
+    assert cut.bounding_box().min.Z < -1
+    assert _bed(cut) == pytest.approx(0, abs=0.03)
+    from build123d import Plane, section
+
+    assert section(cut, Plane.XY.offset(0.1)).area > 100  # a real strip on the bed
+
+
+def test_banana_example():
+    """The bundled organic example: one valid solid on the bed, nothing a box or a cylinder, and
+    the organic style finds nothing to suggest."""
+    from pathlib import Path
+
+    from b123d_print import metrics as M
+    from b123d_print.project import dims, load, printables
+
+    mod = load(Path(R.__file__).parent / "examples" / "banana" / "banana.py")
+    d = dims(mod, "")
+    part = printables(mod, d)[""]
+    assert part.is_valid and len(part.solids()) == 1
+    assert _bed(part) == pytest.approx(0, abs=0.03)
+    assert {f.geom_type.name for f in part.faces()} <= {"BSPLINE", "PLANE"}  # the bed and the stem's cut end
+    res = M.design_metrics(mod, d, {"": part}, Settings())
+    assert res["style"] == "organic"
+    assert not [f for f in res["findings"] if f["level"] == "suggest"], res["findings"]
+
+
+def test_section_loop_closure_is_not_a_knife_edge():
+    """A section's edges meet within ~1e-5, not exactly: the loop's last point sat on its first, and
+    the near-zero segment between them read as a 0.00 mm knife edge where a collar meets a body."""
+    from b123d_print.checks import wall_thickness
+
+    r = wall_thickness(R.demo_organic_blend(), "XZ", 4.0, step=0.25, limit=0.8)
+    assert r is None or r["min"] == float("inf"), r

@@ -21,7 +21,7 @@ import numpy as np
 from build123d import Part
 
 from . import checks as ck
-from .render import tessellate
+from .render import bbox, tessellate
 from .styles import EDGE_PREFS, THRESHOLDS, Style, load_style, normalize
 
 # DS-C1 / DS-C3: the slicers' defaults (OrcaSlicer, PrusaSlicer and Cura profiles)
@@ -103,7 +103,7 @@ class Mesh:
 def _sections(part: Part, step: float, cap: int = 100) -> list:
     """MeshSlicer sections at up to `cap` evenly spaced heights: per height, a list of
     [outer, holes...] loops per face."""
-    bb = part.bounding_box()
+    bb = bbox(part)
     z0, z1 = bb.min.Z, bb.max.Z
     n = max(1, min(cap, int(round((z1 - z0) / step))))
     sl = ck.MeshSlicer(part)
@@ -116,7 +116,7 @@ def _sections(part: Part, step: float, cap: int = 100) -> list:
 
 def size(part: Part) -> dict:
     """M1: bounding box, volume, area, sorted aspect ratios. Reported only: no proportion rule (DS-G9)."""
-    bb = part.bounding_box()
+    bb = bbox(part)
     dims = [bb.size.X, bb.size.Y, bb.size.Z]
     s = sorted(dims, reverse=True)
     return {"x": round(dims[0], 2), "y": round(dims[1], 2), "z": round(dims[2], 2),
@@ -148,7 +148,7 @@ def mass(part: Part, mesh: Mesh, p: Params) -> dict:
 
 def print_time(part: Part, extruded: float, p: Params) -> dict:
     """M3 (DS-C3, DS-C7), one rule: extruded volume / print_flow + layers x 3 s. A rough estimate."""
-    layers = max(1, int(round(part.bounding_box().size.Z / p.layer)))
+    layers = max(1, int(round(bbox(part).size.Z / p.layer)))
     total = extruded / p.flow + layers * LAYER_S
     return {"minutes": round(total / 60, 1), "layers": layers,
             "layer_share": round(layers * LAYER_S / total, 3) if total else 0.0,
@@ -164,7 +164,7 @@ def supports(part: Part, mesh: Mesh, p: Params, faces: list | None = None, max_p
     max_points: measure the column height under at most this many evenly picked triangles (each
     weighing for the ones skipped), and bridge_min_area: count flat ceilings smaller than this
     (mm^2) as supported without measuring their span: faster, for comparing orientations (orient.py)."""
-    zmin = part.bounding_box().min.Z
+    zmin = bbox(part).min.Z
     edge_faces = inside = None
     rows, pts, wts, spans = [], [], [], []
     for f in faces if faces is not None else part.faces():
@@ -359,7 +359,7 @@ def edges(part: Part, max_overhang: float = 45.0, info: list | None = None) -> d
     holes, their rims and full bosses are not counted."""
     from OCP.BRepTools import BRepTools
 
-    zmin = part.bounding_box().min.Z
+    zmin = bbox(part).min.Z
     info = _edge_info(part) if info is None else info
     by_face: dict = {}
     for row in info:
@@ -659,7 +659,7 @@ def slenderness(part: Part, faces_per_level: list) -> dict:
     area (the post, wall or arm it belongs to), as long as the run is tall, over the square
     root of the section's area. A post of height H and diameter D scores 1.13 H / D; a tapering
     tip scores low (its run is short)."""
-    bb = part.bounding_box()
+    bb = bbox(part)
     n = len(faces_per_level)
     dz = (bb.max.Z - bb.min.Z) / n if n else 0.0
     areas = []
@@ -700,7 +700,7 @@ def _occupancy(part: Part, n: int = SYMMETRY_GRID) -> np.ndarray | None:
     count out). None for a part flat in some direction."""
     from matplotlib.path import Path as MPath
 
-    bb = part.bounding_box()
+    bb = bbox(part)
     lo = np.array([bb.min.X, bb.min.Y, bb.min.Z])
     size = np.array([bb.size.X, bb.size.Y, bb.size.Z])
     if (size <= 1e-9).any():
@@ -814,7 +814,7 @@ def water_traps(part: Part, up: str = "+Z", res: float | None = None, max_cells:
     if up != "+Z":
         ax, deg = _TO_UP[up]
         p = part.rotate(Axis((0, 0, 0), ax), deg)
-    bb = p.bounding_box()
+    bb = bbox(p)
     span = max(bb.size.X, bb.size.Y, bb.size.Z)
     if res is None:
         res = 0.5 if span < 30 else 1.0
