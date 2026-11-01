@@ -1457,7 +1457,8 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
     assembly render and section views when png is among them, and the print sheet
     (<name>[_<variant>]_print.md, printsheet.py) when print is, and whole-assembly BOM JSON
     (<name>[_<variant>]_hardware.json) when hardware is, the shopping list as Markdown
-    (<name>[_<variant>]_bom.md) and CSV (_bom.csv) when bom and bom_csv are. Returns a summary, with the timing
+    (<name>[_<variant>]_bom.md) and CSV (_bom.csv) when bom and bom_csv are, and the replication spec
+    (<name>[_<variant>]_spec.md, replicate.py) when spec is and the part has a MEASURE.md. Returns a summary, with the timing
     report (Pieces.timing) under "timing".
     only: just these pieces (comma-separated or a list): no assembly render, and only the views
     and templates of those pieces. cache: build through the build cache (the worker). review: the
@@ -1511,6 +1512,15 @@ def export_variant(mod: ModuleType, script: Path, key: str, out: Path | None = N
         f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'bom')}.csv"), hardware.bom_file_csv(hardware_items), outputs,
                          newline="")
         summary["files"].append(str(f))
+    if "spec" in formats:  # the replication spec, only for a part with a MEASURE.md
+        from . import replicate
+
+        res = replicate.from_part(script, d, replicate.standard(mod, key), key)
+        if res is not None:
+            f = _export_text(outdir.path(out, f"{out_name(script.stem, key, 'spec')}.md"),
+                             replicate.text(res, out_name(script.stem, key, "")), outputs)
+            summary["files"].append(str(f))
+            summary["spec"] = replicate.summary(res)
     summary["timing"] = pc.timing()
     if "png" not in formats:
         outdir.readme(out, script.stem)

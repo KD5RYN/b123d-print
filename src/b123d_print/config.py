@@ -28,10 +28,10 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 WORKSPACE_FILE = "b123d-print.toml"
-FORMATS = ("step", "stl", "3mf", "png", "glb", "print", "hardware", "bom", "bom_csv")  # every export format; `formats` picks a subset
-DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb, print, hardware, bom or bom_csv)
+FORMATS = ("step", "stl", "3mf", "png", "glb", "print", "hardware", "bom", "bom_csv", "spec")  # every export format; `formats` picks a subset
+DEFAULT_FORMATS = ("step", "stl", "3mf", "png")  # what export writes unless told otherwise (not glb, print, hardware, bom, bom_csv or spec)
 SUFFIX = {"step": ".step", "stl": ".stl", "3mf": ".3mf", "png": ".png", "glb": ".glb"}  # out/ files of a format, by suffix
-TAGGED = {"print": "_print.md", "hardware": "_hardware.json", "bom": "_bom.md", "bom_csv": "_bom.csv"}  # ... and by name end
+TAGGED = {"print": "_print.md", "hardware": "_hardware.json", "bom": "_bom.md", "bom_csv": "_bom.csv", "spec": "_spec.md"}  # ... and by name end
 
 
 def out_file_wanted(filename: str, formats) -> bool:
@@ -58,7 +58,7 @@ class Settings:
     max_triangles: int = 50_000  # import_model refuses meshes with more triangles (simplify them first)
     printer: str = ""  # optional printer profile (`b123d-print printer list`); "" = generic
     material: str = ""  # optional material profile: pla, petg, asa, abs, tpu or your own
-    formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps), print (the print sheet), hardware (declared BOM JSON), bom / bom_csv (the shopping list as Markdown / CSV)
+    formats: tuple = DEFAULT_FORMATS  # what export writes: step (other CAD), stl / 3mf (slicer), png (previews), glb (web/3D apps), print (the print sheet), hardware (declared BOM JSON), bom / bom_csv (the shopping list as Markdown / CSV), spec (the replication spec from MEASURE.md)
     style: str = ""  # design style for parts without STYLE: functional (default), modern, least_cost, rugged, soft, structural, organic, decorative, toy or your own
     filament_price: float | None = None  # price per kg; design_metrics shows a cost when set
     print_flow: float = 10.0  # mm^3/s for the rough print-time estimate (standard hotend 8-12, high-flow 20+)

@@ -2,6 +2,25 @@
 
 ## 0.3.17 — unreleased
 
+- **Replicate a physical part** (#165): a workflow for copying a part you have in hand, often
+  injection-molded, as a printable one. The `replicate_part` prompt plans the measurements (tool,
+  datum, three readings for critical sizes, the photos to take) as a draft `MEASURE.md`, sorts
+  every dimension into critical (mating interfaces, hole sizes and spacings, fits, sealing and
+  bearing faces, snaps, threads, the mating envelope) or free, and proposes what to do with each
+  molded feature for FDM, with the reason: draft, coring and thin walls, ribs, sink marks,
+  parting lines, ejector marks and gates, living hinges and snaps, molded threads, the material
+  change. Rules C1–C12 (sourced, BEST_PRACTICES §19), a docs page and an AGENTS.md section.
+- **`replication_spec`** (MCP tool; CLI `b123d-print spec [--strict]`; export format `spec`,
+  `<name>_spec.md` in `out/docs/`): `MEASURE.md` with Class, Source, Field and Why changed
+  columns, joined with the script's real `Dims` values (variants, derived values and
+  `hole_comp()` included), as one table of measured vs modeled values, with flags: a critical
+  value still an estimate or not measured, readings spread wider than their accuracy (draft, an
+  oval hole), a critical value modeled differently with no reason, a `Field` the script lacks. A
+  variant's own changes are labeled, not flagged. Read-only and sandboxed; builds nothing.
+- The `plate_2gang_to_1gang` example is now also the replicate example: the molded original's
+  drawing in `ref/` (not a mesh) and its `MEASURE.md` replication spec. `new_part` from an
+  example copies its `MEASURE.md`.
+
 - **Patterns instead of position loops** (#170). Part scripts place repeated features with
   build123d's `GridLocations`, `PolarLocations`, `HexLocations`, `Locations` and `mirror`, and cut
   or add every copy in one boolean: 400 holes took 0.22 s fused and 10.2 s one boolean at a time

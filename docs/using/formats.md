@@ -12,6 +12,7 @@
 | `_hardware.json` | the declared whole-assembly [hardware BOM](../scripts/convention.md#declared-hardware): versioned JSON metadata, with variant and confirmation status; opt in with `formats="hardware"` or `all` |
 | `_bom.md` | the [shopping list](slicing.md#what-do-i-need-to-buy) of the declared hardware: one table (Qty, Item, Specification, Used for, Source/link, Status), identical items merged, items without a confirmed specification marked **check before ordering**, and a total. Reads as plain text and renders on GitHub and in editors. Opt in with `formats="bom"` or `all` |
 | `_bom.csv` | the same list as CSV for a spreadsheet (Excel, Google Sheets) or a shopping cart: UTF-8 with a byte-order mark, RFC 4180 quoting, and cells that start with `=`, `+`, `-` or `@` prefixed with `'` so a spreadsheet never runs them as formulas. Opt in with `formats="bom_csv"` or `all` |
+| `_spec.md` | the [replication spec](replicate.md#the-replication-spec) of a part copied from a physical original: its `MEASURE.md` joined with the script's `Dims` (measured vs modeled, class, why changed) and the flags. Written only for a part with a `MEASURE.md`; opt in with `formats="spec"` or `all` |
 | `_view.glb`, `_view.html` | the [3D view](#3d-view-in-the-browser): `export` writes one per variant (`view=`) |
 
 !!! note "Bambu Studio: \"The 3mf file has invalid config, load geometry data only\""
@@ -22,12 +23,12 @@
 
 Pick them in your config (`formats = ["3mf", "png"]`, see [Settings](settings.md)), per run
 (`b123d-print build --formats step,3mf`), or with `formats=` on the MCP `export` tool. `all`
-means all nine (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`, `bom`, `bom_csv`). Default: `step`, `stl`, `3mf` and `png`.
+means all ten (`step`, `stl`, `3mf`, `png`, `glb`, `print`, `hardware`, `bom`, `bom_csv`, `spec`). Default: `step`, `stl`, `3mf` and `png`.
 What to do with the files in the slicer: [From part to print](slicing.md).
 
 The download/pull format filter tells the text formats apart by name: `print` selects only
-`*_print.md`, `hardware` only `*_hardware.json`, `bom` only `*_bom.md` and `bom_csv` only
-`*_bom.csv`. Other outputs, such as traced outlines, remain available in an unfiltered whole-part
+`*_print.md`, `hardware` only `*_hardware.json`, `bom` only `*_bom.md`, `bom_csv` only
+`*_bom.csv` and `spec` only `*_spec.md`. Other outputs, such as traced outlines, remain available in an unfiltered whole-part
 download. `out/README.md` always comes along.
 
 ## Where each file goes

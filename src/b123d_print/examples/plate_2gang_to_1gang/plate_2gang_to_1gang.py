@@ -16,6 +16,11 @@ Print orientation: front face down on the bed (Z=0), back rim up. X = installed 
 
 Back is simplified from the injection-molded original: flat face, perimeter rim, bosses tied
 together by an inner rim around the opening and straight stiffening ribs out to the outer rim.
+
+A replicated part (docs: Replicating a physical part): ref/original_drawing.png is the molded
+original's drawing, MEASURE.md its replication spec (each dimension critical or free, measured or
+standard, the Dims field that models it and why the copy differs). `replication_spec` (CLI
+`b123d-print spec`) checks the two against each other.
 """
 
 from dataclasses import dataclass

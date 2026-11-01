@@ -324,6 +324,46 @@ When the user gives you someone else's model (STL, 3MF or STEP) to change:
    and give the attribution line to use when sharing (e.g. "Remix of <title> by <author>,
    <license>, <URL>").
 
+## Replicating a physical part
+
+When the user has a physical part (often injection-molded) and wants a printable copy, use the
+`replicate_part` prompt's phases ([guide](https://kd5ryn.github.io/b123d-print/using/replicate/)).
+`parts/<name>/MEASURE.md` is the **replication spec** and the source of truth for every measured
+value: `| Feature | Value | Method | Accuracy | Status | Class | Source | Field | Why changed |`.
+
+1. **Identify** what it does, what it mates with and how, how it is loaded and how it was made;
+   ask for the mating parts, the material (a recycling mark), heat, sunlight and how often it
+   comes apart.
+2. **Plan the measurements and wait:** one row per dimension, values empty, with the method,
+   accuracy, Class and the Dims field it becomes. One datum, not chained; three readings of each
+   critical size in the Value cell (`4.21, 4.19, 4.22`); on a molded wall, say where it was
+   measured (where it mates, or mid-height) [C2]; threads by diameter and pitch; the photos to
+   take [C10]. Never guess a value.
+3. **Classify and decide, and wait.** Class `critical` (mating interfaces, hole sizes and
+   spacings, fits, sealing and bearing faces, snap and latch geometry, threads, the envelope
+   where it fits) or `free` (styling, ribs, coring, walls away from interfaces). Source
+   `measured`, `standard`, `derived`, `changed` or `estimate`. Critical sizes are modeled as
+   measured, or with the reason in Why changed. A molded part is already at nominal size: never
+   add or remove molding shrinkage [C12].
+4. **Molded features**, each change with its reason in Why changed:
+   - Draft: remove it; keep a taper only where it does a job (a taper fit, nesting) [C1].
+   - Coring and thin even walls: solid or thicker in a print; keep pockets that do a job [C3].
+     Ribs: keep where they run, as thick as the wall, or drop them where solid replaces them [C4].
+   - Sink marks, parting lines, flash, ejector-pin marks, gates, knit lines: never modeled or
+     measured on [C5].
+   - A living hinge is redesigned (0.4–0.6 mm nylon, TPU or PP, or a pin hinge) [C6]; a snap arm
+     is recomputed for the print material and printed flat [C7].
+   - Bosses: the position and the screw, not the molded proportions; inserts for screws taken out
+     often; threads only M5–M6 and up; declare the screw as hardware [C8].
+   - Material: pick by what the molded resin was chosen for (heat, strain, sunlight, sliding);
+     say the copy is weaker across its layers [C9].
+5. **Model** every row with a value as the `Dims` field named in its Field column (or an
+   expression of fields); **verify** with the usual checks, then `replication_spec` until it has no
+   warnings, `measure` on the critical features, and a fit-test template of each critical
+   interface. With a scan of the part, `original(d)` and `before_after` as in a remix.
+- Provisional (one source, Hackaday): round a reading to the value the designer meant (43.97 →
+  44 mm, inch vs mm, standard sizes) and say so in Why changed [C11].
+
 ## Output formats
 
 `export` writes, per printable part: **STEP** (opens in other CAD — Onshape, Fusion, FreeCAD —

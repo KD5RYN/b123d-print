@@ -61,7 +61,18 @@ this part broke through a 0.05 mm skin there.
 ![Wall plate section through the counterbores](../images/plate_2gang_to_1gang_xy2.45.png)
 
 *Section just past the face, where the wall check looks.*
-[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/plate_2gang_to_1gang/plate_2gang_to_1gang.py)
+
+It is also the [replicate](../using/replicate.md) example: a copy of an injection-molded plate,
+started from the original's drawing (`ref/original_drawing.png`, not a mesh). Its `MEASURE.md`
+is the replication spec: the hole spacings, hole sizes, counterbores and opening are critical
+and modeled as measured; the outline and depths are free (the `140` variant makes them bigger);
+the molded back's coring and extra screw bosses became a solid frame and straight ribs, each
+with its reason. `b123d-print spec plate_2gang_to_1gang` prints the table.
+
+![The molded original's drawing](../images/plate_2gang_to_1gang_original_drawing.png)
+
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/plate_2gang_to_1gang/plate_2gang_to_1gang.py) ·
+[MEASURE.md](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/plate_2gang_to_1gang/MEASURE.md)
 
 ## `shelf_bracket`
 

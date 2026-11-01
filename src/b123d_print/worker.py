@@ -43,6 +43,7 @@ from b123d_print.project import (  # noqa: E402
     export_variant,
     load,
     make_pieces,
+    out_name,
     run_checks,
     variants,
     write_template,
@@ -61,6 +62,7 @@ from b123d_print.project import Pieces  # noqa: E402
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
 from b123d_print import fit  # noqa: E402  (fit between pieces)
 from b123d_print import hardware  # noqa: E402  (hardware_list: the declared bought parts)
+from b123d_print import replicate  # noqa: E402  (replication_spec: MEASURE.md against the Dims)
 from b123d_print import trace as tr  # noqa: E402  (outline tracing)
 import scipy.interpolate  # noqa: E402,F401  (trace's spline fit, loaded before the guard)
 import contourpy  # noqa: E402,F401  (trace's contours)
@@ -363,6 +365,11 @@ def do(job: dict, warned: list | None = None) -> dict:
         items = hardware.declared(mod, dims(mod, k))
         return {"variant": k or "standard", "variants": [kk or "standard" for kk in keys], "declared": items is not None,
                 "items": [item.record() for item in items or []]}
+    if op == "spec":  # the replication spec (replication_spec): MEASURE.md joined with the Dims, nothing is built
+        k = key if key is not None else keys[0]
+        res = replicate.from_part(script, dims(mod, k), replicate.standard(mod, k), k)
+        return {"variant": k or "standard", "variants": [kk or "standard" for kk in keys], "measure": res is not None,
+                **({"spec": res, "text": replicate.text(res, out_name(script.stem, k, ""))} if res else {})}
     out = Path(job["out_dir"])
     settings = load_settings(script)
     # the build cache: only in a worker that records what the script reads (main), and only in

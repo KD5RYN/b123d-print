@@ -70,6 +70,7 @@ nav:
       - Sandbox: using/sandbox.md
       - Comparing parts: using/compare.md
       - Remixing a part: using/remix.md
+      - Replicating a physical part: using/replicate.md
       - Design review: using/design-review.md
       - Fit-test templates: using/templates.md
       - Splitting parts: using/splitting.md

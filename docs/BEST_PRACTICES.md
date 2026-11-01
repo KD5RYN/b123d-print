@@ -275,6 +275,9 @@ calibration keys (`hole_comp_h`, `press_fit`, `free_fit`, `pip_clearance`, `max_
 (the CNC Kitchen pocket, T2–T4) and `split()`, and the guide [Splitting parts](using/splitting.md)
 (J6–J8).
 
+**Replicate (0.3.17).** C1–C12 (§19) are guidance in AGENTS.md and the `replicate_part`
+prompt; `replication_spec` checks the record (C2: readings spread wider than their accuracy).
+
 **Dropped:** the class-d rows: slicer tuning, shrinkage percentages, rib ratios borrowed from
 injection molding.
 
@@ -288,6 +291,33 @@ injection molding.
 5. Helpers: later (P3).
 6. Single-source rules are in AGENTS.md, labeled provisional with their one source; they never
    become checks or default constants.
+
+## 19. Replicating molded parts
+
+Rules for copying a physical part, usually injection molded, as a print (#165; the
+[`replicate_part`](using/replicate.md) workflow). Researched on 2026-11-01 under the same
+validation rule. Two more pairs count as one publisher here: **Hubs and Protolabs** (Hubs runs
+as "Protolabs Network (formerly Hubs)"), and **Fictiv and its Core77 reposts**. The Stratasys
+Direct molding and FDM guides are one publisher; the two Hackaday articles are one. *Derived*
+marks a rule built from sourced facts that no source states as a rule.
+
+| # | Rule | Value / range | Evidence | P | Class | Proposed behavior |
+|---|---|---|---|---|---|---|
+| C1 | Draft: molded faces along the mold's opening direction taper so the part releases. FDM needs none, and draft already there does no harm. Remove it in a copy; keep a taper only where it does a job (a taper fit, parts that nest or stack, a casting pattern) or is part of the look. | molded: ≥0.5°, 1–2° typical, ~1° per 25 mm of depth, 3° light texture, 5°+ heavy | Molded: PL-DRAFT, PL-IMG, HUBS-IM (2° min.), FICTIV-IM (rigid 0.5–2°, PP/PE 0.5–1.5°), SSD-IM (+1.5° per 0.025 mm of texture). FDM: SSD-2025 (draft unnecessary, harmless), MH-DFM, FICTIV-RIBS. | — | **b** | AGENTS.md and the replicate prompt: draft removed by default, the reason in the spec's Why changed. |
+| C2 | Measure a drafted feature where it mates (or at mid-height) and write down where; work out which end the designer meant to be nominal. A small odd angle is draft, not a design taper. | 2° over 40 mm moves a face ~1.4 mm; 1° over 25 mm ~0.44 mm | ER-DRAFT (draft changes a feature's size along its depth; the face it starts from keeps the nominal size), HACKADAY-RE (draft gives non-round readings), HACKADAY-MEAS (used the largest size for a clearance). *Derived.* | — | **b** (derived) | The prompt's measurement plan says where on each molded wall to measure; `replication_spec` warns when readings spread more than their accuracy. |
+| C3 | Thin even walls and coring exist so a molded part fills and cools evenly. In a print a cored region can be solid (the slicer fills it) and walls can be thicker; strength comes from perimeters (W3, W4). Keep cored pockets only where they do a job (weight, clearance, a mating feature). | molded walls ~2–4 mm (ABS ~1.1–3.6, PP ~0.6–3.8, PC 1–4, PA and POM ~0.8–3) | SSD-IM (2–4 mm, coring keeps walls even), PL-IMG and FICTIV-IM (per material). FDM: SSD-2025 (FDM parts "can be designed solid"), MH-DFM (walls and infill decide strength). | P | **b** | AGENTS.md and the prompt; the change and its reason go in the spec. |
+| C4 | Molded ribs are thinner than the wall so they do not sink the far face. A print has no sink: ribs, gussets and boss walls can be as thick as the wall (R4). Keep where the ribs are and which way they run (that is the stiffening), thicken them, or drop them where solid replaces them. | molded ribs 40–60 % of the wall, height ≤ ~3× | PL-RIBS (≤60 %), XOM-SINK (40–60 %), SSD-IM, FICTIV-IM (50–65 %), HUBS-IM. FDM: SSD-2025 (no need to thin), MH-DFM, FICTIV-RIBS (run ribs along the load; they help against warp). | P | **b** | As C3. |
+| C5 | Sink marks, the parting line and flash, ejector-pin marks, the gate vestige and knit lines are marks of the molding, not design: do not model them, and do not measure on them (measure flat, unmarked areas; across a parting line only after trimming flash). A sink dent shows a thick section behind it; a crack along a knit line in a broken original is a molding weakness, not a feature. | — | Defined by PL-DEFECT, XOM-SINK, SSD-IM, RD-EJECT, HUBS-IM, FR-COSM (knit lines weak under stress). Leaving out details that do not affect fit: SCS-RE, HACKADAY-MEAS. *Measuring away from them is derived.* | — | **b** | The prompt: not copied; measured away from. |
+| C6 | A molded living hinge (PP or PE, 0.2–0.35 mm, a million cycles or more) cannot be copied as is: that is about one FDM layer, and PLA and ABS lack the strain and fatigue life. Print it 0.4–0.6 mm in nylon, TPU or PP with the hinge width along Z and expect tens of cycles, or replace it with a pin or print-in-place hinge (N7–N9). | molded 0.2–0.35 mm; FDM 0.4–0.6 mm; one FDM example failed after 25 cycles | HUBS-IM, SSD-IM (molded). HUBS-HINGE, MH, SSD-2025 (FDM: few cycles, or another hinge design). | P | **b** | AGENTS.md and the prompt: a living hinge is redesigned, with the material and the cycles said. |
+| C7 | A snap arm sized for POM, PP or nylon is usually over-strained in PLA or PETG. Recompute it with the print material's allowable strain (N4, provisional numbers), lengthen or thin the arm or reduce the undercut, print it flat so it bends along the layers (N1), and for snaps opened often use about 60 % of the single-use strain. | — | 3ERP-SNAP (molded materials; printed snaps more conservative, layers along the arm), FICTIV-SNAP (PLA 4–8 %, halve along Z), BAYER-SNAP (60 % for frequent use; PC 4 %, PC/ABS 2.5 %). | P | **b** | The prompt: snaps redesigned; the `snap_arm` recipe. |
+| C8 | Bosses and threads: copy the boss's position and the screw, not its molded proportions; give it a thicker wall and gussets. A screw taken out more than a few times gets a heat-set insert or a captive nut; a one-time self-tapper gets a tested pilot hole; model threads only at M5–M6 and up (T1–T7). Identify the original screw and declare it as hardware. | molded boss OD ~2× the screw, wall ~60 % of the nominal; M3 in PETG: ~1 Nm into plastic, ~3 Nm in an insert | RD-BOSS, FICTIV-IM, HUBS-IM, SSD-IM (molded). SSD-2025 (no printed threads under 3.8 mm; inserts with ≥2 mm wall), CNCK-HELI (insert vs plastic). | — | **b** | AGENTS.md and the prompt. |
+| C9 | Material change: choose the print material by the property the molded resin was chosen for (strain or a hinge → PETG, nylon, TPU or a redesign; heat → ASA, PC, PA; outdoors → ASA; sliding or gears → nylon), and say that the copy is weaker across its layers (S4). A PP or POM part near heat should not become PLA. | HDT at 0.45 MPa: PLA 57–60 °C, PETG 69–78, ABS 87–100, ASA 100–103, PC 111–117; molded PP ~80–85, POM ~110, PA6/66 115–155. Across-layer impact 12–52 % of in-plane | PL-MAT, PL-PP, PL-POM, XOM-HDT (molded). BAMBU-GUIDE, POLYMAKER-TDS (FDM HDT, impact XY/Z). CNCK-LAYER (standing ≥50 % weaker), ABS-M30 (Z elongation 8.1 → 1.8 %), FICTIV-SNAP. PRUSA-MAT, UM-FIL (UV: ASA). | P | **b** + profile | The prompt asks heat, sunlight, chemicals, flexing; the report says the material change and its effect. |
+| C10 | Reverse engineering: measure from one datum, not chained; rebuild the design intent (what fits and works), not the as-built shape; identify threads by major diameter and pitch against a chart (metric and inch look alike); on a worn or broken part measure the unworn areas and the mating part, since a reading of a worn part records the wear. | — | HACKADAY-RE, SCS-RE (one datum; hole centres from edges), CADIM, NYLON-RE, MSPE2025 (design intent; wear), TAMESON, SCS-THREAD (threads). | — | **b** | The prompt's measurement plan; the measuring guide. |
+| C11 | Round a reading to the value the designer meant (43.97 → 44 mm; 0.197 in = 5 mm; common angles), checking inch against mm and standard sizes, and measure again whatever matters. | — | HACKADAY-RE, HACKADAY-MEAS only. **(1 src)** | — | **b** (provisional) | AGENTS.md, labeled provisional; the rounded value's reason goes in Why changed. |
+| C12 | A molded part already includes its mold shrinkage (the mold was cut oversize), so measure the part and model what you measure; never add or remove molding shrinkage. FDM shrinkage is set per filament in the slicer (M1). | molded shrink ABS ~0.3–0.7 %, PP ~1.5–3 % | PL-TOL, RD-MISTAKES, SSD-IM (molded). SSD-2025, ORCA-SHRINK (FDM: in the slicer). | P | **b** | AGENTS.md and the prompt. |
+
+Not adopted: creep of PLA and PETG under a steady load (community reports only, no published
+numbers found); snap-fit strain values for PP and POM (no readable primary table).
 
 ---
 
@@ -450,6 +480,46 @@ hobby page. *(peer-reviewed)* = journal or conference.
 - EPOXY-BOND *(patent; search only)*: US 5712039, https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/5712039
 - PRINTFARMCALC: https://printfarmcalc.com/reference/shrinkage/
 - GRANDPACAD: https://grandpacad.com/en/tools/material-shrinkage-calculator
+
+**Replicating molded parts (§19, fetched 2026-11-01)**
+
+- Protolabs and Protolabs Network (formerly Hubs) (one publisher):
+  - PL-DRAFT: https://www.protolabs.com/injection-molding/fundamentals-of-molding/draft
+  - PL-IMG: https://protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines
+  - PL-RIBS: https://www.protolabs.com/resources/design-tips/design-stronger-molded-parts/
+  - PL-DEFECT: https://www.protolabs.com/resources/design-tips/injection-molding-defects-and-how-to-avoid-them/
+  - PL-MAT: https://www.protolabs.com/resources/guides-and-trend-reports/thermoplastic-material-selection-for-injection-molding/
+  - PL-PP: https://www.protolabs.com/en-gb/services/injection-moulding/polypropylene/
+  - PL-POM: https://www.protolabs.com/services/injection-molding/acetal/
+  - PL-TOL: https://www.protolabs.com/resources/blog/injection-molding-tolerances/
+  - HUBS-IM: https://www.hubs.com/guides/injection-molding/
+- Fictiv: FICTIV-IM https://www.fictiv.com/specifications/injection-molding; FICTIV-RIBS
+  https://www.fictiv.com/articles/best-practices-for-adding-ribs-and-gussets-to-3d-printed-parts-for-structural-integrity
+- SSD-IM (Stratasys Direct, molding guide): https://stratasys.com/siteassets/sdm/resources/design-guidelines/injection-molding/injection_molding_design_guidelines_2017.pdf
+- ABS-M30 (Stratasys data sheet, copy hosted by UConn): https://pocc.techpark.uconn.edu/wp-content/uploads/sites/2880/2020/10/MDS_FDM_ABS-M30_0920a.pdf
+- MH-DFM *(vendor)*: https://matterhackers.com/news/design-for-manufacturing-injection-molding-versus-3d-printing
+- XOM-SINK (Xometry): https://www.xometry.com/resources/injection-molding/managing-sink-in-injection-molding-designs/
+- XOM-HDT (Xometry): https://www.xometry.com/resources/materials/heat-deflection-temperature/
+- RapidDirect: RD-EJECT https://www.rapiddirect.com/blog/ejector-pins-injection-molding/; RD-BOSS
+  https://www.rapiddirect.com/blog/screw-boss-design-injection-molding/; RD-MISTAKES
+  https://www.rapiddirect.com/blog/15-injection-molding-design-mistakes-and-their-solutions/
+- FR-COSM (Fast Radius) *(summary via search; the page loads)*: https://www.fastradius.com/resources/cosmetic-injection-molding-defects/
+- 3ERP-SNAP: https://www.3erp.com/blog/snap-fit-joint-design/
+- BAYER-SNAP (Bayer MaterialScience, copy hosted by SparkFun): https://cdn.sparkfun.com/assets/home_page_posts/1/4/1/0/Plastic_Snap_fit_design.pdf
+- BAMBU-GUIDE (Bambu Lab filament guide): https://cdn1.bambulab.com/filament/a5e185aed14e6/filament-guide-en-4.pdf
+- POLYMAKER-TDS: https://wiki.polymaker.com/polymaker-products/polymaker-filaments/technical-data-at-a-glance
+- CNCK-LAYER (CNC Kitchen): https://www.cnckitchen.com/blog/the-influence-of-layer-height-on-the-strength-of-fdm-3d-prints
+- UM-FIL (UltiMaker): https://ultimaker.com/learn/3d-printer-filament-types-and-uses-a-comprehensive-guide/
+- ORCA-SHRINK (OrcaSlicer wiki): https://www.orcaslicer.com/wiki/material_settings/filament/material_basic_information
+- ER-DRAFT (Engineers Rule): https://www.engineersrule.com/tips-for-designing-molded-parts-in-solidworks-part-1/
+- Hackaday (one publisher) *(community)*: HACKADAY-RE https://hackaday.com/2018/03/27/how-to-reverse-engineer-mechanical-designs-for-3d-modeling;
+  HACKADAY-MEAS https://hackaday.com/2016/04/15/measuring-parts-badly-for-accurate-reverse-engineering/
+- SendCutSend: SCS-RE https://sendcutsend.com/wp-content/uploads/2025/10/2.1.pdf; SCS-THREAD
+  https://sendcutsend.com/blog/how-to-measure-thread-size/
+- CADIM (CADimensions): https://resources.cadimensions.com/cadimensions-resources/reverse-engineering-re-designing-existing-parts
+- NYLON-RE *(vendor)*: https://nl.nylonplastic.com/reverse-engineering-manufacturing-guide/
+- MSPE2025 *(peer-reviewed)*: Poloczek, R., Management Systems in Production Engineering 33(4), 2025, DOI 10.2478/mspe-2025-0055, https://reference-global.com/2/v2/download/article/10.2478/mspe-2025-0055.pdf
+- TAMESON: https://tameson.co.uk/pages/measure-thread-size
 
 **Unreachable or gated** (not used as sources):
 
