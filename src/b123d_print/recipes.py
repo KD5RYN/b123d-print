@@ -526,10 +526,10 @@ def demo_text_on_surface() -> Part:
 
 
 def demo_text_on_path() -> Part:
-    tag = Cylinder(22, 3, align=BED)
-    arc = CenterArc((0, 0), 15, 160, -140)  # clockwise: the text reads along the top
-    tag -= Pos(0, 0, 3 - 0.6) * text_on_path("HELLO WORLD", arc, size=5, depth=1.6)  # sunk 0.6
-    tag += Pos(0, -3, 3) * text_label("OK", size=9, depth=0.6)
+    tag = Cylinder(25, 3, align=BED)
+    arc = CenterArc((0, 0), 17, 160, -140)  # clockwise: the text reads along the top
+    tag -= Pos(0, 0, 3 - 0.6) * text_on_path("HELLO WORLD", arc, size=6, depth=1.6)  # sunk 0.6
+    tag += Pos(0, -4, 3) * text_label("OK", size=10, depth=0.6)
     return tag
 
 
