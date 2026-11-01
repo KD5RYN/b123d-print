@@ -47,7 +47,8 @@ a remote server a part is done only when download_part has brought its files to 
 Workflow: new_part -> write_part (whole script) -> build_part -> render_preview + section ->
 check -> fix and repeat -> design_metrics (style) -> suggest_orientation -> (offer a fit-test template:
 list_faces, make_template) -> export (it returns a 3D view of the part: give the user that link or file so they can turn it in a browser). To remix an existing STL/3MF/STEP: upload_reference ->
-describe_model -> import_model in the script (prompt remix_part). The rules (read_guide, the
+describe_model -> import_model in the script (prompt remix_part). To copy a physical part (often
+molded): prompt replicate_part, MEASURE.md as the spec, replication_spec checks it. The rules (read_guide, the
 resource b123d-print://guide, or the prompt design_part_from_photos) also cover 0.2 mm mating
 clearance, HOLE_COMP from the user's config, holes, overhangs and strength. render_preview and
 section return PNG images.
@@ -210,7 +211,7 @@ def _resume_note(name: str) -> str:
 # jobs that read the built pieces from the cache and answer in seconds: they get the quick lane
 # (sched.py), so they never wait behind another client's long builds. With fresh=True they rebuild,
 # so they queue like any build.
-QUICK_OPS = frozenset({"measure", "section", "faces", "edges", "hardware"})
+QUICK_OPS = frozenset({"measure", "section", "faces", "edges", "hardware", "spec"})
 CHECK_SHARES = 2  # a check splits into at most this many workers: 3 on 4 cores was slower than 2 (#73)
 CLIENT_JOBS = 4  # HTTP default: jobs running + waiting per client (--client-jobs)
 
@@ -1104,7 +1105,8 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     the slicer, including declared hardware), hardware (versioned whole-assembly BOM JSON,
     <name>[_<variant>]_hardware.json), bom and bom_csv (the shopping list of that hardware as a
     Markdown table, <name>[_<variant>]_bom.md, and as CSV, _bom.csv; hardware_list returns it in
-    the result), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
+    the result), spec (the replication spec from MEASURE.md, <name>[_<variant>]_spec.md, for a
+    part copied from a physical original; replication_spec returns it), or 'all'. Omit to use the user's `formats` setting (default: step, stl, 3mf and
     png). Ask the user which they want if unclear.
     view: a 3D view the user can turn in a browser, per variant: 'print' (default: the printable
     parts on the bed), 'assembly' (assembly(d) with its stand-ins) or 'none'. Over HTTP it is a
@@ -1484,7 +1486,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     it; run `curl -fLo <name>.zip '<link>'` and unzip it in the project folder, then check the
     files are there. Over SSH: the `b123d-print pull` command that writes the same files. Locally
     (stdio): says where the files already are. variant: only that variant's out/ files ('standard'
-    = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print, hardware, bom, bom_csv); the script and ref/ always come.
+    = ''); formats: only those out/ files (step, stl, 3mf, png, glb, print, hardware, bom, bom_csv, spec); the script and ref/ always come.
     Over HTTP it also gives the 3D view links of the views export wrote (in a browser, no token).
     embed=True also puts the zip (up to 8 MB) into the result (over HTTP and SSH), for clients
     whose shell has no network (Antigravity/agy) or that can neither fetch URLs nor read
@@ -1862,6 +1864,30 @@ async def hardware_list(name: str = "", variant: str | None = None, count: int =
     return _scrub(shopping_list(entries, count, "csv" if format == "csv" else "table"))
 
 
+@mcp.tool()
+async def replication_spec(name: str, variant: str | None = None, as_json: bool = False) -> str:
+    """The replication spec of a part copied from a physical original (the replicate_part
+    prompt): its MEASURE.md table (Feature | Value | Method | Accuracy | Status | Class | Source |
+    Field | Why changed) joined with the script's Dims values, as one Markdown table (Feature |
+    Field | Class | Source | Measured | Tol | Modeled | Δ | Why changed) plus flags: a critical
+    value still an estimate or not measured, readings spread wider than their accuracy (draft, an
+    oval hole, warp), a critical value modeled differently with no reason, a Field the script
+    lacks. Several readings in a Value cell ("4.21, 4.19, 4.22") are averaged. variant: whose Dims
+    (default: the standard one). Reads MEASURE.md and the Dims only: builds nothing, changes
+    nothing. The `spec` export format writes the same table to out/docs/."""
+    _script(name)
+    res = await _job(name, "spec", variant=variant)
+    if not res.get("ok"):
+        return _error_text(res)
+    if not res.get("measure"):
+        return (f"parts/{name}/MEASURE.md does not exist yet. For a part copied from a physical original, the "
+                "replicate_part prompt drafts it as a measurement plan (one row per dimension, Class, Method, Field); "
+                "the measuring guide's sheet template has the columns.")
+    if as_json:
+        return json.dumps({"variant": res["variant"], **res["spec"]}, indent=1, ensure_ascii=False)
+    return _scrub(res["text"])
+
+
 def _numbers(v, n: int, what: str) -> list[float] | None:
     if v in (None, "", []):
         return None
@@ -2117,6 +2143,85 @@ Work in these steps:
 6. Remote server (HTTP or SSH) only, required: {_remote_step(name)}
 7. Report as usual, plus: what changed in numbers, inherited vs new findings, the license and the
    attribution line to use when sharing it (e.g. "Remix of <title> by <author>, <license>, <URL>").
+
+The full rules:
+
+{_rules()}"""
+
+
+@mcp.prompt()
+def replicate_part(name: str, description: str = "", scan: str = "") -> str:
+    """Copy a physical part (often injection-molded) as a printable one: a measurement plan,
+    each dimension critical or free, molding features changed for FDM, a replication spec in
+    MEASURE.md checked against the Dims, and a check of the copy against the original."""
+    return f"""I want a printable copy of a physical part, as the part '{name}'.
+What it is, what it mates with, photos or drawings: {description or '(I will describe it and attach photos or a drawing)'}
+A 3D scan of it: {scan or '(none: say if one would help)'}
+
+Work in these phases. parts/{name}/MEASURE.md is the replication spec, the source of truth for
+every measured value; the script's Dims model it. Never guess a dimension: ask.
+
+1. IDENTIFY. From my photos, drawing and words: what the part does, what it mates with and how
+   (screws, a snap, a press fit, a sliding fit, a seal, a bearing), how it is loaded, and how it
+   was made (molded parts show draft, a parting line, ejector-pin marks, a gate, uniform thin
+   walls with coring and ribs). Ask what I don't know: the mating parts, the material if marked
+   (a recycling code such as >PP< or >ABS< on the part), temperature, outdoor use, how often it
+   is taken apart. If I have a scan, upload_reference and describe_model it: it gives the shape,
+   but calipers win for every size that fits something.
+2. MEASUREMENT PLAN, then STOP. Write parts/{name}/MEASURE.md (create the folder with new_part
+   first, or give me the file to save there) with the header (units, datum, orientation in use,
+   must fit, photos) and one row per dimension, Value left empty:
+   | Feature | Value | Method | Accuracy | Status | Class | Source | Field | Why changed |
+   - Class: critical (must match the original or what it mates with: mating interfaces, hole
+     sizes and spacings, fits, sealing and bearing faces, snap and latch geometry, threads, the
+     envelope where it fits into or against something) or free (outer styling, ribs, coring,
+     wall thickness away from interfaces, cosmetic features). When unsure, ask.
+   - Method: the tool and how (calipers outside/inside jaws rocked for the largest reading, depth
+     rod, step; radius, thread pitch or profile gauge; feeler gauge; a square-on photo or flatbed
+     scan with a scale for an outline, then trace_outline). One datum for everything; hole
+     spacing as edge-to-edge (outside + inside, averaged), not chained.
+   - Readings: critical values three times at slightly different places, all three in the Value
+     cell ("4.21, 4.19, 4.22"). On a molded wall, say WHERE: draft makes a wall read differently
+     at its root and tip; measure at the mating location (or mid-height, and say so).
+   - Threads: diameter and pitch with a pitch gauge; say metric or inch. Standard sizes (screw
+     clearance holes, box screw spacings, bearing seats) get Source standard with the standard's
+     name, and are checked against the part.
+   - Photos to take: overview, each critical feature square on with a scale in its plane, the
+     back (coring, ribs, bosses), any marking.
+   Point me to the measuring guide (docs: Measuring for the AI). STOP until I have filled it in.
+3. CLASSIFY AND DECIDE, then STOP. Read MEASURE.md back. Flag readings that disagree by more
+   than their accuracy (draft, an oval hole, warp, wear) and ask which value to model. For every
+   molding feature, propose what the copy does, with the reason, in the Why changed column (see
+   "Molded features" below): draft removed (or kept where a taper does a job), coring and thin
+   walls made solid or thicker in line-width multiples, ribs at full wall thickness or dropped
+   where solid replaces them, sink marks, parting lines, ejector marks, gates and knit lines not
+   copied, living hinges and snaps redesigned for layers and material, molded threads replaced by
+   inserts, nuts or modeled threads (M6 and up), extra bosses for other variants dropped. Say
+   the material change and what it does to strength, creep, temperature and fit. Propose the
+   print orientation: critical faces and hole axes where they print best, the load along the
+   layers. Ask which fits need clearance (press, sliding, free from my settings; holes true to
+   size + HOLE_COMP). STOP and wait for my confirmation.
+4. MODEL. new_part('{name}') if needed, then write_part. Every row with a value gets a Dims field
+   named in its Field column (or an expression of fields, "PLATE_W - 2 * RIM_WALL"); the field's
+   comment says its source ("MEASURE.md, calipers x3"). Critical sizes are modeled as measured,
+   or with the reason in Why changed (a clearance, rounded to the standard). Record that it is a
+   copy of a physical part, and of what, in the docstring. Model in print orientation.
+5. VERIFY. build_part, render_preview, sections through every critical feature, check (fix every
+   FAIL). Then replication_spec('{name}'): every WARN is resolved (measured, traced to a field,
+   modeled as measured, or given a reason). measure the critical features on the built part
+   (hole diameters, spacings, the opening) and compare with MEASURE.md. Offer a fit-test template
+   (make_template) of each critical interface before the full print, and for an outline a 1:1
+   print of a slice to lay on the original. With a scan, define original(d) returning the
+   import_model of it placed like the copy, and before_after: the free changes show, the critical
+   faces should not move. Then design_metrics, suggest_orientation, export with formats including
+   spec (the spec next to the print files).
+6. Remote server (HTTP or SSH) only, required: {_remote_step(name)}
+7. Report as usual, plus the replication spec: the critical dimensions measured vs modeled, what
+   changed for printing and why, the material change, what to test with the template first.
+
+Molded features and what to do with them for FDM:
+
+{data("replicate.md")}
 
 The full rules:
 

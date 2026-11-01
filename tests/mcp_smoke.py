@@ -96,11 +96,11 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     tools = {t.name for t in (await c.list_tools()).tools}
     expect(tools >= {"use_printer", "list_parts", "new_part", "read_part", "write_part", "build_part", "render_preview", "section", "check",
                      "export", "compare", "upload_reference", "describe_model", "before_after", "design_metrics",
-                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe", "save_setup"},
+                     "suggest_orientation", "download_part", "list_faces", "list_edges", "make_template", "check_fit", "trace_outline", "recipe", "save_setup", "replication_spec"},
            f"tools: {sorted(tools)}")
     prompts = {p.name for p in (await c.list_prompts()).prompts}
     expect(prompts >= {"design_part_from_photos", "modify_part", "verify_part", "calibrate_hole_comp", "remix_part", "design_review",
-                       "fit_test", "setup_workspace"},
+                       "fit_test", "setup_workspace", "replicate_part"},
            f"prompts: {sorted(prompts)}")
     g = await c.get_prompt("design_part_from_photos", {"description": "a bracket"})
     expect("LIST EVERY DIMENSION" in g.messages[0].content.text, "prompt carries the confirm-dimensions rule")
@@ -252,6 +252,7 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
     expect(res.is_error and "Parts:" in text(res), "unknown part: error lists the parts")
     await multipart_checks(c, expect)
     await remix_checks(c, pw, expect)
+    await replicate_checks(c, pw, expect)
     await trace_recipe_checks(c, pw, expect)
 
 
@@ -364,6 +365,21 @@ def no_server_paths(rec: Recorder, root: Path, expect) -> None:
     bad = [t for t in rec.texts if any(r in t for r in roots)]
     expect(not bad, f"no result shows the server's own folders ({len(rec.texts)} results)"
            + (f"\n{bad[0][:800]}" if bad else ""))
+
+
+async def replicate_checks(c, pw, expect) -> None:
+    """Replicate: the example brings its drawing and MEASURE.md; replication_spec joins it with the Dims (sandboxed)."""
+    res = await c.call_tool("new_part", {"name": "rp", "example": "plate_2gang_to_1gang"})
+    expect("Created" in text(res) and (pw is None or ((pw / "parts/rp/MEASURE.md").is_file()
+                                                     and (pw / "parts/rp/ref/original_drawing.png").is_file())),
+           "new_part from the replicate example copies MEASURE.md and the original's drawing")
+    res = await c.call_tool("replication_spec", {"name": "rp", "variant": "140"})
+    t = text(res)
+    ok = not res.is_error and "9 critical" in t and "(variant 140)" in t and "No flags" in t
+    expect(ok, "replication_spec: the example's critical sizes match, the variant's changes are its own"
+           + ("" if ok else f"\n{t[:2000]}"))
+    res = await c.call_tool("replication_spec", {"name": "box"})
+    expect(not res.is_error and "MEASURE.md does not exist" in text(res), "replication_spec without a MEASURE.md says how to start one")
 
 
 async def remix_checks(c, pw, expect) -> None:

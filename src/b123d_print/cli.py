@@ -63,6 +63,8 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
             for f in src.joinpath("ref").iterdir():
                 if f.is_file() and not (p.parent / "ref" / f.name).exists():
                     (p.parent / "ref" / f.name).write_bytes(f.read_bytes())
+        if src.joinpath("MEASURE.md").is_file() and not (p.parent / "MEASURE.md").exists():  # a replicate example's spec
+            (p.parent / "MEASURE.md").write_bytes(src.joinpath("MEASURE.md").read_bytes())
         return p
     title = name.replace("_", " ").capitalize()
     p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8", newline="")
@@ -507,6 +509,31 @@ def cmd_bom(args) -> int:
                         "declared": items is not None, "items": [item.record() for item in items or []]})
     sys.stdout.write(hardware.shopping_list(entries, args.count, "csv" if args.csv else "table"))
     return 0
+
+
+def cmd_spec(args) -> int:
+    """The replication spec: MEASURE.md joined with the part's Dims (a part copied from a physical original)."""
+    from . import replicate
+    from .partfiles import resolve_part
+    from .project import dims, load, out_name, variant_key, variants
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    if not (script.parent / replicate.MEASURE_FILE).is_file():
+        sys.exit(f"spec: {script.parent / replicate.MEASURE_FILE} does not exist (the replicate_part prompt drafts it; "
+                 "docs: Replicating a part)")
+    mod = load(script)
+    keys = list(variants(mod))
+    key = variant_key(args.variant) if args.variant else keys[0]
+    if key not in keys:
+        sys.exit(f"spec: no variant {args.variant!r}; variants: {[k or 'standard' for k in keys]}")
+    res = replicate.from_part(script, dims(mod, key), replicate.standard(mod, key), key)
+    if args.json:
+        json.dump(res, sys.stdout, indent=1, ensure_ascii=False)
+        print()
+    else:
+        sys.stdout.write(replicate.text(res, out_name(script.stem, key, "")))
+    return 1 if args.strict and any(f["level"] == "WARN" for f in res["flags"]) else 0
 
 
 def cmd_params(args) -> int:
@@ -1048,6 +1075,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant")
     p.add_argument("--count", type=int, default=1, help="how many assemblies: multiplies every quantity (default 1)")
     p.add_argument("--csv", action="store_true", help="CSV instead of the Markdown table (for a spreadsheet or cart)")
+    p = sub.add_parser("spec", help="the replication spec of a part copied from a physical original: MEASURE.md "
+                                    "joined with the Dims, with flags (critical estimates, spread readings, changes "
+                                    "without a reason)")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("--variant", help="default: the first variant")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--strict", action="store_true", help="exit 1 if there is any warning")
     p = sub.add_parser("params", help="list a part's Dims fields (type, value, source comment) and variant overrides")
     p.add_argument("part", help="part name or script path")
     p.add_argument("--json", action="store_true")
@@ -1221,6 +1255,11 @@ def main(argv: list[str] | None = None) -> int:
             return {"metrics": cmd_metrics, "orient": cmd_orient, "styles": cmd_styles}[args.cmd](args)
         except ValueError as e:
             sys.exit(str(e))
+    if args.cmd == "spec":
+        try:
+            return cmd_spec(args)
+        except FileNotFoundError as e:
+            sys.exit(f"spec: {e}")
     if args.cmd == "bom":
         try:
             return cmd_bom(args)

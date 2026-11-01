@@ -27,6 +27,13 @@ Or [remix](using/remix.md) a model you downloaded (STL, 3MF or STEP) and change 
   flaws from new ones, and a before/after view shows exactly what moved. (A demo for the docs,
   not printed yet.)
 
+Or [replicate](using/replicate.md) a physical part, often a molded one, as a printable copy:
+
+- *"Copy this molded wall plate so I can print one."* The assistant plans the measurements
+  (which tool, which datum, three readings for what must fit), sorts every dimension into
+  critical and free, removes draft and coring and redesigns what does not print, and keeps it
+  all in a replication spec that checks the model against your readings.
+
 Before a long print, test the fit with a [fit-test template](using/templates.md): a thin, quick print
 cut from the real part.
 
@@ -94,6 +101,9 @@ framework.
 - **[Remix](using/remix.md)** — start from someone else's STL, 3MF or STEP: `import_model` makes
   a mesh a solid (coplanar triangles merged), the checks tell the original's problems from the
   ones the remix added, and a before/after view shows the change.
+- **[Replicate](using/replicate.md)** — copy a physical part: a measurement plan, each dimension
+  critical or free, molded features changed for FDM with reasons, and `replication_spec` checking
+  the model's `Dims` against the readings in `MEASURE.md`.
 - **Fit-test templates** — a quick thin print of a face, a slice or a region of the real part
   (same holes and clearances) to check the hole pattern and the fits before the full print
   ([fit-test templates](using/templates.md)).

@@ -149,7 +149,7 @@ def readme(out: str | Path, part: str) -> Path:
              "| `print/templates/` | fit-test templates: small, quick test prints of one feature |",
              "| `cad/` | STEP (opens in other CAD: Onshape, Fusion, FreeCAD) and GLB (3D apps) |",
              "| `images/` | previews, section cuts, before/after and compare pictures |",
-             "| `docs/` | shopping list (`_bom.md`, `_bom.csv`), hardware JSON, the 3D view (`_view.html`) |",
+             "| `docs/` | shopping list (`_bom.md`, `_bom.csv`), hardware JSON, replication spec (`_spec.md`), the 3D view (`_view.html`) |",
              ""]
     if to_slice:
         lines += ["## Open in the slicer", ""] + [f"- `{rel}`" for rel in to_slice] + [""]
