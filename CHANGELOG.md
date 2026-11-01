@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.17 — unreleased
+## 0.3.17 — 2026-11-01
 
 - **Replicate a physical part** (#165): a workflow for copying a part you have in hand, often
   injection-molded, as a printable one. The `replicate_part` prompt plans the measurements (tool,
