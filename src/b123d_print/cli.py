@@ -1,4 +1,4 @@
-"""`b123d-print` command line: init, setup, new, build, check, bom, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
+"""`b123d-print` command line: init, setup, new, build, check, sketch, bom, metrics, orient, styles, faces, edges, template, view, compare, to-step, config, list,
 version history (save, versions, restore) and MCP over SSH (setup-ssh, ssh-serve, pull, push)."""
 
 from __future__ import annotations
@@ -45,8 +45,10 @@ def examples() -> list[str]:
     return sorted(d.name for d in base.iterdir() if d.joinpath(f"{d.name}.py").is_file())
 
 
-def new_part(root: Path, parts_dir: str, name: str, description: str = "", example: str | None = None) -> Path:
-    """Scaffold <parts_dir>/<name>/<name>.py from the template, or copy a bundled example."""
+def new_part(root: Path, parts_dir: str, name: str, description: str = "", example: str | None = None,
+             sketch_first: bool = False) -> Path:
+    """Scaffold <parts_dir>/<name>/<name>.py from the template (sketch_first: the one with a
+    sketches(d) outline that build(d) extrudes), or copy a bundled example."""
     if example and example not in examples():
         raise ValueError(f"no example {example!r}; examples: {examples()}")
     if not NAME_RE.match(name):
@@ -67,7 +69,7 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
             (p.parent / "MEASURE.md").write_bytes(src.joinpath("MEASURE.md").read_bytes())
         return p
     title = name.replace("_", " ").capitalize()
-    p.write_text(data("part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8", newline="")
+    p.write_text(data("part_template_sketch.py" if sketch_first else "part_template.py").format(name=name, title=title, description=description or "TODO: what it is, what it mates with."), encoding="utf-8", newline="")
     return p
 
 
@@ -459,6 +461,26 @@ def cmd_template(args) -> int:
         worst = max(worst, f["level"] == ck.FAIL)
     print(f"  -> {len(r['files'])} files in {script.parent / 'out'}")
     return worst
+
+
+def cmd_sketch(args) -> int:
+    """Sketch first: draw one of the script's sketches(d) on a mm grid with its dimensions, and
+    run the sketch checks; exit 1 if one fails."""
+    from . import sketch as skt
+    from .project import dims, load, resolve_part
+
+    root, parts_dir = workspace(args.root)
+    script = resolve_part(args.part, root, parts_dir)
+    mod = load(script)
+    key = _one_variant(mod, args.variant)
+    tag = "_".join(x for x in (script.stem, key) if x)
+    try:
+        res = skt.sketch_report(mod, dims(mod, key), args.name, script.parent / "out", tag, load_settings(script),
+                                "small" if args.small else "normal", dims=not args.no_dims)
+    except skt.SketchError as e:
+        sys.exit(f"sketch: {e}")
+    print(skt.text(res))
+    return int(any(f["level"] == skt.FAIL for f in res["findings"]))
 
 
 def cmd_diagnose(args) -> int:
@@ -981,6 +1003,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("name")
     p.add_argument("-d", "--description", default="")
     p.add_argument("--from", dest="example", help="start from a bundled example (see `b123d-print examples`)")
+    p.add_argument("--sketch", action="store_true", help="sketch first: a template with a sketches(d) outline that "
+                                                         "build(d) extrudes (see `b123d-print sketch`)")
     for name, hlp in (("build", "export STEP/STL/3MF/PNG + section views"), ("check", "run checks; exit 1 on failure")):
         p = sub.add_parser(name, help=hlp)
         p.add_argument("parts", nargs="*", help="part names or script paths (default: all)")
@@ -1027,6 +1051,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("recipes", help="list the recipe library, or show one recipe's code, notes and sources")
     p.add_argument("name", nargs="?")
+    p = sub.add_parser("sketch", help="sketch first: draw a sketch from sketches(d) on a mm grid with its dimensions "
+                                      "and checks (one region, neck, inside corners, small holes, bed); exit 1 on a failure")
+    p.add_argument("part", help="part name or script path")
+    p.add_argument("name", nargs="?", help="the sketch's name in sketches(d) (default: the first)")
+    p.add_argument("--variant")
+    p.add_argument("--no-dims", action="store_true", help="the shape and grid only, no dimensions")
+    p.add_argument("--small", action="store_true", help="a smaller picture (~800 px wide)")
     p = sub.add_parser("faces", help="list a part's flat faces with their ids (for a face template)")
     p.add_argument("part", help="part name or script path")
     p.add_argument("--variant")
@@ -1223,7 +1254,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_versions(args)
     if args.cmd == "new":
         root, parts_dir = workspace(args.root)
-        print(f"created {new_part(root, parts_dir, args.name, args.description, args.example)}")
+        print(f"created {new_part(root, parts_dir, args.name, args.description, args.example, args.sketch)}")
         return 0
     if args.cmd == "config":
         root, _ = workspace(args.root)
@@ -1283,7 +1314,7 @@ def main(argv: list[str] | None = None) -> int:
         except (TemplateError, FileNotFoundError) as e:
             sys.exit(f"{args.cmd}: {e}")
     return {"build": cmd_build, "check": cmd_check, "compare": cmd_compare, "to-step": cmd_to_step, "fit": cmd_fit,
-            "trace": cmd_trace, "recipes": cmd_recipes, "view": cmd_view}[args.cmd](args)
+            "trace": cmd_trace, "recipes": cmd_recipes, "view": cmd_view, "sketch": cmd_sketch}[args.cmd](args)
 
 
 if __name__ == "__main__":

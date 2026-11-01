@@ -51,6 +51,7 @@ if __name__ == "__main__":
 | `views(d)` | no | `[View(...)]` cross-sections saved with every export |
 | `templates(d)` | no | `[Template.slice(...), Template.face_of(...), Template.crop(...)]` [fit-test templates](../using/templates.md) written with every export ([arguments](checks-api.md#template)) |
 | `hardware(d)` | no | `[Hardware(...), ...]`: bought parts for the whole variant assembly, in the print sheet and optional JSON BOM ([declared hardware](#declared-hardware)) |
+| `sketches(d)` | no | [sketch first](../using/sketch-first.md): `{"outline": lambda: outline(d)}`, named 2D shapes (lazy like pieces) that `render_sketch` draws with their dimensions and checks before `build(d)` extrudes, revolves or sweeps them |
 | `checks(d)` | no | `[Wall(...), Overhang(...), Probe(...), ...]` — see [Checks API](checks-api.md); moving parts are declared here too, as `Motion(...)` or `Slide(...)` on `assembly(d)` labels ([motion clearance](../using/checks.md#motion-clearance)) |
 | `original(d)` | no | for a [remix](../using/remix.md): the original model placed as the remix is; default: what `build(d)` loaded with `import_model`. The automatic checks also run on it, so its findings are labeled inherited, and `before_after` and export compare the remix with it |
 

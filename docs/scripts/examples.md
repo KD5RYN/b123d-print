@@ -87,6 +87,17 @@ the same L with sharp corners, or standing up, gets them ([DS-T*](../DESIGN_GUID
 An example with estimated sizes: not printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/shelf_bracket/shelf_bracket.py)
 
+## `sketch_bracket`
+
+![The bracket's sketch with its dimensions](../images/sketch_bracket_sketch_outline.png)
+
+A flat L mounting plate drawn [sketch first](../using/sketch-first.md): `sketches(d)` returns its
+outline (`rounded_outline` with an R5 inside corner, two screw holes, a `slot` for adjustment),
+`b123d-print sketch sketch_bracket` draws it with its dimensions and checks, and `build(d)`
+extrudes the same outline, then adds countersinks and `bed_chamfer`. Variant `long` has a 100 mm
+arm. An example with estimated sizes: not printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/sketch_bracket/sketch_bracket.py)
+
 ## `banana`
 
 ![A whole banana lying on its side, stem and all](../images/banana.png)
