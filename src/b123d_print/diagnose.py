@@ -692,6 +692,16 @@ def slow_piece(label: str, seconds: float) -> dict:
                       "build each distinct piece once (@functools.cache) and mirror or copy it"]}
 
 
+def _loop_fix(script) -> str | None:
+    """The fix for a script that does a boolean on every pass of a for loop (loops.loop_hint)."""
+    from .loops import loop_hint
+
+    try:
+        return loop_hint(Path(script).read_text(encoding="utf-8")) if script else None
+    except OSError:
+        return None
+
+
 def from_result(res: dict, script=None) -> dict | None:
     """The diagnosis of a failed result the worker did not diagnose: a timeout, a killed worker,
     or an error reported without one (the traceback's text is parsed instead)."""
@@ -712,6 +722,9 @@ def from_result(res: dict, script=None) -> dict | None:
                          "piece builds, times and caches on its own, then work on the slow one with parts=")
         else:
             fixes.append("return lazy pieces from build(d) and build one at a time with parts= to find the slow one")
+        loops = _loop_fix(script)
+        if loops:
+            fixes.append(loops)
         fixes += ["build each distinct piece once (@functools.cache on its function) and mirror or copy it, instead "
                   "of building it again",
                   "a piece over ~1,500 faces is slow everywhere: halve the points of curves and polylines"]

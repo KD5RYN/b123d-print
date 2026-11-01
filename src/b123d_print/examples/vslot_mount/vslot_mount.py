@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from bd_warehouse.fastener import SocketHeadCapScrew
 from bd_warehouse.open_builds import TNut, VSlotLinearRail
-from build123d import Align, Axis, Box, Cylinder, Part, Plane, Polygon, Pos, Rot, chamfer, extrude
+from build123d import Align, Axis, Box, Cylinder, GridLocations, Part, Plane, Polygon, Pos, Rot, chamfer, extrude
 
 from b123d_print import Gap, View, hole_comp, load_settings
 
@@ -81,13 +81,11 @@ def build(d: Dims) -> Part:
             d.SCREW_PITCH / 2 - gap / 2, d.SCREW_PITCH / 2 + gap / 2, d.PLATE_L / 2]
     w, h = d.key_w / 2, d.key_h
     v = Polygon((-w, d.PLATE_T), (w, d.PLATE_T), (w - h, d.PLATE_T + h), (-w + h, d.PLATE_T + h), align=None)
-    for x0, x1 in zip(ends[::2], ends[1::2]):  # sides at 45 deg, facing up in print: no overhang
-        p += Pos(x0, 0, 0) * extrude(Plane.YZ * v, x1 - x0)
+    # sides at 45 deg, facing up in print: no overhang; the three key pieces fused in one boolean
+    p += [Pos(x0, 0, 0) * extrude(Plane.YZ * v, x1 - x0) for x0, x1 in zip(ends[::2], ends[1::2])]
     for x in (-d.SCREW_PITCH / 2, d.SCREW_PITCH / 2):
         p -= Pos(x, 0, 0) * Cylinder((d.screw_hole_d + d.HOLE_COMP) / 2, d.PLATE_T, align=BED)
-    for x in (-d.PILOT_X, d.PILOT_X):
-        for y in (-d.PILOT_Y, d.PILOT_Y):
-            p -= Pos(x, y, 0) * Cylinder((d.PILOT_D + d.HOLE_COMP) / 2, d.PLATE_T, align=BED)
+    p -= GridLocations(2 * d.PILOT_X, 2 * d.PILOT_Y, 2, 2) * Cylinder((d.PILOT_D + d.HOLE_COMP) / 2, d.PLATE_T, align=BED)
     return p
 
 

@@ -28,6 +28,7 @@ from build123d import (
     Box,
     Cone,
     Cylinder,
+    Locations,
     Mode,
     Part,
     Pos,
@@ -194,28 +195,30 @@ def base(d: Dims) -> Part:
         RectangleRounded(d.INNER, d.INNER, max(d.OUTER_CORNER_R - d.WALL, 0.5)), d.LID_INNER_Z
     )
     post_h = d.LID_INNER_Z - d.FLOOR_T
-    for x, y in d.POSTS:  # lid screw posts, filled solid back into the corner
-        b += Pos(x, y, d.FLOOR_T) * Cylinder(d.POST_D / 2, post_h, align=(CEN, CEN, MIN))
+
+    def post(x, y):  # lid screw post, filled solid back into the corner
         fill = d.INNER / 2 - abs(x) + 0.5  # post center to the inside wall, into the wall a bit
-        b += Pos(x, y, d.FLOOR_T) * Box(
-            fill, fill, post_h, align=(MIN if x > 0 else Align.MAX, MIN if y > 0 else Align.MAX, MIN)
-        )
-        b -= Pos(x, y, d.LID_INNER_Z) * Cylinder(
-            (d.PILOT_D + d.HOLE_COMP) / 2, 10, align=(CEN, CEN, Align.MAX), mode=Mode.PRIVATE
-        )
+        return [Pos(x, y, d.FLOOR_T) * Cylinder(d.POST_D / 2, post_h, align=(CEN, CEN, MIN)),
+                Pos(x, y, d.FLOOR_T) * Box(fill, fill, post_h,
+                                           align=(MIN if x > 0 else Align.MAX, MIN if y > 0 else Align.MAX, MIN))]
+
+    # every post in one boolean, then every pilot (one cutter copied to each post) in another
+    b += [s for x, y in d.POSTS for s in post(x, y)]
+    b -= Locations(*[(x, y, d.LID_INNER_Z) for x, y in d.POSTS]) * Cylinder(
+        (d.PILOT_D + d.HOLE_COMP) / 2, 10, align=(CEN, CEN, Align.MAX), mode=Mode.PRIVATE
+    )
+
     def flared(x, y, dia, flare):  # post with a tapered skirt at the floor
         r = dia / 2
         return Pos(x, y, d.FLOOR_T) * Cylinder(r, d.STANDOFF_H, align=(CEN, CEN, MIN)) + Pos(
             x, y, d.FLOOR_T
         ) * Cone(r + flare, r, d.STANDOFF_FLARE_H, align=(CEN, CEN, MIN))
 
-    for x, y in d.HOLES:  # board standoffs, M3
-        b += flared(x, y, d.STANDOFF_D, d.STANDOFF_FLARE)
-        b -= Pos(x, y, d.PCB_SCREW_FLOOR_LEFT) * Cylinder(
-            (d.PCB_SCREW_PILOT_D + d.HOLE_COMP) / 2, 50, align=(CEN, CEN, MIN), mode=Mode.PRIVATE
-        )
-    for x, y in d.PADS:  # support pads, no screws
-        b += flared(x, y, d.PAD_D, d.PAD_FLARE)
+    b += [flared(x, y, d.STANDOFF_D, d.STANDOFF_FLARE) for x, y in d.HOLES]  # board standoffs, M3
+    b -= Locations(*[(x, y, d.PCB_SCREW_FLOOR_LEFT) for x, y in d.HOLES]) * Cylinder(
+        (d.PCB_SCREW_PILOT_D + d.HOLE_COMP) / 2, 50, align=(CEN, CEN, MIN), mode=Mode.PRIVATE
+    )
+    b += [flared(x, y, d.PAD_D, d.PAD_FLARE) for x, y in d.PADS]  # support pads, no screws
 
     # L-shaped lips at the two plain-edge (-X) corners, just outside the board, to locate it
     lip_h = d.PCB_TOP + d.CORNER_LIP_ABOVE - d.FLOOR_T
@@ -268,8 +271,7 @@ def lid(d: Dims) -> Part:
         d.INNER - 2 * d.FIT_CLEARANCE, d.INNER - 2 * d.FIT_CLEARANCE, max(d.OUTER_CORNER_R - d.WALL - d.FIT_CLEARANCE, 0.5)
     )
     lip = Pos(0, 0, z0 - d.LIP_H) * extrude(lip_out - offset(lip_out, -d.LIP_W), d.LIP_H)
-    for x, y in d.POSTS:
-        lip -= Pos(x, y, 0) * Cylinder(d.POST_D / 2 + d.FIT_CLEARANCE + 1.2, 100, mode=Mode.PRIVATE)
+    lip -= Locations(*d.POSTS) * Cylinder(d.POST_D / 2 + d.FIT_CLEARANCE + 1.2, 100, mode=Mode.PRIVATE)
     l += lip
 
     # LED cone: a boss hangs from the lid down to the LED tip, cone through it
@@ -296,12 +298,10 @@ def lid(d: Dims) -> Part:
     )
 
     # Lid screws, counterbored for pan heads
-    for x, y in d.POSTS:
-        l -= Pos(x, y, 0) * Cylinder((d.SCREW_CLEAR_D + d.HOLE_COMP) / 2, 100, mode=Mode.PRIVATE)
-        l -= Pos(x, y, d.LID_OUTER_Z) * Cylinder(
-            (d.CBORE_D + d.HOLE_COMP) / 2, d.CBORE_DEPTH, align=(CEN, CEN, Align.MAX), mode=Mode.PRIVATE
-        )
-    return l
+    screw = Cylinder((d.SCREW_CLEAR_D + d.HOLE_COMP) / 2, 100, mode=Mode.PRIVATE) + Pos(0, 0, d.LID_OUTER_Z) * Cylinder(
+        (d.CBORE_D + d.HOLE_COMP) / 2, d.CBORE_DEPTH, align=(CEN, CEN, Align.MAX), mode=Mode.PRIVATE
+    )
+    return l - Locations(*d.POSTS) * screw  # one cutter, copied to every post
 
 
 def board_dummy(d: Dims) -> list[tuple[Part, str, str]]:

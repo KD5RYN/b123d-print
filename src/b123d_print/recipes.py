@@ -25,7 +25,10 @@ from build123d import (Align, Axis, Bezier, Box, Circle, Compound, Cone, Cylinde
                        Line, Part, Plane, Polygon, Polyline, Pos, Rectangle, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere,
                        Spline, Text, Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale, section,
                        split, sweep)
+from build123d import GridLocations  # ribs; the other location sets are in patterns.py
 
+from .patterns import (bolt_circle, demo_bolt_circle, demo_grip_ridges, demo_hex_grille, demo_hole_grid,
+                       demo_slot_grille, grip_ridges, hex_grille, hole_grid, slot_grille)
 from .pcb import pcb_board, pcb_mounting_pattern, pcb_standoff
 
 BED = (Align.CENTER, Align.CENTER, Align.MIN)
@@ -489,10 +492,7 @@ def ribs(span: float, height: float, count: int = 3, thickness: float = 2.0, pit
     apart in Y (default 10 x thickness), centered. To stiffen a large flat wall or plate and
     against warping (BP-R5); as thick as the wall (BP-R4)."""
     pitch = pitch if pitch is not None else 10 * thickness
-    out = Part()
-    for i in range(count):
-        out += Pos(0, (i - (count - 1) / 2) * pitch, 0) * Box(span, thickness, height, align=BED)
-    return out
+    return Part() + GridLocations(0, pitch, 1, count) * Box(span, thickness, height, align=BED)
 
 
 def demo_gusset() -> Part:
@@ -847,6 +847,10 @@ class Recipe:
                 f"```python\n{code}```\n")
 
 
+_PATTERN_IMPORTS = ("import math\nfrom build123d import (Align, Box, BuildPart, BuildSketch, Cylinder, GridLocations, "
+                    "HexLocations, Part,\n                       PolarLocations, Pos, RegularPolygon, Sketch, SlotOverall, "
+                    "extrude)\n\nBED = (Align.CENTER, Align.CENTER, Align.MIN)\nTOP = (Align.CENTER, Align.CENTER, Align.MAX)")
+
 _MOUNT_IMPORTS = ("import math\nfrom build123d import Align, Box, Cylinder, Part, Pos\n"
                   "from b123d_print.recipes import _screw\n\n"
                   "TOP = (Align.CENTER, Align.CENTER, Align.MAX)\n"
@@ -1012,6 +1016,64 @@ RECIPES = {r.name: r for r in [
   bracket takes the bending load off the corner. Fillet the corner too (BP-R1).
 - No source gives rib height or spacing for FDM; the defaults here are a starting point.
 """, ["[BP-R1, R4, R5](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"]),
+    Recipe("bolt_circle", "Bolt circle (PolarLocations)", [bolt_circle], demo_bolt_circle, """
+- One cutter for every hole: `part -= Pos(0, 0, top) * bolt_circle(...)` is one boolean. A boolean
+  per hole in a for loop costs much more (400 holes: 0.22 s fused, 10.2 s one at a time).
+- PolarLocations(radius, count, start_angle=0, angular_range=360, rotate=True, endpoint=False):
+  an arc of holes is `angular_range=90`; `endpoint=True` puts a hole at both ends of the arc.
+- Holes are vertical here, the accurate way to print them. A bolt circle on a wall prints its
+  holes on their side: use `teardrop_hole` copies instead (BP-H3), or turn the part.
+- Leave a wall between neighbouring holes and to the edge of at least 2-3 lines (BP-W2, W3);
+  a hole's printed size is hole_d + HOLE_COMP (BP-H1).
+""", ["[BP-H1, H3, W2, W3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "[Patterns guide](https://kd5ryn.github.io/b123d-print/using/patterns/) one fused pattern, one boolean (timings measured on build123d 0.13.0)"],
+           imports=_PATTERN_IMPORTS),
+    Recipe("hole_grid", "Hole grid (GridLocations)", [hole_grid], demo_hole_grid, """
+- GridLocations(x_spacing, y_spacing, x_count, y_count, align=CENTER) is centered on the origin;
+  `align=(Align.MIN, Align.MIN)` starts the first hole at the origin instead.
+- One fused cutter, one boolean (the patterns guide has the timings). For holes of different
+  sizes, a list works the same: `part -= [Pos(x, y, top) * Cylinder(...) for ...]`.
+- Holes under 1-2 mm print poorly and the holes check warns below 1 mm (BP-H5); the web between
+  holes (pitch - hole) at least 2-3 lines (BP-W2, W3).
+""", ["[BP-H5, W2, W3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "[Patterns guide](https://kd5ryn.github.io/b123d-print/using/patterns/) one fused pattern, one boolean (timings measured on build123d 0.13.0)"],
+           imports=_PATTERN_IMPORTS),
+    Recipe("hex_grille", "Honeycomb grille or lightening (HexLocations)", [hex_grille], demo_hex_grille, """
+- HexLocations(radius, x_count, y_count, major_radius=False): radius is the apothem of the
+  tiling cell (centre to flat side), so neighbours are 2 x radius apart; for holes `cell` across
+  flats with `web` between them, radius = (cell + web) / 2. Columns are sqrt(3) x radius apart,
+  every other column shifted half a step; the cells have corners on +X and -X.
+- The web is a wall: at least 1 line wide or it does not print (BP-W1), better 2-4 whole lines
+  (0.9-1.8 mm at 0.4; BP-W2, W3). The thin-feature check measures it.
+- Through a plate lying flat: no overhangs. On a wall printed standing, the cell's top is a
+  ceiling: turn the cutter so a corner points up (two 60-degree slopes, BP-O1) rather than a
+  flat side (a bridge, BP-O3).
+- Lightening a part that carries load: keep a solid border and solid material around holes and
+  bosses; it is the walls, not the infill, that carry the load (BP-W4).
+""", ["[BP-W1..W4, O1, O3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "[Patterns guide](https://kd5ryn.github.io/b123d-print/using/patterns/) one fused pattern, one boolean (timings measured on build123d 0.13.0)"],
+           imports=_PATTERN_IMPORTS),
+    Recipe("slot_grille", "Vent and speaker slots (builder-mode GridLocations)", [slot_grille], demo_slot_grille, """
+- Builder mode: a `with GridLocations(...)` context inside a BuildSketch places one slot at each
+  location; one extrude makes the cutter. The same works for any sketch shape, and
+  `mode=Mode.SUBTRACT` inside a BuildPart cuts directly.
+- Web between slots = pitch - slot_w: at least 2-3 lines (BP-W2, W3). Slots narrower than about
+  0.5 mm close up (BP-W7); vents usually want 2-3 mm.
+- Slots through a wall printed standing: run them horizontally only if the roof is short (a
+  bridge of slot_w, BP-O3), or vertically, or with a pointed roof.
+""", ["[BP-W2, W3, W7, O3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "[Patterns guide](https://kd5ryn.github.io/b123d-print/using/patterns/) one fused pattern, one boolean (timings measured on build123d 0.13.0)"],
+           imports=_PATTERN_IMPORTS),
+    Recipe("grip_ridges", "Grip ridges on a knob (PolarLocations, rotate)", [grip_ridges], demo_grip_ridges, """
+- PolarLocations(..., rotate=True) turns each copy to face out, so a box's local X is radial.
+  rotate=False keeps every copy's orientation (round bosses don't care; slots and ribs do).
+- Ridges at least 2 lines wide (BP-W1, W3) and 0.5-1 mm high read and grip; standing vertical,
+  they print without overhangs. Ridges along a slope or across Z need the overhang check.
+- A diamond knurl is two sets of helical ridges: many more faces and much slower to build and
+  check. Straight ridges usually grip as well on a printed part.
+""", ["[BP-W1, W3, O1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "[Patterns guide](https://kd5ryn.github.io/b123d-print/using/patterns/) one fused pattern, one boolean (timings measured on build123d 0.13.0)"],
+           imports=_PATTERN_IMPORTS),
     Recipe("spine_loft", "Body lofted along a curved spine", [spine_loft], demo_spine_loft, """
 - For natural shapes (fruit, bodies, limbs, horns that bulge): model them from cross-sections along
   a curve, not from boxes, cylinders and spheres fused together (DS-O1). Give each section its own

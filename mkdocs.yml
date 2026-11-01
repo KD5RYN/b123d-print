@@ -76,6 +76,7 @@ nav:
       - Fit between pieces: using/fit.md
       - Tracing an outline: using/tracing.md
       - Recipes: using/recipes.md
+      - Patterns: using/patterns.md
       - Threads, fasteners and gears: using/threads-fasteners-gears.md
   - Writing part scripts:
       - The part script: scripts/convention.md

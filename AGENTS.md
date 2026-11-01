@@ -98,6 +98,26 @@ assemblies, several parts merged; `format="csv"` for a spreadsheet. The `bom` / 
 formats write it as `_bom.md` / `_bom.csv`. Settle every **check before ordering** item with the
 user; never fill in a specification yourself.
 
+## Repeated features: patterns, one boolean
+
+Holes, bosses, ribs, slots and cells that repeat are placed with build123d's location sets, not
+computed in a `for` loop with a boolean on every pass
+([guide](https://kd5ryn.github.io/b123d-print/using/patterns/)):
+
+- `GridLocations(x_spacing, y_spacing, x_count, y_count)` (centered), `PolarLocations(radius,
+  count, start_angle=0, angular_range=360, rotate=True)`, `HexLocations(apothem, x_count,
+  y_count)` (neighbours 2 x apothem apart), `Locations(*d.POINTS)`, and `mirror(shape,
+  about=Plane.YZ)` for the other side of a symmetric part.
+- **One boolean for all the copies:** `part -= GridLocations(...) * hole` (a list of placed
+  copies), `part += [rib(p) for p in d.RIBS]`, or a `with GridLocations(...):` context in
+  `BuildPart` / `BuildSketch` with `mode=Mode.SUBTRACT`. A boolean per pass costs far more: 400
+  holes took 0.22 s fused and 10.2 s one at a time. `build_part` hints at such loops.
+- Recipes: `bolt_circle`, `hole_grid`, `hex_grille` (honeycomb vents, lightening),
+  `slot_grille` (vents, speaker slots), `grip_ridges`, `ribs`. Continuous features (threads,
+  flutes, spirals) are one sweep or loft, not thousands of copies.
+- Webs between copies at least 2-3 lines [W2, W3], holes at least 1-2 mm [H5], rows of
+  horizontal holes as teardrops [H3], hex cells in a standing wall corner-up [O1].
+
 ## Big and multi-piece projects
 
 A part that takes long to build makes every step slow. The time limit is 240 s per call.

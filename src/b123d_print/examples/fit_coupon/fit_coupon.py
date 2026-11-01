@@ -129,25 +129,27 @@ def peg(d: Dims) -> Part:
 def holes(d: Dims) -> Part:
     p = Box(d.HOLES_W, d.HOLES_D, d.PLATE_T, align=BED)
     p = chamfer(p.edges().group_by(Axis.Z)[-1], length=d.EDGE_CHAMFER)
+    cuts = []  # every hole and label, cut in one boolean
     for i, c in enumerate(d.CLEARANCES):
         x, y = d.hole_xy(i)
-        p -= Pos(x, y, 0) * Cylinder((d.PEG_D + 2 * c + d.HOLE_COMP) / 2, d.PLATE_T * 3, mode=Mode.PRIVATE)
         top = d.PEG_D / 2 + 0.5 + d.LABEL_GAP
-        p -= Pos(x, y + top, d.PLATE_T - d.LABEL_DEPTH) * extrude(_label(c, d.LABEL_SIZE), d.LABEL_DEPTH + 1)
-    return p
+        cuts += [Pos(x, y, 0) * Cylinder((d.PEG_D + 2 * c + d.HOLE_COMP) / 2, d.PLATE_T * 3, mode=Mode.PRIVATE),
+                 Pos(x, y + top, d.PLATE_T - d.LABEL_DEPTH) * extrude(_label(c, d.LABEL_SIZE), d.LABEL_DEPTH + 1)]
+    return p - cuts
 
 
 def pip(d: Dims) -> Part:
     """A plate with ring holes and a loose disc in each: separate solids, printed together."""
     plate = Box(d.PIP_W, d.PIP_D, d.PIP_T, align=BED)
     plate = chamfer(plate.edges().group_by(Axis.Z)[-1], length=d.EDGE_CHAMFER)
-    discs = []
+    discs, cuts = [], []
     for i, g in enumerate(d.PIP_GAPS):
         x, y = d.pip_xy(i)
-        plate -= Pos(x, y, 0) * Cylinder((d.DISC_D + 2 * g + d.HOLE_COMP) / 2, d.PIP_T * 3, mode=Mode.PRIVATE)
         top = d.DISC_D / 2 + 0.5 + d.LABEL_GAP
-        plate -= Pos(x, y + top, d.PIP_T - d.LABEL_DEPTH) * extrude(_label(g, d.LABEL_SIZE), d.LABEL_DEPTH + 1)
+        cuts += [Pos(x, y, 0) * Cylinder((d.DISC_D + 2 * g + d.HOLE_COMP) / 2, d.PIP_T * 3, mode=Mode.PRIVATE),
+                 Pos(x, y + top, d.PIP_T - d.LABEL_DEPTH) * extrude(_label(g, d.LABEL_SIZE), d.LABEL_DEPTH + 1)]
         discs.append(Pos(x, y, 0) * Cylinder(d.DISC_D / 2, d.PIP_T, align=BED))
+    plate -= cuts  # one boolean for every ring hole and label
     return Compound([*plate.solids(), *discs])
 
 
