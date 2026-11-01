@@ -37,6 +37,9 @@ lower-left corner.*
         return {"outline": lambda: outline(d)}  # lazy, like pieces: made only when asked for
     ```
 
+    A sketch's name becomes part of its picture's file name: 1-40 letters, digits, `_` or `-`,
+    starting with a letter or digit.
+
 3. **The picture and the checks.** `render_sketch(name)` (CLI `b123d-print sketch <name>
    [<sketch>]`) draws the sketch on a mm grid, writes it to `out/images/<name>_sketch_<sketch>.png`,
    lists the sizes, holes, slots and corner radii, and runs the sketch checks below. The AI

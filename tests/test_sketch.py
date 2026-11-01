@@ -130,6 +130,26 @@ def test_lazy_sketches_and_missing_hook():
         skt.Sketches(object(), None)
 
 
+@pytest.mark.parametrize("key", ["../x", "a/b", "two words", "", "-lead", "x" * 41, 3])
+def test_bad_sketch_names_are_refused(key):
+    class Mod:
+        @staticmethod
+        def sketches(d):
+            return {"ok": Sketch() + Rectangle(5, 5), key: Sketch() + Circle(3)}
+
+    with pytest.raises(skt.SketchError, match="bad sketch name") as e:
+        skt.Sketches(Mod, 1)
+    assert repr(key) in str(e.value) and "'ok'" not in str(e.value)
+    good = {"outline", "a-1", "B_2", "x" * 40}
+
+    class Fine:
+        @staticmethod
+        def sketches(d):
+            return {k: Sketch() + Rectangle(5, 5) for k in good}
+
+    assert set(skt.Sketches(Fine, 1).names()) == good
+
+
 def test_cli_new_sketch_and_sketch_command(tmp_path, monkeypatch, capsys):
     (tmp_path / "b123d-print.toml").write_text("", encoding="utf-8")
     p = new_part(tmp_path, "parts", "plate", sketch_first=True)
