@@ -1209,6 +1209,11 @@ def _with_bodies(shape, notes: list):
     import build123d
     from OCP.TopoDS import TopoDS_Iterator
 
+    from .bodies import valid_name
+
+    labels = [n.get("label") for n in notes]
+    if not all(valid_name(n) for n in labels) or len(set(labels)) != len(labels):
+        return None  # a note bodies() could not have written: a miss, rebuilt
     tops, it = [], TopoDS_Iterator(shape.wrapped)
     while it.More():
         tops.append(it.Value())

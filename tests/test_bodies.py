@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from build123d import Align, Box, Color, Mesher, Pos, import_step
+from build123d import Align, Box, Color, Compound, Mesher, Pos, import_step
 
 import b123d_print
 from b123d_print import checks as ck
@@ -187,3 +187,30 @@ def test_inlay_example_builds_and_passes_check():
         assert [f.level for f in found if f.check == "bodies"] == [ck.OK]
         part = project.printables(mod, project.dims(mod, key))[""]
         assert [n for _, _, n in split(part)] == ["tag", "text"]
+
+
+@pytest.mark.parametrize("labels", [("../../x", "y"), ("Base plate", "lid/top"), ("a", "a"), ("a\n", "b"), ("ok", "")])
+def test_a_compound_with_other_labels_is_not_multi_body(tmp_path, labels):
+    """An ordinary labelled assembly (or a hostile label) is one part: no body files, nothing outside out/."""
+    a, b = Box(10, 10, 3, align=BED), Pos(0, 0, 3) * Box(4, 4, 1, align=BED)
+    a.label, b.label = labels
+    c = Compound(children=[a, b])
+    assert split(c) is None and printable(c) is c
+    out = tmp_path / "ws" / "out"
+    files = export_files(c, out, "part", ["stl", "3mf"])
+    assert [p.name for p in files] == ["part.stl", "part.3mf"]
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()) == [
+        "ws/out/part.3mf", "ws/out/part.stl"]
+    assert len(Mesher().read(str(out / "part.3mf"))) == 2  # Mesher's own handling, as before #167
+    assert ck.Bodies("p").run({"p": c}, None, Settings()) == []
+
+
+def test_stl_files_and_cache_note_refuse_a_bad_name():
+    from b123d_print.bodies import stl_files
+    from b123d_print.project import _with_bodies
+
+    t = tag()
+    split(t)[1][0].label = "../x"  # changed after bodies(): split refuses it, so nothing is written for it
+    assert [n for n, _ in stl_files(t, "tag")] == ["tag.stl"]
+    notes = [{"type": "Part", "label": "../x", "color": None}, {"type": "Part", "label": "b", "color": None}]
+    assert _with_bodies(t, notes) is None
