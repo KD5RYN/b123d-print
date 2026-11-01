@@ -32,6 +32,7 @@ from build123d import (
     Box,
     Cone,
     Cylinder,
+    Locations,
     Mode,
     Pos,
     Rot,
@@ -166,11 +167,9 @@ def build(d: Dims):
         d.PLATE_DEPTH,
     )
 
-    # Bosses behind the holes
-    for x, y in d.CORNER_HOLES:
-        plate += Pos(x, y, 0) * Cylinder(d.CORNER_BOSS_D / 2, d.BOSS_DEPTH, align=BED)
-    for x, y in d.CENTER_HOLES:
-        plate += Pos(x, y, 0) * Cylinder(d.CENTER_BOSS_D / 2, d.BOSS_DEPTH, align=BED)
+    # Bosses behind the holes: Locations(...) * shape places a copy at each point, one boolean each set
+    plate += Locations(*d.CORNER_HOLES) * Cylinder(d.CORNER_BOSS_D / 2, d.BOSS_DEPTH, align=BED)
+    plate += Locations(*d.CENTER_HOLES) * Cylinder(d.CENTER_BOSS_D / 2, d.BOSS_DEPTH, align=BED)
 
     # Opening outline with arc notches at top and bottom center
     opening = RectangleRounded(d.OPENING_W, d.OPENING_H, d.OPENING_CORNER_R)
@@ -200,8 +199,7 @@ def build(d: Dims):
         for sx in (-1, 1)
         for sy in (-1, 1)
     ]
-    for p1, p2 in RIBS:
-        plate += rib(d, p1, p2)
+    plate += [rib(d, p1, p2) for p1, p2 in RIBS]  # a list of shapes: fused in one boolean
 
     # Edge treatment on the outside before cutting openings (simpler edge selection)
     plate = fillet(plate.edges().group_by(Axis.Z)[0], radius=d.FRONT_EDGE_FILLET)
@@ -216,20 +214,17 @@ def build(d: Dims):
     ]
     plate = chamfer(opening_edges, length=d.OPENING_FRONT_CHAMFER)
 
-    # Counterbored corner holes (counterbore opens on the front face, Z=0)
-    for x, y in d.CORNER_HOLES:
-        plate -= Pos(x, y, 0) * Cylinder((d.CORNER_HOLE_D + d.HOLE_COMP) / 2, d.PLATE_DEPTH, align=BED, mode=Mode.PRIVATE)
-        plate -= Pos(x, y, 0) * Cylinder((d.CBORE_D + d.HOLE_COMP) / 2, d.CBORE_DEPTH, align=BED, mode=Mode.PRIVATE)
-        plate -= Pos(x, y, 0) * Cone(
-            (d.CBORE_D + d.HOLE_COMP) / 2 + d.CBORE_LIP_CHAMFER,
-            (d.CBORE_D + d.HOLE_COMP) / 2,
-            d.CBORE_LIP_CHAMFER,
-            align=BED, mode=Mode.PRIVATE
-        )
+    # Counterbored corner holes (counterbore opens on the front face, Z=0): one cutter, copied to
+    # every corner hole, cut in one boolean
+    cbore = (Cylinder((d.CORNER_HOLE_D + d.HOLE_COMP) / 2, d.PLATE_DEPTH, align=BED, mode=Mode.PRIVATE)
+             + Cylinder((d.CBORE_D + d.HOLE_COMP) / 2, d.CBORE_DEPTH, align=BED, mode=Mode.PRIVATE)
+             + Cone((d.CBORE_D + d.HOLE_COMP) / 2 + d.CBORE_LIP_CHAMFER, (d.CBORE_D + d.HOLE_COMP) / 2,
+                    d.CBORE_LIP_CHAMFER, align=BED, mode=Mode.PRIVATE))
+    plate -= Locations(*d.CORNER_HOLES) * cbore
 
     # Center holes for the switch screws
-    for x, y in d.CENTER_HOLES:
-        plate -= Pos(x, y, 0) * Cylinder((d.CENTER_HOLE_D + d.HOLE_COMP) / 2, d.PLATE_DEPTH, align=BED, mode=Mode.PRIVATE)
+    plate -= Locations(*d.CENTER_HOLES) * Cylinder((d.CENTER_HOLE_D + d.HOLE_COMP) / 2, d.PLATE_DEPTH, align=BED,
+                                                   mode=Mode.PRIVATE)
 
     return plate
 

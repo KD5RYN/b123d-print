@@ -120,27 +120,30 @@ def ledge(d: Dims, angle: float) -> Part:
 def build(d: Dims) -> Part:
     p = Box(d.WIDTH, d.DEPTH, d.BASE_T, align=BED)
     p += Pos(0, d.SPINE_Y + d.SPINE_T / 2, 0) * Box(d.LADDER_W, d.SPINE_T, d.SPINE_H, align=BED)
-    for i, a in enumerate(d.ANGLES):
-        p += Pos(d.ledge_x(i), 0, 0) * ledge(d, a)
+    # collect the ledges, pillars and bridges, add them in one boolean; then the labels, cut in one
+    adds = [Pos(d.ledge_x(i), 0, 0) * ledge(d, a) for i, a in enumerate(d.ANGLES)]
     for r, spans in enumerate(d.SPANS):
         x = -d.row_w(spans) / 2
         y = d.row_y(r)
         for s in spans:
-            for px in (x + d.PILLAR_W / 2, x + d.PILLAR_W * 1.5 + s):
-                p += Pos(px, y, d.BASE_T) * Box(d.PILLAR_W, d.BRIDGE_D, d.BRIDGE_H, align=BED)
-            p += Pos(x + d.PILLAR_W + s / 2, y, d.BASE_T + d.BRIDGE_H) * Box(s + 2 * d.PILLAR_W, d.BRIDGE_D, d.BRIDGE_T, align=BED)
+            adds += [Pos(px, y, d.BASE_T) * Box(d.PILLAR_W, d.BRIDGE_D, d.BRIDGE_H, align=BED)
+                     for px in (x + d.PILLAR_W / 2, x + d.PILLAR_W * 1.5 + s)]
+            adds += [Pos(x + d.PILLAR_W + s / 2, y, d.BASE_T + d.BRIDGE_H) * Box(s + 2 * d.PILLAR_W, d.BRIDGE_D, d.BRIDGE_T, align=BED)]
             x += s + 2 * d.PILLAR_W + d.BRIDGE_GAP
+    p += adds
+    cuts = []
     for i, a in enumerate(d.ANGLES):  # labels on the ledge tops
         top = d.BASE_T + d.LEDGE_START + d.rise(a) + d.LEDGE_FRONT
         t = Text(f"{a}", d.LABEL_SIZE * 0.9, align=(Align.CENTER, Align.CENTER))
-        p -= Pos(d.ledge_x(i), d.SPINE_Y - d.LEDGE_OUT / 2, top - d.LABEL_DEPTH) * extrude(t, d.LABEL_DEPTH + 1)
+        cuts.append(Pos(d.ledge_x(i), d.SPINE_Y - d.LEDGE_OUT / 2, top - d.LABEL_DEPTH) * extrude(t, d.LABEL_DEPTH + 1))
     for r, spans in enumerate(d.SPANS):  # labels on the base in front of each bridge
         x = -d.row_w(spans) / 2
         for s in spans:
             t = Text(f"{s}", d.LABEL_SIZE, align=(Align.CENTER, Align.MAX))
-            p -= Pos(x + d.PILLAR_W + s / 2, d.row_y(r) - d.BRIDGE_D / 2 - 1, d.BASE_T - d.LABEL_DEPTH) * extrude(t, d.LABEL_DEPTH + 1)
+            cuts.append(Pos(x + d.PILLAR_W + s / 2, d.row_y(r) - d.BRIDGE_D / 2 - 1, d.BASE_T - d.LABEL_DEPTH)
+                        * extrude(t, d.LABEL_DEPTH + 1))
             x += s + 2 * d.PILLAR_W + d.BRIDGE_GAP
-    return p
+    return p - cuts
 
 
 def checks(d: Dims):

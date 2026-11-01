@@ -47,6 +47,7 @@ from . import intent
 from .config import Settings, hole_comp_source, load_settings, parse_formats, safe_console
 from .motion import _Swept
 from .motion import image_path as motion_image
+from .loops import loop_hint
 from .partfiles import find_parts, resolve_part, timing_lines  # noqa: F401  (light: the MCP server imports them from there)
 from . import outdir
 from .render import export_files, render, report, section_view
@@ -223,9 +224,18 @@ class Pieces:
             self._asm_done = True
         return self._asm
 
+    def _loop_hint(self) -> str | None:
+        """loops.loop_hint for the part script (booleans on every pass of a for loop), or None."""
+        f = getattr(self.mod, "__file__", None)
+        try:
+            return loop_hint(Path(f).read_text(encoding="utf-8")) if f else None
+        except OSError:
+            return None
+
     def timing(self) -> dict:
         """The timing report: per built piece its faces, seconds and whether it was cached; the
-        build(d) call's seconds when it ran; and HEAVY_HINT for the pieces that need it."""
+        build(d) call's seconds when it ran; and HEAVY_HINT for the pieces that need it; the
+        loop hint when the script does a boolean on every pass of a for loop."""
         pieces = {(n or "part"): st for n, st in self.stats.items()}
         hints = [f"{n}: {st['faces']} faces" + (f", {st['seconds']:g} s" if st.get("seconds") is not None else "")
                  + f": {HEAVY_HINT}" for n, st in pieces.items()
@@ -234,6 +244,9 @@ class Pieces:
         if self.build_seconds is not None and self.build_seconds > HEAVY_SECONDS and len(eager) > 1:
             hints.append(f"build(d) took {self.build_seconds:.1f} s for {len(eager)} pieces at once: return lazy pieces "
                          "({'name': lambda: make_name(d)}) to see each piece's time and build one at a time")
+        loops = self._loop_hint()
+        if loops:
+            hints.append(loops)
         out = {"pieces": pieces, "hints": hints}
         if self.build_seconds is not None:
             out["build_seconds"] = round(self.build_seconds, 2)

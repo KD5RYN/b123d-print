@@ -44,6 +44,9 @@ def build(d: Dims) -> Part:
     checks() (the script's own name works too); return {{"base": ..., "lid": ...}} to name several."""
     part = Box(d.WIDTH, d.DEPTH, d.HEIGHT, align=BED)
     part = chamfer(part.edges().group_by(Axis.Z)[0], length=d.BED_CHAMFER)
+    # Repeated features: place every copy with GridLocations / PolarLocations / HexLocations /
+    # Locations(*points) and cut them in one boolean, not one per pass of a for loop, e.g.
+    # part -= Pos(0, 0, d.HEIGHT / 2) * (GridLocations(10, 10, 3, 2) * Cylinder((d.HOLE_D + d.HOLE_COMP) / 2, d.HEIGHT))
     return part
 
 
