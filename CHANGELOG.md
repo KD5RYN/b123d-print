@@ -132,6 +132,17 @@
   touches no other or is narrower than a line width. The print sheet gets a **Bodies
   (multi-colour)** table and the layers the bodies share. New `inlay` recipe (the pocket cut by
   the insert itself) and an `inlay_tag` example.
+- **Sketch first, an option the AI offers per part** (#169): for parts that are mostly a 2D
+  shape made solid (brackets, plates, clips, spacers; knobs and pulleys; hooks and handles), the
+  2D sketch is drawn and confirmed before any 3D. A script's optional `sketches(d)` hook returns
+  named 2D shapes, lazy like pieces; `render_sketch` (CLI `b123d-print sketch`) draws one on a
+  mm grid with automatic dimensions (overall size, holes and slots grouped by size, inside corner
+  radii, centres as ordinates from the lower-left corner) and runs the sketch checks: one closed
+  region, narrowest neck against `min_wall`, inside corners under R0.5, holes under 1 mm, the
+  bed. `new_part(..., sketch_first=True)` / `b123d-print new --sketch` scaffolds it. New recipes
+  `rounded_outline(points, radii)` (one radius per corner; refuses radii that do not fit, where
+  FilletPolyline would make a bad face silently) and `slot(a, b, width)`, a bundled
+  `sketch_bracket` example, and a [Sketch first](https://kd5ryn.github.io/b123d-print/using/sketch-first/) page.
 
 ## 0.3.16 — 2026-10-28
 

@@ -57,6 +57,7 @@ from b123d_print import templates  # noqa: E402,F401  (fit-test templates)
 from b123d_print import joints  # noqa: E402,F401  (split parts, joint helpers)
 from b123d_print import viewer  # noqa: E402  (the 3D view's GLB)
 from b123d_print import measure  # noqa: E402  (measure)
+from b123d_print import sketch as skt  # noqa: E402  (sketches(d): render_sketch)
 from b123d_print import outdir  # noqa: E402  (out/'s folders)
 from b123d_print.project import Pieces  # noqa: E402
 import scipy.ndimage  # noqa: E402,F401  (design_metrics' water-trap labelling, loaded before the guard)
@@ -322,7 +323,7 @@ def do_describe(job: dict) -> dict:
 def _usage_error(e: BaseException) -> bool:
     """An error in what the tool was asked (a wrong piece, variant, face or measurement)."""
     msg = str(e)
-    return (isinstance(e, (measure.MeasureError, templates.TemplateError))
+    return (isinstance(e, (measure.MeasureError, templates.TemplateError, skt.SketchError))
             or (isinstance(e, KeyError) and (msg.startswith(("'no part", "'no variant", '"no part', '"no variant'))
                                               or "no part(s)" in msg or "no variant" in msg)))
 
@@ -406,6 +407,9 @@ def do(job: dict, warned: list | None = None) -> dict:
     tag = "_".join(x for x in (script.stem, k) if x)
     size = job.get("size", "normal")
     small = "_small" if size == "small" else ""
+    if op == "sketch":  # sketches(d): 2D only, nothing is built
+        return {"variant": k or "standard",
+                **skt.sketch_report(mod, d, job.get("sketch"), out, tag, settings, size, dims=job.get("dims", True))}
     if op == "render":
         which = job.get("parts")
         sel, layout = _preview_parts(pc, which)

@@ -218,6 +218,14 @@ async def flow(c, pw, expect, mode: str = "stdio") -> None:
            "design_metrics reports the numbers and the style's findings (in the sandbox)" + ("" if "style:" in t else f"\n{t[:2000]}"))
     res = await c.call_tool("design_metrics", {"name": "coupon", "style": "baroque"})
     expect(res.is_error and "no style 'baroque'" in text(res), "design_metrics refuses an unknown style with the list")
+    res = await c.call_tool("new_part", {"name": "plate", "sketch_first": True})
+    expect("sketch-first template" in text(res), "new_part with sketch_first")
+    res = await c.call_tool("render_sketch", {"name": "plate", "size": "small"})
+    t = text(res)
+    expect(not res.is_error and t.startswith("sketch outline") and "[OK  ] region" in t and images(res),
+           "render_sketch draws and checks the sketch (in the sandbox)" + ("" if "region" in t else f"\n{t[:2000]}"))
+    res = await c.call_tool("render_sketch", {"name": "coupon"})
+    expect("ERROR" in text(res) and "no sketches(d)" in text(res), "render_sketch on a script without sketches(d) says so")
     await c.call_tool("new_part", {"name": "lay"})  # box is the endless loop by now
     res = await c.call_tool("suggest_orientation", {"name": "lay", "load": "along X", "image": True, "size": "small"})
     t = text(res)

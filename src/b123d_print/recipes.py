@@ -23,9 +23,9 @@ from dataclasses import dataclass, field
 
 from build123d import (Align, Axis, Bezier, Box, CenterArc, Circle, Compound, Cone, Cylinder, Edge, Face, FilletPolyline,
                        FontStyle, GeomType, Keep, Line, Location, Part, Plane, Polygon, Polyline, Pos, Rectangle,
-                       RectangleRounded, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere, Spline, Text, TextAlign,
-                       Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale, section, split,
-                       sweep)
+                       RectangleRounded, RegularPolygon, Rot, Shell, Sketch, SlotCenterToCenter, Solid, Sphere, Spline,
+                       Text, TextAlign, Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale,
+                       section, split, sweep)
 from build123d import GridLocations  # ribs; the other location sets are in patterns.py
 
 from .patterns import (bolt_circle, demo_bolt_circle, demo_grip_ridges, demo_hex_grille, demo_hole_grid,
@@ -1118,6 +1118,65 @@ def demo_revolved_profile() -> Part:
 
 
 # ---------------------------------------------------------------------------------------------
+# Sketch first: 2D outlines to extrude, revolve or sweep
+
+
+def rounded_outline(points, radii=0.0) -> Sketch:
+    """A closed 2D outline through `points` [(x, y), ...] in order, each corner rounded by its
+    own radius: `radii` is one number for every corner or one per point (0 = sharp). Returns a
+    Sketch on XY (a face) to cut holes from and extrude, revolve or sweep; return it from
+    sketches(d) so render_sketch checks it first. Inside corners want at least 0.5 mm (BP-R1).
+    Raises ValueError naming the corner when two radii do not fit on the edge between them."""
+    pts = [Vector(*p) for p in points]
+    if len(pts) < 3:
+        raise ValueError("rounded_outline: at least three points")
+    rs = [float(radii)] * len(pts) if isinstance(radii, (int, float)) else [float(r) for r in radii]
+    if len(rs) != len(pts):
+        raise ValueError(f"rounded_outline: {len(pts)} points but {len(rs)} radii (one per point, or one number)")
+    n = len(pts)
+    tangent = []  # how far each corner's fillet reaches along its edges
+    for i in range(n):
+        a, b = (pts[i - 1] - pts[i]), (pts[(i + 1) % n] - pts[i])
+        if a.length < 1e-9 or b.length < 1e-9:
+            raise ValueError(f"rounded_outline: point {i} {tuple(points[i])} repeats its neighbour")
+        turn = math.pi - a.get_angle(b) * math.pi / 180  # how far the outline turns at the corner
+        if rs[i] < 0:
+            raise ValueError(f"rounded_outline: radius {rs[i]:g} at point {i}: radii are 0 or more")
+        tangent.append(rs[i] * math.tan(turn / 2) if rs[i] > 0 and turn > 1e-9 else 0.0)
+    for i in range(n):
+        j = (i + 1) % n
+        edge = (pts[j] - pts[i]).length
+        if tangent[i] + tangent[j] > edge + 1e-9:
+            raise ValueError(f"rounded_outline: radii {rs[i]:g} at point {i} {tuple(points[i])} and {rs[j]:g} at point "
+                             f"{j} {tuple(points[j])} need {tangent[i] + tangent[j]:.2f} mm of the {edge:.2f} mm edge "
+                             "between them: make them smaller or the edge longer")
+    if not any(rs):
+        return Sketch() + make_face(Polyline(*pts, close=True))
+    return Sketch() + make_face(FilletPolyline(*pts, radius=[max(r, 0.0) for r in rs], close=True))
+
+
+def slot(a, b, width: float) -> Sketch:
+    """A 2D slot (stadium) `width` wide whose round ends are centred on points a and b, at any
+    angle: an adjustment slot to cut from an outline, or the outline of a link or arm. With a == b
+    it is a circle. Cut a printed-size slot: width = screw clearance + hole_comp."""
+    pa, pb = Vector(*a), Vector(*b)
+    v = pb - pa
+    if v.length < 1e-9:
+        return Sketch() + Pos(pa.X, pa.Y) * Circle(width / 2)
+    mid = (pa + pb) * 0.5
+    angle = math.degrees(math.atan2(v.Y, v.X))
+    return Sketch() + Pos(mid.X, mid.Y) * SlotCenterToCenter(v.length, width, rotation=angle)
+
+
+def demo_rounded_outline() -> Part:
+    # an L bracket plate: rounded outside corners, R4 inside corner, two holes and an adjustment slot
+    outline = rounded_outline([(0, 0), (70, 0), (70, 14), (14, 14), (14, 50), (0, 50)], [3, 3, 3, 4, 3, 3])
+    outline -= Pos(7, 40) * Circle(3.4 / 2)
+    outline -= slot((32, 7), (52, 7), 3.4)
+    return extrude(outline, 4)
+
+
+# ---------------------------------------------------------------------------------------------
 # Registry
 
 
@@ -1583,6 +1642,23 @@ RECIPES = {r.name: r for r in [
   fit tightly: model small and ream (BP-H6).
 """, ["[BP-O1, B1, H6](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs, bed edges, precise bores",
       "build123d `revolve`, `FilletPolyline`"]),
+    Recipe("rounded_outline", "Sketch first: rounded outline and slots", [rounded_outline, slot], demo_rounded_outline, """
+- **For parts that are mostly a 2D shape made solid** (brackets, plates, clips, spacers; a
+  profile to revolve or a section to sweep): draw the outline, return it from `sketches(d)`, check
+  it with `render_sketch` (CLI `b123d-print sketch`) and get the user's OK before any 3D. Then
+  `build(d)` extrudes (or revolves, sweeps) the same function's result, so the part is the sketch.
+- One radius per point, in the order of the points (0 = sharp). Inside corners at least 0.5 mm,
+  more where the part is loaded (BP-R1); outside corners print rounded at nozzle scale anyway.
+  `rounded_outline` refuses radii that do not fit on an edge (FilletPolyline would silently make
+  a bad face).
+- Cut holes and slots from the outline before extruding: `outline -= Pos(x, y) * Circle((d + hole_comp) / 2)`,
+  `outline -= slot(a, b, width + hole_comp)`. A hole in the sketch is vertical in the part: it
+  prints round, no teardrop needed.
+- Extruded flat (outline on the bed) the layers run along the outline: an arm or a hook loaded in
+  its own plane is strong this way (BP-S4). Chamfer the bed edges after extruding (BP-O2).
+- A traced outline (`trace_outline`) gives the points of a scanned shape: smooth it with radii here.
+""", ["[BP-R1, O2, S4](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) inside radii, bed chamfer, load along the layers",
+      "[build123d FilletPolyline, make_face, SlotCenterToCenter (0.13.0)](https://build123d.readthedocs.io/en/latest/objects.html)"]),
 ]}
 
 

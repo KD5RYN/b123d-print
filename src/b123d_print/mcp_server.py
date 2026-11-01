@@ -211,7 +211,7 @@ def _resume_note(name: str) -> str:
 # jobs that read the built pieces from the cache and answer in seconds: they get the quick lane
 # (sched.py), so they never wait behind another client's long builds. With fresh=True they rebuild,
 # so they queue like any build.
-QUICK_OPS = frozenset({"measure", "section", "faces", "edges", "hardware", "spec"})
+QUICK_OPS = frozenset({"measure", "section", "faces", "edges", "hardware", "spec", "sketch"})
 CHECK_SHARES = 2  # a check splits into at most this many workers: 3 on 4 cores was slower than 2 (#73)
 CLIENT_JOBS = 4  # HTTP default: jobs running + waiting per client (--client-jobs)
 
@@ -709,24 +709,28 @@ def _human_size(n: int) -> str:
 
 
 @mcp.tool()
-def new_part(name: str, description: str = "", example: str | None = None, show_code: bool = False) -> str:
+def new_part(name: str, description: str = "", example: str | None = None, show_code: bool = False,
+             sketch_first: bool = False) -> str:
     """Create parts/<name>/<name>.py from the template (Dims dataclass, build(d), VARIANTS,
     views, checks). name: lower_snake_case. example: copy a bundled example instead (see
-    list_parts), e.g. 'hole_coupon' to calibrate hole compensation. Returns a short confirmation;
+    list_parts), e.g. 'hole_coupon' to calibrate hole compensation. sketch_first: the template
+    with a sketches(d) outline that build(d) extrudes, for a part that is mostly a 2D shape made
+    solid (offer it per part, see the guide's Sketch first); check the outline with render_sketch. Returns a short confirmation;
     the template is the b123d-print://template resource (or read_part), show_code=True returns
     the new file's code here. Usually the next step is write_part with the whole script.
     If you haven't, call read_guide first; confirm the dimensions with the user before writing the script."""
     if not (_root() / "b123d-print.toml").exists():
         init_workspace(_root())
     try:
-        p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example)
+        p = _new_part(_root(), load_settings(_root()).parts_dir, name, description, example, sketch_first)
     except (ValueError, FileExistsError) as e:
         raise ToolError(str(e)) from None
     rel = p.relative_to(_root()).as_posix()
     _reminded(name)
     if show_code:
         return f"Created {rel}. Edit it with write_part.\n\n{ESSENTIALS}\n\nCurrent code:\n\n{p.read_bytes().decode('utf-8')}"
-    src = f"the bundled example {example!r}" if example else "the template (resource b123d-print://template)"
+    src = (f"the bundled example {example!r}" if example else "the sketch-first template (sketches(d) + build(d))"
+           if sketch_first else "the template (resource b123d-print://template)")
     return (f"Created {rel} from {src}. Next: write_part('{name}', <whole script>); read_part('{name}') "
             "shows the current code. A single part returned by build() is named 'part' in checks "
             f"(or '{name}'); return {{'name': part}} to name several.\n\n{ESSENTIALS}")
@@ -939,6 +943,27 @@ async def section(name: str, plane: str, at: float, variant: str | None = None, 
     hints = "".join(f"\nhint: {h}" for h in res["timing"]["hints"])
     return _with_note(_with_image(f"{res['plane']} section at {res['at']:g} mm ({res['variant']}): {_show(res['image'])}{hints}",
                                   res["image"], inline), name)
+
+
+@mcp.tool(structured_output=False)
+@_files_doc
+async def render_sketch(name: str, sketch: str | None = None, variant: str | None = None, dims: bool = True,
+                        size: str = "normal", inline: bool = True) -> list:
+    """Sketch first: one 2D shape from the script's sketches(d) hook, drawn flat on a mm grid as a
+    PNG, with automatic dimensions (overall size, hole diameters, slot widths, inside corner radii,
+    hole and slot centres from the lower-left corner) and the sketch checks: one closed region,
+    the narrowest neck against min_wall, inside corners under R0.5 (BP-R1), holes under 1 mm,
+    the outline against the bed. Show it to the user and get an OK before build(d) extrudes,
+    revolves or sweeps it. sketch: its name in sketches(d) (default: the first). dims=False draws
+    the shape and grid only. Nothing 3D is built. size: 'normal' or 'small'."""
+    _image_options(size)
+    res = await _job(name, "sketch", variant=variant, sketch=sketch, dims=dims, size=size)
+    if not res.get("ok"):
+        return [_error_text(res)]
+    from .sketch import text
+
+    body = text({**res, "image": _show(res["image"])})
+    return _with_note(_with_image(f"{body}\n(variant {res['variant']})", res["image"], inline), name)
 
 
 async def _check(name: str, variant: str | None, fresh: bool = False) -> dict:

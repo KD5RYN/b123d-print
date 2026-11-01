@@ -9,11 +9,12 @@ actually printed; several rules exist because a print failed without them.
 
 Use the **b123d-print MCP server** tools if your client has them (`new_part`, `write_part`,
 `build_part`, `render_preview`, `section`, `check`, `check_fit`, `export`, `list_faces`, `list_edges`, `make_template`,
-`trace_outline`, `recipe`). **`read_guide` returns this guide:** call it once before the first part
+`trace_outline`, `recipe`, `render_sketch`). **`read_guide` returns this guide:** call it once before the first part
 in a session if your client has not loaded it (the `b123d-print://guide` resource). Otherwise
 use the CLI:
 
-- `b123d-print new <name>` — scaffold `parts/<name>/<name>.py`
+- `b123d-print new <name> [--sketch]` — scaffold `parts/<name>/<name>.py` (`--sketch`: sketch first, below)
+- `b123d-print sketch <name> [<sketch>]` — draw and check a 2D sketch from `sketches(d)`
 - `uv run parts/<name>/<name>.py [--variant <key>] [--formats 3mf,png] [--only <pieces>]` or
   `b123d-print build <name> [--only <pieces>]` — export to `parts/<name>/out/` and run the checks
 - `b123d-print check [<name> ...]` — checks only; exit code 1 on any failure
@@ -57,6 +58,29 @@ paste into the script; never put edge ids in the script, they change with the mo
 6. `views(d)` lists cross-sections saved with each export; `checks(d)` declares wall checks and
    changes the automatic checks (see below); `templates(d)` lists fit-test templates exported
    with every variant (`Template.slice("XY", 3)`, `Template.face_of("bottom")`, `Template.crop(...)`).
+
+## Sketch first (optional, offer it per part)
+
+For a part that is **mostly a 2D shape made solid**, offer to draw and confirm the 2D sketch
+before any 3D: outlines extruded flat (brackets, plates, clips, spacers, gaskets), profiles
+revolved (knobs, pulleys, spool parts, bushings) and sections swept (hooks, handles). Not for
+boxy enclosures (box, shell, lid) or organic shapes (use `organic`). The user may say no; then
+model as usual.
+
+1. Confirm the dimensions as always. `new_part(name, sketch_first=True)` (CLI `new --sketch`)
+   scaffolds a script whose optional **`sketches(d)`** hook returns named 2D shapes, lazy like
+   pieces: `{"outline": lambda: outline(d)}`.
+2. Draw the outline from points, not from unions of boxes and circles: `rounded_outline(points,
+   radii)` (one radius per corner, 0 = sharp; it refuses radii that do not fit) and `slot(a, b,
+   width)` from `b123d_print.recipes`, holes cut with `Circle((d + HOLE_COMP) / 2)`. A profile to
+   revolve is drawn on `Plane.XZ`. A traced outline (`trace_outline`) can be the points.
+3. **`render_sketch(name, sketch=...)`** (CLI `b123d-print sketch`): a PNG on a mm grid with
+   its dimensions (overall size, holes, slots, inside corner radii, centres from the lower-left
+   corner) and the sketch checks: one closed region, narrowest neck vs `min_wall`, inside
+   corners under R0.5 (BP-R1), holes under 1 mm, the bed. Fix every FAIL, show the picture,
+   and **wait for the user's OK on the sketch**.
+4. `build(d)` extrudes, revolves or sweeps **the same function's result**, then adds the 3D-only
+   features (countersinks, `bed_chamfer`, which also chamfers inside radii); then the usual flow.
 
 ## Declared bought hardware (optional)
 

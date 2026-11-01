@@ -66,6 +66,7 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `transition_loft` | Transition loft: duct, hose and funnel adapters | `transition_loft`, `section_shape` | A body that changes section along Z, solid or hollow, with straight collars |
 | `swept_section` | Section swept along a path: hooks, handles, rails | `swept_section`, `section_shape` | A constant section swept along a path and put on Z=0, lying flat |
 | `revolved_profile` | Revolved profile: knobs, pulleys, wheels | `revolved_profile` | A closed (r, z) profile with rounded corners revolved around Z |
+| `rounded_outline` | Sketch first: rounded outline and slots | `rounded_outline`, `slot` | A closed 2D outline through points with a radius per corner, and slots between two centres ([sketch first](sketch-first.md)) |
 
 ## Patterns: bolt circles, grids, grilles
 

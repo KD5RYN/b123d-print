@@ -22,6 +22,8 @@ and optionally:
                                                     # (default: what build() loaded with import_model)
     def templates(d) -> list[Template]              # fit-test templates exported with every variant
     def hardware(d) -> list[Hardware]              # declared bought parts for the whole assembly
+    def sketches(d) -> dict[str, Sketch | callable] # sketch first: named 2D shapes, drawn and checked
+                                                    # by render_sketch (b123d_print.sketch); lazy
 
     if __name__ == "__main__":
         from b123d_print import run
