@@ -96,9 +96,11 @@ def test_changed_value_needs_a_reason_and_default_tolerance():
 
 def test_unknown_field_bad_expression_and_non_numbers():
     res = run("| a | 1 | | | | free | | NOPE | |\n| b | 1 | | | | free | | W ** 2 | |\n"
-              "| c | 1 | | | | free | | HOLES | |\n| d | 1 | | | | free | | _private | |\n")
+              "| c | 1 | | | | free | | HOLES | |\n| d | 1 | | | | free | | _private | |\n"
+              "| e | 1 | | | | free | | W / 0 | |\n| f | 1 | | | | free | | HOLES * W | |\n")
     w = messages(res)
     assert w[0] == "a: Field 'NOPE': no Dims field NOPE" and "W ** 2" in w[1] and "_private" in w[2]
+    assert w[3] == "e: Field 'W / 0': division by zero" and w[4].startswith("f: Field 'HOLES * W': cannot compute it")
     c = next(e for e in res["rows"] if e["feature"] == "c")
     assert c["modeled"].startswith("((0, 1)") and "delta" not in c
 

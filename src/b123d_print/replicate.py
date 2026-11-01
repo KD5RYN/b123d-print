@@ -253,9 +253,11 @@ def spec(rows: list[Row], columns: set[str], d, base=None, variant: str = "") ->
         if r.field and d is not None:
             try:
                 m = modeled(r.field, d)
-            except (NameError, ValueError) as err:
+            except (NameError, ValueError, ArithmeticError, TypeError) as err:
                 m = None
-                why = f"no Dims field {err}" if isinstance(err, NameError) else str(err)
+                why = (f"no Dims field {err}" if isinstance(err, NameError)
+                       else "division by zero" if isinstance(err, ZeroDivisionError)
+                       else f"cannot compute it ({err})" if isinstance(err, (ArithmeticError, TypeError)) else str(err))
                 flag("WARN", r, f"Field {r.field!r}: {why}")
             e["modeled"] = m
             if isinstance(m, float) and r.measured is not None:
@@ -293,7 +295,7 @@ def spec(rows: list[Row], columns: set[str], d, base=None, variant: str = "") ->
 def _differs(expr: str, base, value: float) -> bool:
     try:
         b = modeled(expr, base)
-    except (NameError, ValueError):
+    except (NameError, ValueError, ArithmeticError, TypeError):
         return False
     return isinstance(b, float) and abs(b - value) > 1e-9
 
