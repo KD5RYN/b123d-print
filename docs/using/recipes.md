@@ -44,6 +44,8 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `pip_hinge` | Print-in-place hinge | `pip_hinge` | A print-in-place hinge lying flat: two leaves (-Y and +Y) on the bed, knuckles along X |
 | `lid_with_lip` | Lid with a lip and clearance | `lid_with_lip`, `box_shell` | A lid for a box `outer_w` x `outer_l` with walls `wall` thick: a plate top_t thick and a |
 | `text_label` | Embossed and debossed text | `text_label` | Text as a solid from Z=0 up `depth`, centered on the origin. Emboss: part += Pos(x, y, top) |
+| `text_on_surface` | Text on curved faces (wrap or project) | `text_on_surface` | Text on a curved (or flat) face as a solid along the surface normal: emboss or deboss |
+| `text_on_path` | Text along a curve (arc on a tag or lid) | `text_on_path` | Flat text that follows a curve in the XY plane, as a solid from Z=0 up `depth` |
 | `bed_chamfer` | Fillet-safe chamfer on bed edges | `bed_chamfer` | Chamfer every edge on the bed (Z=0) by `size` at 45 degrees, holes included, by cutting a |
 | `zip_tie_slot` | Cable and zip-tie slots | `zip_tie_slot`, `cable_slot` | A rectangular tunnel along X for a zip tie (width tie_w, thickness tie_t, + clearance per |
 | `gusset` | Ribs and gussets | `gusset`, `ribs` | A triangular gusset in the XZ plane for an inside corner between a floor (Z=0, extending to |
@@ -409,3 +411,46 @@ vase = vase_shell([(30, 0), (40, 30), (34, 75), (24, 110)], max_lean=s.max_overh
 
 The bundled [`twisted_vase` example](../scripts/examples.md) uses `twisted_loft` with
 `PRINT = {"vase": True, ...}`.
+
+## Text on curved faces and paths
+
+`text_label` puts flat text on a flat face. For a jar, a knob, a dome or a round tag:
+
+```python
+from b123d_print.recipes import text_on_surface, text_on_path, text_label
+
+jar += text_on_surface(jar, "JAM", at=(0, -40, 20), size=8, depth=0.6)            # raised, wrapped
+knob -= text_on_surface(knob, "VOL", at=(0, -40, 9), size=6, depth=0.8, deboss=True)  # sunk
+lid += text_on_surface(lid, "LID", at=(0, 0, 30), size=9, method="project")        # across fillets
+tag -= Pos(0, 0, top - 0.6) * text_on_path("ROUND TAG", CenterArc((0, 0), 15, 160, -140), size=5, depth=1.6)
+label = text_label("LINE ONE\nLINE TWO", size=6, text_align=(TextAlign.LEFT, TextAlign.TOP))
+```
+
+- **`at`** is a point on or just outside the surface: the text's center goes to the nearest
+  point of the nearest face, standing towards **`up`** (+Z by default; a top face reads with +Y up).
+- **`method="wrap"`** (default) bends the text onto that one face and keeps its size: cylinders,
+  cones, spheres, revolved and spline faces. A closed face's seam is handled. Wrapping onto a
+  revolved spline face is slow, about 1 s per letter. **`method="project"`** casts it onto the
+  whole part along the normal at `at`: it crosses face edges (a filleted or lofted lid) and is
+  fast, but letters stretch where the surface slopes away (keep it within ~30 degrees).
+- **Emboss** `part += ...`; **deboss** `part -= ...(deboss=True)`. The solid runs along the surface
+  normal, `depth` out (or in) and 0.2 mm the other way, so the boolean is clean.
+- **Text along a curve:** `text_on_path` follows an Edge or Wire in XY. The letters stand on
+  the left of the path's direction: an arc drawn clockwise reads along the top.
+- **Several lines:** `"ONE\nTWO"`, lined up with `text_align` (`TextAlign.LEFT`, `CENTER`,
+  `RIGHT`; `TOP`, `CENTER`, `BOTTOM`) in all three.
+- **Sizes:** the flat-text minimums hold on the surface (BP-X1..X3): characters >= 5 mm, strokes
+  >= 2 line widths, depth >= 0.5 mm along the normal. The thin-feature check measures the strokes
+  and fails where a font's own junctions are thinner than a line (Arial Bold's G, R and 4 under
+  ~7 mm): bigger letters, sunk text, or a sturdier font. On a wall the strokes stand up: the
+  roof of a sunk stroke is a short overhang as deep as the text (0.6-1 mm prints without support).
+- **A second colour:** the text is its own solid. Sunk and filled: `body = part - text`,
+  `inlay = part & text` (flush with the surface). Raised: `raised = text - part`.
+- **A face that does not mesh:** now and then, cutting wrapped text into a revolved spline face
+  leaves a face OpenCascade cannot triangulate; the exported STL would have a hole there. The
+  validity check fails on it: change `depth` by 0.05 mm or use `method="project"`.
+- **Fonts:** `font=` a font installed on the machine that builds the part (the server, for a
+  remote server), or `font_path=` a font file (`str(Path(__file__).parent / "font.ttf")`, kept next to the script).
+
+The bundled [`text_knob` example](../scripts/examples.md) wraps "VOL" into a knob's tapered side
+and sinks "VOLUME" along an arc on its top.

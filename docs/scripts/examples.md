@@ -108,6 +108,21 @@ twisted_vase` notes that every layer is one closed contour and how far the wall 
 CC0. An example with chosen sizes: not printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/twisted_vase/twisted_vase.py)
 
+## `text_knob`
+
+![Text knob: a tapered knob with VOL wrapped into its side and VOLUME along an arc on top](../images/text_knob.png)
+
+Text beyond flat labels: a 38 mm control knob for a 6 mm D shaft (a snug press fit), standing on
+its base. "VOL" is wrapped into the tapered side with the
+[`text_on_surface` recipe](../using/recipes.md#text-on-curved-faces-and-paths), sunk 0.8 mm along
+the surface normal, so the letters keep their size on the curve; "VOLUME" is sunk 0.6 mm along an
+arc on the top with `text_on_path`, and a pointer groove sits above the side label. The text and
+the pointer are one solid, `label(d)`: for a two-colour print it is the inlay that fills the
+pockets (`body(d) & label(d)`). `check` warns on the 4.6 mm bridge over the bore, the roofs of the
+sunk side letters and the pointed tips of the V's. CC0. An example with chosen sizes: not printed
+yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/text_knob/text_knob.py)
+
 ## `split_trim`
 
 ![The split trim's joint, pulled apart: two pieces, a bowtie key and two square pins](../images/split_trim.png)

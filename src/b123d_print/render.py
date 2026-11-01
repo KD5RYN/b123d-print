@@ -131,6 +131,28 @@ def _bbox(shape, tol: float):
     return BoundBox(box)
 
 
+def unmeshed_faces(shape, tol: float = 0.02) -> list:
+    """Faces OpenCascade cannot triangulate: each one is a hole in the exported STL or 3MF. Planes,
+    cylinders and the other analytic faces mesh; only freeform faces (spline, revolved, offset) are
+    tried, and a face already meshed (bbox does it) is not meshed again."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+    from OCP.TopLoc import TopLoc_Location
+
+    bad = []
+    for f in shape.faces():
+        if f.geom_type.name not in _FREEFORM:
+            continue
+        loc = TopLoc_Location()
+        poly = BRep_Tool.Triangulation_s(f.wrapped, loc)
+        if poly is None:
+            BRepMesh_IncrementalMesh(f.wrapped, tol, False, 0.2, False)
+            poly = BRep_Tool.Triangulation_s(f.wrapped, loc)
+        if poly is None or poly.NbTriangles() == 0:
+            bad.append(f)
+    return bad
+
+
 def report(part: Part) -> dict:
     """Bounding box (mm), volume (mm^3) and validity."""
     bb = bbox(part)

@@ -77,6 +77,19 @@
   feature on a root too thin for a child's 90 N pull or 0.45 Nm twist (M18); round holes a finger
   can get stuck in (M19). New style-file fields: `small_parts_check`, `min_neck_safety`,
   `finger_holes_check`, `toy_material_note`.
+- **Text on curved faces and along paths** (#168): the `text_on_surface` recipe wraps text onto
+  a cylinder, cone, sphere, revolved or spline face (`method="wrap"`, keeps the letters' size;
+  a closed face's seam is handled) or projects it across face edges (`method="project"`), raised
+  or sunk along the surface normal; `text_on_path` follows an arc on a round tag or lid;
+  `text_label` takes several lines (`text_align`) and a `font_path`. The text is its own solid, so
+  it can be a second-colour inlay (`part & text`). New CC0 example **`text_knob`**: a 6 mm D-shaft
+  knob with "VOL" wrapped into its tapered side and "VOLUME" sunk along an arc on top.
+- **The validity check fails on a face that does not mesh** (a hole in the exported STL/3MF), as
+  a boolean of wrapped text with a revolved spline face sometimes leaves.
+- **Fix: the thin-feature check read wide strokes at an angle as thin walls.** An XZ or YZ
+  section grazing the upright corner of a letter on an arc cut a 0.02 mm sliver in both planes,
+  which then confirmed each other. A wall thin across a level direction is upright, and only the
+  XY section, which shows its true thickness, now confirms it and gives its size.
 
 ## 0.3.16 — 2026-10-28
 
