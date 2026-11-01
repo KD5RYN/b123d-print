@@ -87,7 +87,7 @@ missing on the server is resumed from the user's copy (new_part, write_part, upl
 ESSENTIALS = """\
 Rules (all of them: read_guide):
 1. Before modeling, list every dimension with its source (typed / photo / estimate) and the ones missing; ask the user and WAIT for confirmation. For a hole, say whether its size is the printed hole or what goes in it (then + clearance per side); holes are drawn true to size, plus hole_comp only if the user opted in.
-2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0.
+2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0. Repeated features: place them with GridLocations / PolarLocations / HexLocations / Locations (or mirror) and cut or add them in one boolean (part -= GridLocations(...) * hole), not one per pass of a for loop.
 3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural, organic, decorative, toy); set STYLE in Dims. A natural object (fruit, plant, animal, figurine, shell, sculpture): STYLE organic, and start from a recipe (spine_loft, tapered_sweep, organic_blend, flat_base; example banana), not from boxes and cylinders. A vase, planter or lamp shade: STYLE decorative (twisted_loft, patterned_surface, vase_shell; example twisted_vase).
 4. The order, every part: build_part -> render_preview + section through holes and pockets -> check (fix every FAIL) -> design_metrics(name, style=...) -> suggest_orientation(name) -> export. The results end with "Before printing": make the calls it lists. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
 5. On a remote server bring the files home after export: download_part(name) (embed=True if your shell has no network).
@@ -2049,6 +2049,8 @@ Work in these steps:
    default per side, from config). Holes get HOLE_COMP (from config; horizontal ones a teardrop and
    HOLE_COMP_H). Model in print orientation, bed at Z=0. Threads, screws, inserts, gears and
    V-slot parts: use bd_warehouse and py_gearworks, kept to sizes that print (the rules below).
+   Repeated holes, bosses, ribs, slots or cells: GridLocations / PolarLocations / HexLocations /
+   Locations (recipes bolt_circle, hole_grid, hex_grille, slot_grille), cut or added in one boolean.
 3. Verify: build_part, render_preview, section through every pocket, boss, rib, hole and mating
    feature, and check. Add Wall checks wherever a cut goes deeper than the wall it starts in.
    Fix and repeat until check passes.

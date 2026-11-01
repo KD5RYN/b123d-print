@@ -17,7 +17,7 @@ Print orientation: as the original, base on the bed. Standalone part, no mating 
 
 from dataclasses import dataclass
 
-from build123d import Mode, Part, Plane, Polygon, Pos, SlotCenterToCenter, extrude
+from build123d import Locations, Mode, Part, Plane, Polygon, Pos, SlotCenterToCenter, extrude, mirror
 
 from b123d_print import Wall, hole_comp, import_model
 
@@ -45,15 +45,13 @@ VARIANTS = {"": {}}
 def build(d: Dims) -> Part:
     part = import_model(d.REF)
     w = d.SLOT_W + d.HOLE_COMP
-    for x in (-d.HOLE_X, d.HOLE_X):
-        slot = SlotCenterToCenter(d.SLOT_L, w, rotation=90, mode=Mode.PRIVATE)
-        part -= Pos(x, d.HOLE_Y, -1) * extrude(slot, d.BASE_T + 2)
-    for x in (-d.GUSSET_X, d.GUSSET_X):
-        # a right triangle in the YZ plane, against the upright's front face and the base's top
-        tri = Polygon((0, 0), (-d.GUSSET_H, 0), (0, d.GUSSET_H), align=None, mode=Mode.PRIVATE)
-        g = extrude(Plane.YZ.offset(x - d.GUSSET_T / 2) * tri, d.GUSSET_T)
-        part += Pos(0, d.UPRIGHT_Y + 0.01, d.BASE_T - 0.01) * g  # overlap a hair so they fuse
-    return part
+    slot = extrude(SlotCenterToCenter(d.SLOT_L, w, rotation=90, mode=Mode.PRIVATE), d.BASE_T + 2)
+    part -= Locations((-d.HOLE_X, d.HOLE_Y, -1), (d.HOLE_X, d.HOLE_Y, -1)) * slot  # both slots, one boolean
+    # a right triangle in the YZ plane, against the upright's front face and the base's top
+    tri = Polygon((0, 0), (-d.GUSSET_H, 0), (0, d.GUSSET_H), align=None, mode=Mode.PRIVATE)
+    g = extrude(Plane.YZ.offset(d.GUSSET_X - d.GUSSET_T / 2) * tri, d.GUSSET_T)
+    g = Pos(0, d.UPRIGHT_Y + 0.01, d.BASE_T - 0.01) * g  # overlap a hair so they fuse
+    return part + [g, mirror(g, about=Plane.YZ)]  # the other gusset: the same one mirrored across X=0
 
 
 def checks(d: Dims):

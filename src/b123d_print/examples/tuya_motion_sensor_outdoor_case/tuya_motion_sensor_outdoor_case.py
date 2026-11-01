@@ -316,14 +316,16 @@ def back_plate_on_wall(d: Dims) -> Part:
     th = radians(d.TILT)
     r = (d.MOUNT_HOLE_D + d.HOLE_COMP) / 2
     rc = (d.MOUNT_CSK_D + d.HOLE_COMP) / 2
-    for z in d.MOUNT_HOLES_Z:
+
+    def mount_hole(z):
         yf = d.PLATE_T * cos(th) + z * sin(th)  # plate face at the hole, out from the wall
         zw = -d.PLATE_T * sin(th) + z * cos(th)
         y_cone = yf - d.MOUNT_HEAD_SINK - rc * tan(th)
-        p -= Pos(0, -1, zw) * Rot(-90, 0, 0) * Cylinder(r, yf + 2, align=(CEN, CEN, MIN), mode=Mode.PRIVATE)
-        p -= Pos(0, y_cone, zw) * Rot(90, 0, 0) * Cone(rc, r, rc - r, align=(CEN, CEN, MIN), mode=Mode.PRIVATE)
-        p -= Pos(0, y_cone, zw) * Rot(-90, 0, 0) * Cylinder(rc, 30, align=(CEN, CEN, MIN), mode=Mode.PRIVATE)
-    return p
+        return [Pos(0, -1, zw) * Rot(-90, 0, 0) * Cylinder(r, yf + 2, align=(CEN, CEN, MIN), mode=Mode.PRIVATE),
+                Pos(0, y_cone, zw) * Rot(90, 0, 0) * Cone(rc, r, rc - r, align=(CEN, CEN, MIN), mode=Mode.PRIVATE),
+                Pos(0, y_cone, zw) * Rot(-90, 0, 0) * Cylinder(rc, 30, align=(CEN, CEN, MIN), mode=Mode.PRIVATE)]
+
+    return p - [c for z in d.MOUNT_HOLES_Z for c in mount_hole(z)]  # every cutter in one boolean
 
 
 def sensor_dummy(d: Dims) -> Part:

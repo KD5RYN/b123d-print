@@ -79,8 +79,8 @@ def build(d: Dims) -> Part:
     p = fillet_profile(p, d)
     p = chamfer(p.edges().group_by(Axis.Z)[-1], length=d.EDGE_CHAMFER)  # the top; see EDGE_CHAMFER
     k = d.SCREW_D + d.HOLE_COMP_H
-    for y in d.WALL_SCREWS_Y:  # through the wall arm, along X
-        p -= Pos(t / 2, y, d.WIDTH / 2) * Rot(0, 0, 90) * teardrop(k, t * 3, d.TEARDROP_ANGLE)
+    wall_hole = Rot(0, 0, 90) * teardrop(k, t * 3, d.TEARDROP_ANGLE)  # through the wall arm, along X
+    p -= [Pos(t / 2, y, d.WIDTH / 2) * wall_hole for y in d.WALL_SCREWS_Y]  # every copy in one boolean
     p -= Pos(d.SHELF_SCREW_X, h - t / 2, d.WIDTH / 2) * teardrop(k, t * 3, d.TEARDROP_ANGLE)  # up into the shelf
     return p
 

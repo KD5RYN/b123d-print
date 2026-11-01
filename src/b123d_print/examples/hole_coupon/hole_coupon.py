@@ -137,19 +137,20 @@ def build(d: Dims) -> Part:
     tab = Pos(0, d.TAB_Y, 0) * Box(d.WIDTH, d.TAB_T, d.TAB_H, align=BED)
     p += tab
     p = chamfer(p.edges().group_by(Axis.Z)[-1], length=d.EDGE_CHAMFER)
+    cuts = []  # every hole and label, cut in one boolean at the end
     for i, size in enumerate(d.HOLE_SIZES):
         x, y = d.hole_xy(i)
-        p -= Pos(x, y, 0) * Cylinder(size / 2, d.THICKNESS * 3, mode=Mode.PRIVATE)  # nominal, no comp
         label = Text(f"{size:g}", d.LABEL_SIZE, align=(Align.CENTER, Align.MIN))
-        p -= Pos(x, y + size / 2 + d.LABEL_GAP, d.THICKNESS - d.LABEL_DEPTH) * extrude(label, d.LABEL_DEPTH + 1)
+        cuts += [Pos(x, y, 0) * Cylinder(size / 2, d.THICKNESS * 3, mode=Mode.PRIVATE),  # nominal, no comp
+                 Pos(x, y + size / 2 + d.LABEL_GAP, d.THICKNESS - d.LABEL_DEPTH) * extrude(label, d.LABEL_DEPTH + 1)]
     y_lab = d.TAB_Y - d.TAB_T / 2 - d.LABEL_GAP - d.LABEL_SIZE
     for i, size in enumerate(d.H_SIZES):
         x = d.h_x(i)
-        p -= Pos(x, d.TAB_Y, d.ROW1_Z) * Rot(90, 0, 0) * Cylinder(size / 2, d.TAB_T * 3, mode=Mode.PRIVATE)
-        p -= Pos(x, d.TAB_Y, d.ROW2_Z) * teardrop(size, d.TAB_T * 3, d.TEARDROP_ANGLE)
         label = Text(f"{size:g}", d.LABEL_SIZE, align=(Align.CENTER, Align.MIN))
-        p -= Pos(x, y_lab, d.THICKNESS - d.LABEL_DEPTH) * extrude(label, d.LABEL_DEPTH + 1)
-    return p
+        cuts += [Pos(x, d.TAB_Y, d.ROW1_Z) * Rot(90, 0, 0) * Cylinder(size / 2, d.TAB_T * 3, mode=Mode.PRIVATE),
+                 Pos(x, d.TAB_Y, d.ROW2_Z) * teardrop(size, d.TAB_T * 3, d.TEARDROP_ANGLE),
+                 Pos(x, y_lab, d.THICKNESS - d.LABEL_DEPTH) * extrude(label, d.LABEL_DEPTH + 1)]
+    return p - cuts
 
 
 def label_boxes(d: Dims) -> list:

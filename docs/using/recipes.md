@@ -47,6 +47,11 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `bed_chamfer` | Fillet-safe chamfer on bed edges | `bed_chamfer` | Chamfer every edge on the bed (Z=0) by `size` at 45 degrees, holes included, by cutting a |
 | `zip_tie_slot` | Cable and zip-tie slots | `zip_tie_slot`, `cable_slot` | A rectangular tunnel along X for a zip tie (width tie_w, thickness tie_t, + clearance per |
 | `gusset` | Ribs and gussets | `gusset`, `ribs` | A triangular gusset in the XZ plane for an inside corner between a floor (Z=0, extending to |
+| `bolt_circle` | Bolt circle (PolarLocations) | `bolt_circle` | Holes on a circle as one cutter: one boolean for every hole |
+| `hole_grid` | Hole grid (GridLocations) | `hole_grid` | A grid of vertical holes as one cutter: screw grids, pegboards, drain holes |
+| `hex_grille` | Honeycomb grille or lightening (HexLocations) | `hex_grille` | Whole hex cells with a set web, filling an area: vents, speaker grilles, lightening |
+| `slot_grille` | Vent and speaker slots (builder-mode GridLocations) | `slot_grille` | A row of round-ended slots at a pitch, made in a BuildSketch location context |
+| `grip_ridges` | Grip ridges on a knob (PolarLocations, rotate) | `grip_ridges` | Straight ridges around a cylinder, each turned to face out, for knobs and handles |
 | `spine_loft` | Body lofted along a curved spine | `spine_loft` | Cross-sections placed perpendicular to a curved spine and lofted: fruit, bodies, limbs |
 | `tapered_sweep` | Tapered sweep along a path | `tapered_sweep` | A profile swept along a path while it changes size or shape: stems, tentacles, horns |
 | `organic_blend` | Smooth lofted join of two bodies | `organic_blend` | Two bodies joined by a lofted collar that carries on each one's taper, instead of a fillet |
@@ -54,6 +59,23 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `twisted_loft` | Twisted loft (spiral body) | `twisted_loft`, `star_section` | A star or polygon section lofted up Z with a twist and a taper: spiral ridges |
 | `patterned_surface` | Fluted (patterned) surface | `patterned_surface`, `fluted_section` | Flutes that follow a revolved profile, straight or spiralling |
 | `vase_shell` | Vase-mode body | `vase_shell`, `vase_lean` | A solid body of revolution for vase mode; refuses a wall that leans past the overhang limit |
+
+## Patterns: bolt circles, grids, grilles
+
+`bolt_circle`, `hole_grid`, `hex_grille`, `slot_grille`, `grip_ridges` and `ribs` place their
+copies with build123d's `PolarLocations`, `GridLocations` and `HexLocations` and return one fused
+shape, so the part takes one boolean for all of them:
+
+```python
+from b123d_print.recipes import bolt_circle, hex_grille
+
+part -= Pos(0, 0, d.T) * bolt_circle(d.BC_R, 6, d.HOLE_D, d.T, start_angle=30, hole_comp=d.HOLE_COMP)
+part -= Pos(0, 0, d.T) * hex_grille(d.VENT_W, d.VENT_L, cell=6.0, web=1.6, depth=d.T)
+```
+
+[Patterns](patterns.md) explains the location sets, builder and algebra forms, mirroring, the
+timings (400 holes: 0.22 s in one boolean, 10.2 s one at a time) and the printing rules for webs,
+holes and cells.
 
 ## PCB supports and board stand-ins
 

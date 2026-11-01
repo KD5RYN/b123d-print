@@ -2,6 +2,20 @@
 
 ## 0.3.17 — unreleased
 
+- **Patterns instead of position loops** (#170). Part scripts place repeated features with
+  build123d's `GridLocations`, `PolarLocations`, `HexLocations`, `Locations` and `mirror`, and cut
+  or add every copy in one boolean: 400 holes took 0.22 s fused and 10.2 s one boolean at a time
+  (900: 0.73 s and 58.6 s). A new guide page, Patterns (its code runs in the tests against the
+  pinned build123d), a section in AGENTS.md, the first-result rules, the new-part prompt and the
+  part template say so.
+- **Five pattern recipes**, tested for their feature counts: `bolt_circle`, `hole_grid`,
+  `hex_grille` (whole hex cells with a set web: vents, grilles, lightening), `slot_grille`
+  (builder mode) and `grip_ridges`; `ribs` now uses `GridLocations`.
+- **A build hint for booleans in loops:** `build_part` and `b123d-print build` say which lines do
+  a boolean on every pass of a `for` loop (a literal pair such as `for sx in (-1, 1)` is left
+  alone), and a build that times out lists it among the fixes.
+- The examples place their repeated features in one boolean (`Locations`, `GridLocations`,
+  `mirror`, lists of cutters); every piece keeps its volume, face count and size.
 - **An `organic` design style for natural objects** (#151; also `natural`, `sculpted`,
   `figurine`): fruit, plants, animals, figurines, shells, sculpture. The review asks how the part
   was modeled, not how curved it is: is anything still a box or a cylinder, do the sections vary
