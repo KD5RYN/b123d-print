@@ -35,6 +35,19 @@
   alone), and a build that times out lists it among the fixes.
 - The examples place their repeated features in one boolean (`Locations`, `GridLocations`,
   `mirror`, lists of cutters); every piece keeps its volume, face count and size.
+- **Shapes from profiles: four recipes for what boxes and cylinders make badly** (#166), tested:
+  `hollow(part, wall, open="top")` hollows any body with an even wall square to the surface
+  (build123d `offset(openings=)`), round fillets and curves included, instead of subtracting a
+  smaller copy; `transition_loft(a, b, length, wall=, collar_a=, collar_b=, shift=)` lofts from
+  one section to another (round to square, big to small) for duct, hose and funnel adapters,
+  hollow with open ends; `swept_section(path, section)` sweeps a constant section along a path
+  drawn in XY, lying flat, for hooks, handles and rails; `revolved_profile(points, radius=)`
+  revolves an (r, z) outline with rounded corners for knobs, pulleys and wheels.
+  `section_shape` turns a diameter, `(w, h)` or `(w, h, r)` into a section. AGENTS.md says when
+  to use each.
+- **Two bundled examples** (CC0): `rounded_enclosure` (a hollowed rounded box and a lid drawn
+  from 2D sketches, with Wall, Gap and fit checks) and `hose_adapter` (a round pipe to a
+  rounded-rectangle port, standing on the round end without supports).
 - **An `organic` design style for natural objects** (#151; also `natural`, `sculpted`,
   `figurine`): fruit, plants, animals, figurines, shells, sculpture. The review asks how the part
   was modeled, not how curved it is: is anything still a box or a cylinder, do the sections vary

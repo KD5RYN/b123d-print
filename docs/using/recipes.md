@@ -62,6 +62,10 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `patterned_surface` | Fluted (patterned) surface | `patterned_surface`, `fluted_section` | Flutes that follow a revolved profile, straight or spiralling |
 | `vase_shell` | Vase-mode body | `vase_shell`, `vase_lean` | A solid body of revolution for vase mode; refuses a wall that leans past the overhang limit |
 | `inlay` | Colour inlay (multi-colour 3MF) | `inlay` | Text or a logo in a second filament, flush in its pocket: one object with two named, coloured parts |
+| `hollow` | Hollow any body with an even wall | `hollow` | A body made hollow with an even wall square to the surface, one side or more left open |
+| `transition_loft` | Transition loft: duct, hose and funnel adapters | `transition_loft`, `section_shape` | A body that changes section along Z, solid or hollow, with straight collars |
+| `swept_section` | Section swept along a path: hooks, handles, rails | `swept_section`, `section_shape` | A constant section swept along a path and put on Z=0, lying flat |
+| `revolved_profile` | Revolved profile: knobs, pulleys, wheels | `revolved_profile` | A closed (r, z) profile with rounded corners revolved around Z |
 
 ## Patterns: bolt circles, grids, grilles
 
@@ -376,6 +380,50 @@ covers inch-series socket cap/shoulder/set screws and includes related drill/cou
 Those fastener dimensions are distinct from this recipe's head entry, travel, spacing and lip.
 The recipes do not claim a universal ISO/ASME keyhole-mount layout or an ASME inch-size table;
 use explicitly measured dimensions for unsupported hardware.
+
+## Shapes from profiles
+
+Four recipes for the shapes that boxes and cylinders make badly: an even-walled hollow, a body
+whose section changes, a section along a path and a round part from its profile. The
+[`rounded_enclosure`](../scripts/examples.md#rounded_enclosure) and
+[`hose_adapter`](../scripts/examples.md#hose_adapter) examples use the first two.
+
+```python
+from build123d import Axis, Box, FilletPolyline, fillet
+from b123d_print.recipes import hollow, revolved_profile, swept_section, transition_loft
+
+body = fillet(Box(80, 55, 30, align=BED).edges().filter_by(Axis.Z), 8)
+box = hollow(body, d.WALL, open="top")                       # 2 mm everywhere, corners too
+duct = transition_loft(62, (64, 34, 7), length=40, wall=2, collar_a=20, collar_b=20)
+hook = swept_section(FilletPolyline((0, 70, 0), (0, 0, 0), (30, 0, 0), (30, 20, 0), radius=12), (6, 10))
+knob = revolved_profile([(3, 0), (16, 0), (16, 5), (13, 18), (3, 18)], radius=[0, 0, 1, 2, 0])
+```
+
+- **`hollow(part, wall, open="top")`**: build123d's `offset(-wall, openings=...)`, so the wall is
+  measured square to the surface and stays even round fillets and curves; subtracting a smaller
+  copy does not. `open` is a side (`"top"`, `"bottom"`, `"+X"`, `"-Y"`, ...: every flat face on
+  the outside of that side), a Face, a list, or `None` for a closed hollow. Hollow the plain body
+  first and add bosses, ribs, holes and text after: small details inside the offset are what
+  usually makes it fail. Outside fillets come back inside smaller by the wall, so an outside
+  radius of at least twice the wall keeps the inside corners round.
+- **`transition_loft(a, b, length, wall=None, collar_a=0, collar_b=0, shift=(0, 0))`**: a straight
+  loft from section `a` (on the bed) to section `b`, with straight collars at the ends. A section
+  is a diameter, `(w, h)`, `(w, h, corner r)` or a Face (`section_shape`). With `wall` it is hollow
+  and open at both ends; the wall is measured across the section, so on a side leaning by an
+  angle it is `wall x cos(angle)` square to the surface (the example's 2 mm reads 1.89 mm at 19
+  degrees). Keep every side within the overhang limit, inside and out: about 1 mm of change in
+  radius (or `shift`) per 1 mm of length.
+- **`swept_section(path, section, x_dir=(0, 0, 1))`**: one section along a path, put on Z=0. Draw
+  the path in XY (`FilletPolyline` for straight runs with rounded bends, arcs, a `Spline`) so the
+  part lies flat and a hook or handle bends along the layers. The section's first size is its
+  height in Z. Keep it square where it sits on the bed and chamfer that edge with `bed_chamfer`;
+  a bend's radius must be bigger than half the section's width across it. A section that changes
+  along the path: `tapered_sweep`.
+- **`revolved_profile(points, radius=0, angle=360)`**: the half outline as (r, z) points, once
+  round, revolved about Z. A profile clear of r = 0 makes a ring with a bore. `radius` is one corner
+  radius or one per point (0 sharp): round the corners in the profile, keep the bed corners sharp
+  and chamfer them. Print it on its flattest face; a downward-facing side steeper than 45 degrees
+  needs support.
 
 ## Decorative bodies and vase mode
 
