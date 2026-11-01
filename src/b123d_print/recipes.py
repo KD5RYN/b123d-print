@@ -21,10 +21,11 @@ import inspect
 import math
 from dataclasses import dataclass, field
 
-from build123d import (Align, Axis, Bezier, Box, CenterArc, Circle, Compound, Cone, Cylinder, Edge, Face, FontStyle,
-                       GeomType, Keep, Line, Location, Part, Plane, Polygon, Polyline, Pos, Rectangle, RegularPolygon,
-                       Rot, Shell, Sketch, Solid, Sphere, Spline, Text, TextAlign, Vector, Vertex, Wire, extrude,
-                       fillet, loft, make_face, offset, revolve, scale, section, split, sweep)
+from build123d import (Align, Axis, Bezier, Box, CenterArc, Circle, Compound, Cone, Cylinder, Edge, Face, FilletPolyline,
+                       FontStyle, GeomType, Keep, Line, Location, Part, Plane, Polygon, Polyline, Pos, Rectangle,
+                       RectangleRounded, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere, Spline, Text, TextAlign,
+                       Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale, section, split,
+                       sweep)
 from build123d import GridLocations  # ribs; the other location sets are in patterns.py
 
 from .patterns import (bolt_circle, demo_bolt_circle, demo_grip_ridges, demo_hex_grille, demo_hole_grid,
@@ -953,6 +954,170 @@ def demo_inlay() -> Compound:
 
 
 # ---------------------------------------------------------------------------------------------
+# Shapes from profiles: hollow, loft, sweep, revolve
+
+_SIDES = {"top": (0, 0, 1), "bottom": (0, 0, -1), "+z": (0, 0, 1), "-z": (0, 0, -1), "+x": (1, 0, 0),
+          "-x": (-1, 0, 0), "+y": (0, 1, 0), "-y": (0, -1, 0)}
+
+
+def _open_faces(part: Part, open) -> list[Face]:
+    """The faces hollow() leaves open: a side name ("top", "+X", ...: every flat face facing that
+    way, the largest first), a Face, or a list of either."""
+    items = [] if open is None else open if isinstance(open, (list, tuple)) else [open]
+    faces = []
+    for it in items:
+        if isinstance(it, Face):
+            faces.append(it)
+            continue
+        key = str(it).strip().lower()
+        if key not in _SIDES:
+            raise ValueError(f"hollow: open={it!r}; a side ({', '.join(_SIDES)}), a Face or a list of them")
+        want = Vector(*_SIDES[key])
+        flat = [f for f in part.faces().filter_by(GeomType.PLANE) if f.normal_at().dot(want) > 0.999]
+        if not flat:
+            raise ValueError(f"hollow: no flat face faces {it!r} to leave open")
+        top = max(f.center().dot(want) for f in flat)  # the outermost ones on that side
+        faces += [f for f in flat if abs(f.center().dot(want) - top) < 1e-6]
+    return faces
+
+
+def hollow(part: Part, wall: float, open="top") -> Part:
+    """`part` made hollow with an even `wall` measured square to the surface, also round fillets
+    and along curves (build123d offset(-wall, openings=...)): enclosures, cups, covers, shrouds of
+    any shape. open: the side(s) left open: "top", "bottom", "+X", "-Y"... (every flat face on
+    the outside of that side), a Face, a list of them, or None for a closed hollow (rarely wanted
+    in FDM: infill already hollows a solid). Use it instead of subtracting a smaller copy, which
+    leaves thin walls on curves and corners. Outside fillets come back inside with radius r - wall
+    (a sharp inside corner when wall >= r); inside fillets grow by wall."""
+    if wall <= 0:
+        raise ValueError(f"hollow: wall {wall} must be > 0")
+    faces = _open_faces(part, open)
+    try:
+        out = offset(part, -wall, openings=faces or None)
+    except Exception as e:  # OCC gives no reason; say what usually causes it
+        raise ValueError(f"hollow: the {wall} mm offset failed ({type(e).__name__}): a wall thicker than "
+                         "the body's thinnest part or a tight inside curve; lower the wall, or hollow before "
+                         "adding small details") from e
+    solids = out.solids()
+    if not out.is_valid or len(solids) != 1 or out.volume <= 0 or out.volume >= part.volume - 1e-6:
+        raise ValueError(f"hollow: the {wall} mm wall did not give one valid solid ({len(solids)} solids); "
+                         "lower the wall, or hollow before adding small details")
+    return out if isinstance(out, Part) else Part(solids[0].wrapped)
+
+
+def section_shape(spec) -> Face | Sketch:
+    """A section for transition_loft and swept_section: a number is a circle of that diameter;
+    (w, h) a rectangle; (w, h, r) a rectangle with corners rounded r; a Face or Sketch on XY,
+    centered on the origin, as it is."""
+    if isinstance(spec, (int, float)):
+        return Circle(spec / 2)
+    if isinstance(spec, tuple) and len(spec) in (2, 3):
+        w, h, r = (*spec, 0.0) if len(spec) == 2 else spec
+        return RectangleRounded(w, h, r) if r > 0 else Rectangle(w, h)
+    if isinstance(spec, (Face, Sketch)):
+        return spec
+    raise ValueError(f"section {spec!r}: a diameter, (w, h), (w, h, corner r), or a Face/Sketch")
+
+
+def transition_loft(a, b, length: float, wall: float | None = None, collar_a: float = 0.0, collar_b: float = 0.0,
+                    shift: tuple = (0.0, 0.0)) -> Part:
+    """A body that changes section along Z, lofted straight from section `a` (bottom, on Z=0) to
+    section `b` (top), `length` apart, with optional straight collars `collar_a` / `collar_b` long
+    at each end (to slip a hose or a pipe over): duct and hose adapters, round-to-square
+    transitions, funnels, nozzles. a, b: as section_shape (a diameter, (w, h), (w, h, r), or a
+    Face). shift: (x, y) of the top section from the bottom one (an offset duct). wall: hollow it
+    with the ends open, the wall measured across the section (square to the axis); None leaves it
+    solid. The sides must lean no more than the overhang limit (45 degrees from vertical) to
+    print without supports, inside and outside: about 1 mm of change in radius (or shift) per
+    1 mm of length at most. `check` measures it."""
+    sa, sb = section_shape(a), section_shape(b)
+    if length <= 0:
+        raise ValueError(f"transition_loft: length {length} must be > 0")
+    top = collar_a + length
+
+    def body(fa, fb, extra: float = 0.0) -> Part:
+        p = Pos(shift[0], shift[1], 0)
+        z0, z1 = collar_a, top
+        parts = [loft([Plane.XY.offset(z0) * fa, p * Plane.XY.offset(z1) * fb])]
+        if collar_a > 0 or extra:
+            parts.append(Pos(0, 0, -extra) * extrude(fa, collar_a + extra))
+        if collar_b > 0 or extra:
+            parts.append(p * Pos(0, 0, top) * extrude(fb, collar_b + extra))
+        out = parts[0]
+        for q in parts[1:]:
+            out = out + q
+        return out
+
+    outer = body(sa, sb)
+    if wall is None:
+        return outer
+    try:
+        ia, ib = offset(sa, -wall), offset(sb, -wall)
+    except (RuntimeError, ValueError):
+        ia = ib = None
+    if not ia or not ib or not ia.faces() or not ib.faces():
+        raise ValueError(f"transition_loft: a {wall} mm wall leaves no opening in a section")
+    return outer - body(ia.faces()[0], ib.faces()[0], extra=1.0)
+
+
+def swept_section(path: Edge | Wire, section, x_dir=(0, 0, 1)) -> Part:
+    """A constant `section` swept along `path` and put on Z=0: hooks, handles, rails, cable
+    channels, frames. path: a Line, arc, FilletPolyline (straight runs with rounded bends) or
+    Spline; a path drawn in XY gives a part that lies flat, its load along the layers. section:
+    as section_shape, drawn on XY around the origin; its X axis follows x_dir (up, by default),
+    so a (w, h) rectangle is w tall in Z and h wide across the path. For a section that changes
+    along the path use tapered_sweep. Bends need a radius larger than half the section's width
+    across the bend, or the sweep folds."""
+    sec = section_shape(section)
+    pl = _frames(path, [0.0], x_dir)[0]
+    body = sweep(pl * sec, path=path)
+    if not body.is_valid or body.volume <= 0:
+        raise ValueError("swept_section: the sweep folded on itself; widen the bends or narrow the section")
+    return Pos(0, 0, -body.bounding_box().min.Z) * body
+
+
+def revolved_profile(points: list, radius=0.0, angle: float = 360.0) -> Part:
+    """A closed profile of (r, z) points revolved around Z: knobs, pulleys, wheels, spool ends,
+    bushings, caps, feet. Points go round the outline once (not repeated at the end); r >= 0 is
+    the distance from the axis, a profile that stays clear of r = 0 makes a ring (a bore through
+    the middle). radius: one corner radius for every corner, or one per point (0 = sharp; keep
+    the corners on the bed sharp and chamfer them with bed_chamfer). Print it standing on its
+    flattest face: a downward-facing side steeper than 45 degrees needs support."""
+    pts = [(float(r), float(z)) for r, z in points]
+    if len(pts) < 3:
+        raise ValueError("revolved_profile: give at least three (r, z) points")
+    if min(r for r, _ in pts) < 0:
+        raise ValueError("revolved_profile: r is a distance from the axis, >= 0")
+    radii = list(radius) if isinstance(radius, (list, tuple)) else [radius] * len(pts)
+    if len(radii) != len(pts):
+        raise ValueError(f"revolved_profile: {len(radii)} radii for {len(pts)} points")
+    xz = [(r, 0.0, z) for r, z in pts]
+    outline = (FilletPolyline(*xz, radius=radii, close=True) if any(radii)
+               else Polyline(*xz, close=True))
+    body = revolve(make_face(outline), Axis.Z, angle)
+    return Pos(0, 0, -body.bounding_box().min.Z) * body
+
+
+def demo_hollow() -> Part:
+    box = Box(60, 40, 30, align=BED)
+    box = fillet(box.edges().filter_by(Axis.Z), 8)
+    return bed_chamfer(hollow(box, 2.0, open="top"), 0.5)
+
+
+def demo_transition_loft() -> Part:
+    return transition_loft(40, (34, 34, 6), length=30, wall=2.0, collar_a=10, collar_b=10)
+
+
+def demo_swept_section() -> Part:
+    path = FilletPolyline((0, 70, 0), (0, 0, 0), (30, 0, 0), (30, 20, 0), radius=12)
+    return bed_chamfer(swept_section(path, (6, 10)), 0.5)
+
+
+def demo_revolved_profile() -> Part:
+    return revolved_profile([(3, 0), (16, 0), (16, 5), (13, 18), (3, 18)], radius=[0, 0, 1, 2, 0])
+
+
+# ---------------------------------------------------------------------------------------------
 # Registry
 
 
@@ -1362,6 +1527,62 @@ RECIPES = {r.name: r for r in [
       "[BP-O1, W1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs to 45 degrees; one line is the thinnest wall",
       "[PrusaSlicer: Layers and perimeters, Spiral vase](https://help.prusa3d.com/article/layers-and-perimeters_1748)",
       "[Cura: magic_spiralize](https://github.com/Ultimaker/Cura/blob/main/resources/definitions/fdmprinter.def.json)"]),
+    Recipe("hollow", "Hollow any body with an even wall", [hollow], demo_hollow, """
+- An even wall everywhere, also round fillets and curves: the offset is square to the surface.
+  Subtracting a smaller copy (a scaled or shrunk box) leaves the wall thin on curves and corners.
+- Wall: at least ~1.2 mm (three lines) where strength matters, and a whole multiple of the line
+  width: 1.2, 1.6, 2.0 at a 0.4 mm nozzle (BP-W3, W4). Enclosures: 1.6-2.4 mm.
+- Hollow the plain body first, then add bosses, ribs, holes and text: a small detail inside the
+  offset is the usual reason it fails, and a boss added afterwards keeps its own size.
+- Outside fillets come back inside smaller by the wall (sharp when wall >= radius), so the inside
+  corners stay rounded only when the outside radius is bigger than the wall: radius >= 2 x wall
+  is a good start (BP-R1 inside corners).
+- Add a `Wall` check through the hollow (a section just above the floor) when other cuts go near
+  the wall: is_valid does not catch a skin.
+- The open side is usually the top, printed open side up: no ceiling to bridge. A closed hollow
+  needs its ceiling within the bridge length or a dome; in FDM infill already hollows a solid.
+""", ["[BP-W3, W4, R1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) wall thickness, line multiples, inside fillets",
+      "build123d `offset(amount=-wall, openings=...)`"]),
+    Recipe("transition_loft", "Transition loft: duct, hose and funnel adapters", [transition_loft, section_shape],
+           demo_transition_loft, """
+- A straight loft between two sections: round to square, big to small, or offset (`shift`). With
+  `wall` it is hollow, open at both ends; collars give a hose or pipe a straight length to grip.
+- Lean: every side within the overhang limit (45 degrees from vertical; BP-O1), the inside of a
+  hollow one too. Over the loft's length the radius may change by about as much as the length;
+  more needs a longer loft or supports. `check` measures it.
+- The wall is measured across the section; on a leaning side it is thinner square to the surface
+  (x cos(lean): 0.7 x at 45 degrees). Size the wall for that (BP-W3).
+- A hose collar for a sliding fit: the hose's inside diameter minus 2 x the user's press fit for a
+  tight grip, or the pipe's outside diameter + 2 x clearance for a collar that slips over (BP-F1).
+  Print it standing on the wider end.
+""", ["[BP-O1, W3, F1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs, walls, fits",
+      "build123d `loft` (between two sections, ruled when there are only two)"]),
+    Recipe("swept_section", "Section swept along a path: hooks, handles, rails", [swept_section, section_shape],
+           demo_swept_section, """
+- Draw the path in XY so the part lies flat: then a hook or handle bends along the layers, about
+  twice as strong as across them (BP-S4, S5, N1). A hook standing up breaks between layers.
+- Paths: `FilletPolyline` (straight runs with rounded bends: the radius is the bend's centreline
+  radius), `Line` + arcs, or a `Spline`. A bend's radius must be larger than half the section's
+  width across the bend, or the sweep folds.
+- Section: the thickness in Z (the first number of `(w, h)`) is the layer stack; the width across
+  the path carries a hook's bending. A part lying flat keeps a square section and gets
+  `bed_chamfer` on the bed edges: rounded corners (`(w, h, r)`) would put a fillet on the bed
+  (BP-B1). Round sections suit paths that stand up or parts printed in halves.
+- For a section that changes along the path, use `tapered_sweep`.
+""", ["[BP-S4, S5, N1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) layers are the weak direction",
+      "build123d `sweep` along a Wire"]),
+    Recipe("revolved_profile", "Revolved profile: knobs, pulleys, wheels", [revolved_profile], demo_revolved_profile, """
+- Draw the half outline as (r, z) points, the axis on Z, and spin it: one profile gives the whole
+  round part, a bore when it stays clear of r = 0.
+- Print it standing on its flattest face. Downward-facing sides steeper than 45 degrees from
+  vertical need support (BP-O1): a pulley's groove or a mushroom knob's underside prints better
+  as two halves or with 45-degree flanks.
+- Round the corners in the profile (`radius`, per point), not with a fillet afterwards; keep the
+  corners on the bed sharp and chamfer them (bed_chamfer: BP-B1).
+- A shaft bore: the printed size plus `hole_comp`, or a D-flat cut after revolving. Bores that must
+  fit tightly: model small and ream (BP-H6).
+""", ["[BP-O1, B1, H6](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs, bed edges, precise bores",
+      "build123d `revolve`, `FilletPolyline`"]),
 ]}
 
 

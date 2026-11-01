@@ -222,10 +222,28 @@ as a starting point, say so in the report, and never turn it into a default or a
   PLA, PETG and TPU rarely warp. [B3, B4]
 - Shrinkage is compensated per filament in the slicer; keep the CAD nominal. [M1]
 
+**Shapes from profiles: hollow, loft, sweep, revolve** ([recipes](https://kd5ryn.github.io/b123d-print/using/recipes/#shapes-from-profiles))
+
+- **Hollow a body with `hollow(part, wall, open="top")`** (build123d `offset(-wall, openings=)`),
+  never by subtracting a smaller copy: the wall stays even round fillets and curves. Hollow the
+  plain body first, then add bosses, ribs and holes; outside corner radius ≥ 2 × wall keeps the
+  inside corners round. Enclosures: the `rounded_enclosure` example. [W3, W4]
+- **A part whose section changes along its length** (duct and hose adapters, round to square,
+  funnels): `transition_loft(a, b, length, wall=, collar_a=, collar_b=)`; the sides within the
+  overhang limit inside and out, about 1 mm of change in radius per 1 mm of length (the
+  `hose_adapter` example). [O1]
+- **A constant section along a path** (hooks, handles, rails, cable channels):
+  `swept_section(path, section)` with a `FilletPolyline`, arc or `Spline` path drawn in XY, so the
+  part lies flat and its load runs along the layers. A changing section: `tapered_sweep`. [S4, S5]
+- **A round part** (knob, pulley, wheel, spool end, bushing): draw the half outline as (r, z)
+  points and `revolved_profile(points, radius=...)`; corner radii in the profile, bed corners
+  sharp and chamfered. [O1, B1]
+
 **Snap fits and living hinges**
 
 - Use a recipe (`recipe` tool, `b123d_print.recipes`) before improvising a snap arm, hinge, nut
-  trap, teardrop hole, lid lip, text or bed chamfer: they are tested and cite their numbers.
+  trap, teardrop hole, lid lip, text, bed chamfer, hollow, loft, sweep or revolve: they are tested
+  and cite their numbers.
 - Snap arms: lie flat (bend in XY), root fillet ≥ 0.5 × arm thickness, taper the arm toward
   the tip. [N1, N2, N3]
 - Provisional (one source, Fictiv): size the arm with the cantilever strain formula and an

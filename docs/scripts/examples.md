@@ -254,3 +254,27 @@ run on their union. A variant `name` shows another text and colour. CC0. An exam
 sizes: not printed yet.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/inlay_tag/inlay_tag.py)
 
+## `rounded_enclosure`
+
+![Rounded enclosure: the box with the lid on](../images/rounded_enclosure.png)
+
+A box with rounded corners and a lid with a lip, in two pieces. The box is drawn solid and made
+hollow with the [`hollow` recipe](../using/recipes.md#shapes-from-profiles), so its 2 mm wall is
+the same on the flat sides and round the 8 mm corners (a `Wall` check at the corner says 2.00 mm).
+The lid is drawn from 2D sketches: a rounded plate and a lip ring that follows the inside of the
+walls with the user's sliding clearance; a `Gap` check measures it and the fit check sees no
+interference. CC0. An example with chosen sizes: not printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/rounded_enclosure/rounded_enclosure.py)
+
+## `hose_adapter`
+
+![Hose adapter: a round collar lofted to a rounded-rectangle collar](../images/hose_adapter.png)
+
+A round pipe to a rounded-rectangle dust port, made with the
+[`transition_loft` recipe](../using/recipes.md#shapes-from-profiles): a straight hollow loft with a
+collar at each end that slips over the pipe and the port with the user's clearance. The sides
+lean at most ~19 degrees, so it prints standing on the round end without supports; a `Wall`
+check through the leaning side shows the across-the-section wall of 2 mm reads 1.89 mm square to
+the surface. The `port80` variant takes a wider port. CC0. An example with estimated sizes:
+measure your pipe and port first.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/hose_adapter/hose_adapter.py)
