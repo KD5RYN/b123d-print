@@ -272,6 +272,11 @@ as a starting point, say so in the report, and never turn it into a default or a
 
 - Text: on top (XY) faces, ≥ 0.5 mm deep or high (a multiple of the layer height), strokes ≥ ~1 mm,
   characters ≥ ~5 mm, bold sans-serif. [X1, X3]
+- Text on a curved face (jar, knob, dome): the `text_on_surface` recipe, `method="wrap"` on one
+  face (keeps the size), `"project"` across face edges (stretches on slopes); along an arc:
+  `text_on_path`. Same minimums, measured on the surface; sunk text forgives thin strokes more
+  than raised. The text is its own solid: a second colour is `part & text` (sunk) or
+  `text - part` (raised). A face that does not mesh fails `check` (a hole in the STL).
 - Split a part when it exceeds the build volume, would need a lot of support, or when pieces can
   each print in their strongest orientation. Join with a dovetail and dowels or alignment pins
   (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds

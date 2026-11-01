@@ -31,6 +31,7 @@ FAIL, WARN, OK = "fail", "warn", "ok"
 CORNER = 4.0  # see wall_thickness
 REACH = 2.0  # mm: first round of wall_thickness's ray cast (see _face_thinnest)
 CHUNK = 128  # rays cast at once (fewer: a tighter box around them, so fewer segments to test)
+LEVEL = float(np.sin(np.radians(15)))  # a thin direction within 15 deg of level: an upright wall (thin_features)
 PARALLEL = float(np.cos(np.radians(10)))  # walls whose normals are within 10 deg of opposite are parallel
 
 
@@ -607,7 +608,7 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
             r = wall_thickness(part, plane, at, step=sample, limit=limit, exclude=_boxes_2d(ignore, plane, at), slicer=slicer)
             if r is not None and np.isfinite(r["min"]) and r["min"] < limit:
                 spots.append({"min": r["min"], "at": _to_3d(plane, at, r["at"]), "plane": plane, "section_at": at,
-                              "taper": bool(r.get("taper", False))})
+                              "taper": bool(r.get("taper", False)), "dir": r.get("dir")})
     spots.sort(key=lambda s: s["min"])
     kept = []
     for s in spots:
@@ -616,12 +617,18 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
     # A section can cut close to a corner or a knife edge so that its two faces look like a thin
     # wall (a notch through a lip leaves a wedge-shaped end). A real thin wall, pin or plate is
     # thin in at least two of the three planes through the spot; otherwise, or when another plane
-    # shows it tapering, it is an edge.
+    # shows it tapering, it is an edge. A wall thin across a level direction in an upright section
+    # is an upright wall, and an XY section shows its true thickness: only XY can confirm it. An
+    # upright section that grazes a vertical corner at an angle (a letter on an arc, wrapped text)
+    # shows a sliver in both XZ and YZ, though the stroke is wide; when XY confirms it, XY's
+    # thickness is the wall's.
     for s in kept:
+        thin_dir = s.pop("dir", None)
         if s["taper"]:
             continue
+        upright = s["plane"] != "XY" and thin_dir is not None and abs(thin_dir[1]) < LEVEL
         confirmed = False
-        for other in ("XY", "XZ", "YZ"):
+        for other in ("XY",) if upright else ("XY", "XZ", "YZ"):
             if other == s["plane"]:
                 continue
             ax = AXES[other]
@@ -632,7 +639,10 @@ def thin_features(part: Part, limit: float, planes=("XY", "XZ", "YZ"), step: flo
                     confirmed = False
                     break
                 confirmed = True
+                if upright:
+                    s["min"] = max(s["min"], r["min"])
         s["taper"] = not confirmed
+    kept.sort(key=lambda s: s["min"])
     return kept
 
 
@@ -938,7 +948,7 @@ def _face_thinnest(loops, near, radius, limit, exclude) -> dict | None:
     if np.isfinite(tmin[k]):
         taper = bool(tdot[k] > -PARALLEL)
         cand = {"min": float(tmin[k]), "at": o[k].tolist(), "how": "tapers to an edge" if taper else "across the wall",
-                "taper": taper}
+                "taper": taper, "dir": r[k].tolist()}
     elif traw > 0 and traw <= lim:  # only corner hits: a compact blob with no walls, as thick as it is wide
         cand = {"min": traw, "at": o[k].tolist(), "how": "no thin walls (compact section)"}
     else:
@@ -966,7 +976,9 @@ def _face_thinnest(loops, near, radius, limit, exclude) -> dict | None:
                 dd = np.hypot(pc[:, None, 0] - qc[None, :, 0], pc[:, None, 1] - qc[None, :, 1])
                 m = np.unravel_index(np.argmin(dd), dd.shape)
                 if dd[m] < cand["min"] and dd[m] <= lim:
-                    cand = {"min": float(dd[m]), "at": ((pc[m[0]] + qc[m[1]]) / 2).tolist(), "how": "between two boundaries"}
+                    gap_dir = (qc[m[1]] - pc[m[0]]) / max(float(dd[m]), 1e-12)
+                    cand = {"min": float(dd[m]), "at": ((pc[m[0]] + qc[m[1]]) / 2).tolist(), "how": "between two boundaries",
+                            "dir": gap_dir.tolist()}
     return cand
 
 

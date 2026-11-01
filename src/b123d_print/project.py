@@ -50,7 +50,7 @@ from .motion import image_path as motion_image
 from .loops import loop_hint
 from .partfiles import find_parts, resolve_part, timing_lines  # noqa: F401  (light: the MCP server imports them from there)
 from . import outdir
-from .render import export_files, render, report, section_view
+from .render import export_files, render, report, section_view, unmeshed_faces
 
 
 @dataclass
@@ -394,6 +394,14 @@ def check_share(mod: ModuleType, key: str, settings: Settings, share: tuple[int,
                 valid = bool(p.is_valid) and p.volume > 0
                 pre.append(ck.Finding(ck.OK if valid else ck.FAIL, "valid", name or "part",
                                       "valid solid" if valid else f"is_valid={p.is_valid}, volume={p.volume:.3f}", report(p)))
+                holes = unmeshed_faces(p) if valid else []
+                if holes:
+                    at = [[round(v, 2) for v in f.center()] for f in holes]
+                    pre.append(ck.Finding(ck.FAIL, "valid", name or "part",
+                                          f"{len(holes)} face(s) do not mesh: the STL/3MF would have a hole there, "
+                                          f"near {at[0]}. Often a boolean of wrapped text on a spline or revolved "
+                                          "face: change the text depth by 0.05 mm or use method='project'",
+                                          {"faces_at": at}))
             res["pre"] = [finding_dict(f) for f in pre] if share[0] == 0 else []
             res["share"] = list(share)
             named = {(k or "part"): v for k, v in parts.items()}

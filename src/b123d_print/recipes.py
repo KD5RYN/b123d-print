@@ -21,10 +21,10 @@ import inspect
 import math
 from dataclasses import dataclass, field
 
-from build123d import (Align, Axis, Bezier, Box, Circle, Compound, Cone, Cylinder, Edge, Face, FontStyle, GeomType, Keep,
-                       Line, Part, Plane, Polygon, Polyline, Pos, Rectangle, RegularPolygon, Rot, Shell, Sketch, Solid, Sphere,
-                       Spline, Text, Vector, Vertex, Wire, extrude, fillet, loft, make_face, offset, revolve, scale, section,
-                       split, sweep)
+from build123d import (Align, Axis, Bezier, Box, CenterArc, Circle, Compound, Cone, Cylinder, Edge, Face, FontStyle,
+                       GeomType, Keep, Line, Location, Part, Plane, Polygon, Polyline, Pos, Rectangle, RegularPolygon,
+                       Rot, Shell, Sketch, Solid, Sphere, Spline, Text, TextAlign, Vector, Vertex, Wire, extrude,
+                       fillet, loft, make_face, offset, revolve, scale, section, split, sweep)
 from build123d import GridLocations  # ribs; the other location sets are in patterns.py
 
 from .patterns import (bolt_circle, demo_bolt_circle, demo_grip_ridges, demo_hex_grille, demo_hole_grid,
@@ -399,16 +399,25 @@ def demo_lid_with_lip() -> Part:
 # Text
 
 
-def text_label(text: str, size: float = 6.0, depth: float = 0.6, font: str = "", bold: bool = True) -> Part:
+def text_label(text: str, size: float = 6.0, depth: float = 0.6, font: str = "", bold: bool = True,
+               text_align=(TextAlign.CENTER, TextAlign.CENTER), font_path: str = "") -> Part:
     """Text as a solid from Z=0 up `depth`, centered on the origin. Emboss: part += Pos(x, y, top)
     * text_label(...). Deboss: part -= Pos(x, y, top - depth) * text_label(..., depth=depth + 1).
     Minimums (BP-X1..X3): characters >= 5 mm (3.5 possible), strokes >= 2 line widths (~0.9 mm at
     0.4 mm nozzle: a bold sans-serif at 5 mm and up has that), depth >= 0.5 mm and a multiple of
     the layer height (0.6 = 3 x 0.2). Put text on top (XY) faces. font: a system font name;
-    "" uses build123d's default."""
-    kw = {"font": font} if font else {}
-    sk = Text(text, size, font_style=FontStyle.BOLD if bold else FontStyle.REGULAR, align=(Align.CENTER, Align.CENTER), **kw)
+    "" uses build123d's default; font_path: a font file instead. Several lines: "ONE\nTWO", with
+    text_align (TextAlign.LEFT/CENTER/RIGHT, TextAlign.TOP/CENTER/BOTTOM) lining them up."""
+    sk = _text_sketch(text, size, font, font_path, bold, text_align, align=(Align.CENTER, Align.CENTER))
     return extrude(sk, depth)
+
+
+def _text_sketch(text: str, size: float, font: str, font_path: str, bold: bool, text_align, **kw) -> Text:
+    if font:
+        kw["font"] = font
+    if font_path:
+        kw["font_path"] = font_path
+    return Text(text, size, font_style=FontStyle.BOLD if bold else FontStyle.REGULAR, text_align=text_align, **kw)
 
 
 def demo_text_label() -> Part:
@@ -416,6 +425,112 @@ def demo_text_label() -> Part:
     p += Pos(0, 6, 4) * text_label("UP", size=8, depth=0.6)
     p -= Pos(0, -6, 4 - 0.6) * text_label("OK", size=8, depth=1.6)
     return p
+
+
+TEXT_SINK = 0.2  # mm a text solid reaches past the surface, so the boolean never meets a coincident skin
+
+
+def _surface_frame(face: Face, at: Vector, up) -> Plane:
+    """The plane touching `face` at its point nearest `at`: Z along the face's normal, X along
+    the text's baseline (up x normal), so the letters stand towards `up`."""
+    p = Vector(face.distance_to_with_closest_points(Vertex(at))[1])
+    n = face.normal_at(p)
+    x = Vector(up).cross(n)
+    if x.length < 1e-6:  # up is the normal (a top face): read it with +Y up
+        x = Vector(0, 1, 0).cross(n)
+    return Plane(p, x_dir=x.normalized(), z_dir=n)
+
+
+def _wrapped(face: Face, glyphs: list, at: Vector, up) -> list:
+    """Face.wrap every glyph about one point. Wrapping across a closed face's seam fails in
+    OpenCascade: a cylinder, cone, sphere or revolved face is turned about its axis (the same
+    surface, the seam somewhere else) until it works."""
+    axis = face.axis_of_rotation
+    err = None
+    for angle in (0, 180, 90, 270) if axis else (0,):
+        f = face.rotate(axis, angle) if angle else face
+        loc = Location(_surface_frame(f, at, up))
+        try:
+            return [Face.wrap(f, g, loc) for g in glyphs]
+        except Exception as e:  # noqa: BLE001 - OCCT: "BRep_API: command not done", over the boundary
+            err = e
+    raise ValueError(f"the text does not wrap onto this face ({err}): make it smaller, move `at` away from the "
+                     f"face's edges, or use method='project'") from err
+
+
+def _projected(target, face: Face, glyphs: list, at: Vector, up) -> tuple[list, Vector]:
+    """Each glyph projected onto `target` along the normal at `at` (crosses face edges)."""
+    pl = _surface_frame(face, at, up)
+    bb = target.bounding_box()
+    lift = Plane(pl.origin + pl.z_dir * (bb.diagonal + 1), x_dir=pl.x_dir, z_dir=pl.z_dir)
+    out = []
+    for g in glyphs:
+        hit = lift.from_local_coords(g).project_to_shape(target, -pl.z_dir)
+        if not hit:
+            raise ValueError("the text projects past the part's edge: move `at` or make the text smaller")
+        out.extend(hit[0].faces())
+    return out, pl.z_dir
+
+
+def _thickened(faces: list, depth: float, deboss: bool, normal=None) -> Part:
+    """Each face thickened along its normal: out `depth` (emboss) or in (deboss), and TEXT_SINK the
+    other way so it overlaps the surface it sits on."""
+    solids = []
+    for f in faces:
+        n = normal if normal is not None else f.normal_at(f.center())
+        body = Solid.thicken(f, -depth if deboss else depth, normal_override=n)
+        skin = Solid.thicken(f, TEXT_SINK if deboss else -TEXT_SINK, normal_override=n)
+        solids.extend(body.fuse(skin).clean().solids())
+    return Part(Compound(solids).wrapped)
+
+
+def text_on_surface(target, text: str, at, size: float = 6.0, depth: float = 0.6, deboss: bool = False,
+                    up=(0, 0, 1), method: str = "wrap", font: str = "", font_path: str = "", bold: bool = True,
+                    text_align=(TextAlign.CENTER, TextAlign.CENTER)) -> Part:
+    """Text on a curved (or flat) face as a solid along the surface normal. Emboss: part +=
+    text_on_surface(part, ...); deboss: part -= text_on_surface(part, ..., deboss=True). target: the
+    part, or one of its faces; at: a point on or just outside the surface, where the text's center
+    goes (the nearest face of the part takes it); up: the direction the letters stand in.
+    method "wrap" bends the text onto that one face keeping its size (cylinder, cone, sphere,
+    revolved or spline face); "project" casts it onto the whole part along the normal at `at`:
+    it crosses face edges (a fillet, a lofted lid), but letters stretch where the surface slopes
+    away. The text is its own solid, so it can be a second colour: deboss -> inlay = part & text;
+    emboss -> raised = text - part. Same minimums as text_label (BP-X1..X3), measured on the surface."""
+    at = Vector(at)
+    face = target if isinstance(target, Face) else min(target.faces(), key=lambda f: f.distance_to(at))
+    glyphs = _text_sketch(text, size, font, font_path, bold, text_align).faces()
+    if method == "wrap":
+        return _thickened(_wrapped(face, glyphs, at, up), depth, deboss)
+    if method == "project":
+        faces, normal = _projected(target, face, glyphs, at, up)
+        return _thickened(faces, depth, deboss, normal)
+    raise ValueError(f"method must be 'wrap' or 'project', got {method!r}")
+
+
+def text_on_path(text: str, path: Edge | Wire, size: float = 6.0, depth: float = 0.6, position: float = 0.5,
+                 font: str = "", font_path: str = "", bold: bool = True) -> Part:
+    """Flat text that follows a curve in the XY plane (an arc on a round tag or lid) as a solid from
+    Z=0 up `depth`, placed like text_label. position: where along the path (0..1) the text's
+    center goes. The letters stand on the left of the path's direction: an arc drawn clockwise
+    reads along the top, counter-clockwise along the bottom. Same minimums as text_label."""
+    sk = _text_sketch(text, size, font, font_path, bold, (TextAlign.CENTER, TextAlign.CENTER),
+                      path=path, position_on_path=position)
+    return extrude(sk, depth)
+
+
+def demo_text_on_surface() -> Part:
+    jar = Cylinder(15, 24, align=BED)
+    jar += text_on_surface(jar, "JAM", at=(0, -30, 12), size=7, depth=0.6)  # wrapped, raised
+    jar -= text_on_surface(jar, "2026", at=(30, 0, 12), size=6, depth=0.8, deboss=True)  # on the face's seam
+    return jar
+
+
+def demo_text_on_path() -> Part:
+    tag = Cylinder(25, 3, align=BED)
+    arc = CenterArc((0, 0), 17, 160, -140)  # clockwise: the text reads along the top
+    tag -= Pos(0, 0, 3 - 0.6) * text_on_path("HELLO WORLD", arc, size=6, depth=1.6)  # sunk 0.6
+    tag += Pos(0, -4, 3) * text_label("OK", size=10, depth=0.6)
+    return tag
 
 
 # ---------------------------------------------------------------------------------------------
@@ -996,6 +1111,43 @@ RECIPES = {r.name: r for r in [
 - Fonts: build123d's default font is always there; a named font must exist on the machine that
   builds the part (the server, for a remote server).
 """, ["[BP-X1..X3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)"]),
+    Recipe("text_on_surface", "Text on curved faces (wrap or project)", [text_on_surface], demo_text_on_surface, """
+- `method="wrap"` bends the text onto one face and keeps its size: cylinders, cones, spheres,
+  revolved and spline faces. It is the right one for jars, knobs and handles. A closed face's seam
+  is handled (the face is turned about its axis). Wrapping onto a revolved spline face is slow,
+  about 1 s per letter: keep such labels short.
+- `method="project"` casts the text onto the whole part along the normal at `at`: it crosses face
+  edges (a filleted or lofted lid) and is fast, but letters stretch by 1/cos of the slope; keep
+  projected text where the surface is within ~30 degrees of facing `at`.
+- The same minimums as flat text, measured on the surface (BP-X1..X3): strokes >= 2 line widths,
+  characters >= 5 mm, depth >= 0.5 mm along the normal. On a vertical wall the depth is across the
+  layers' width, not a stack of layers: 0.6-1.0 mm reads well. The thin-feature check measures the
+  strokes; it fails where a font's own junctions or spurs are thinner than ~1 line width (Arial
+  Bold's G, R and 4 under ~7 mm): make the text bigger, sink it instead, or pick a sturdier font.
+- Text on a wall prints with its strokes standing up: the underside of a raised horizontal stroke
+  and the roof of a sunk one are short overhangs as deep as the text (0.6-1 mm prints without
+  support). Text on a nearly flat curved top shows stair steps: prefer deboss, or bigger letters.
+- A boolean of wrapped text with a revolved spline face can, now and then, leave a face OpenCascade
+  cannot mesh: the STL would have a hole there. The validity check fails when a face does not
+  mesh; change `depth` by 0.05 mm, or use `method="project"`.
+- Second colour: deboss and fill, `body = part - text`, `inlay = part & text` (flush with the
+  surface); or emboss, `raised = text - part` (the text reaches 0.2 mm into the surface so the
+  fuse is clean).
+- Fonts: as text_label; `font_path=` names a font file so a remote server builds the same letters.
+""", ["[BP-X1..X3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) text size, strokes, depth",
+      "[BP-O1](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) overhangs",
+      "build123d `Face.wrap` (wrap a planar face onto a surface), `Face.project_to_shape`, `Solid.thicken`"]),
+    Recipe("text_on_path", "Text along a curve (arc on a tag or lid)", [text_on_path], demo_text_on_path, """
+- Flat text whose baseline follows an Edge or Wire in XY: an arc around a round tag, a lid or a
+  dial. Place and cut it like text_label (emboss from the top face up, deboss from below it).
+- The letters stand on the left of the path's direction: draw an arc clockwise
+  (`CenterArc(c, r, 160, -140)`) for text along the top, counter-clockwise for text along the bottom.
+- Same minimums as text_label (BP-X1..X3). On a tight arc the inside of each letter is crowded:
+  keep the path radius at least ~2 x the text size.
+- Sunk text is more forgiving than raised: the material left between sunk strokes is wide, while
+  a raised letter is only as strong as its thinnest stroke.
+""", ["[BP-X1..X3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/)",
+      "build123d `Text(path=..., position_on_path=...)`"]),
     Recipe("bed_chamfer", "Fillet-safe chamfer on bed edges", [bed_chamfer], demo_bed_chamfer, """
 - A chamfer, not a fillet, on edges that touch the bed: a fillet's lowest band is a flat overhang
   that flares (BP-O2). The bed-edge check warns on fillets there.
