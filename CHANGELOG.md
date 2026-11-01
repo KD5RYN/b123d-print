@@ -109,6 +109,16 @@
   section grazing the upright corner of a letter on an arc cut a 0.02 mm sliver in both planes,
   which then confirmed each other. A wall thin across a level direction is upright, and only the
   XY section, which shows its true thickness, now confirms it and gives its size.
+- **Multi-colour parts: several bodies in one 3MF object** (#167). `bodies(base=..., inlay=(shape,
+  "white"))` declares bodies that print together (a text or logo inlay on an AMS / MMU printer),
+  as a part, a dict value or a lazy piece. The 3MF holds one object with a named, coloured part
+  per body, in order (the slicer loads it as one object with parts; give each its filament);
+  STEP keeps the names and colours; STL writes the union plus one file per body; renders and the
+  GLB draw each body in its colour; the build cache keeps them. The checks run on the bodies'
+  union, and a new automatic `bodies` check fails on bodies that overlap and warns on one that
+  touches no other or is narrower than a line width. The print sheet gets a **Bodies
+  (multi-colour)** table and the layers the bodies share. New `inlay` recipe (the pocket cut by
+  the insert itself) and an `inlay_tag` example.
 
 ## 0.3.16 — 2026-10-28
 

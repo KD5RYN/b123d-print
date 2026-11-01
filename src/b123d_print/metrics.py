@@ -1341,7 +1341,9 @@ def design_metrics(mod, d, parts: dict, settings, style: str | None = None, up: 
     edges_pref = str(script_attr(mod, d, "EDGES", "") or sty.edges or "").lower()
     if edges_pref not in EDGE_PREFS:
         raise ValueError(f"EDGES={edges_pref!r}: use 'chamfer', 'fillet' or leave it empty")
-    named = {(k or "part"): v for k, v in parts.items()}
+    from .bodies import printable
+
+    named = {(k or "part"): printable(v) for k, v in parts.items()}  # a multi-body part: what prints, the union
     per = {n: part_metrics(v, p, show, upd) for n, v in named.items()}
     eco = economy(named, p.hole_comp, p.hole_comp_h)
     found, seen = [], set()

@@ -80,3 +80,41 @@ slider (and flip); and iso, top, front and right views.
 The viewer is [three.js](https://threejs.org) (MIT), shipped inside the package, so the page
 needs no internet access, neither on the server nor in the browser. See
 [Credits](../credits.md) for its license.
+
+## Multi-colour parts (several bodies)
+
+A part that prints in several filaments at once (text or a logo inlaid in a second colour, on an
+AMS, MMU or tool changer) is declared as **bodies** that print together:
+
+```python
+from b123d_print import bodies
+
+def build(d):
+    ...
+    return bodies(base=plate - letters, inlay=(letters, "white"))
+```
+
+Each keyword is a body, in order; its value is a shape, or `(shape, colour)` with any build123d
+colour (a name, `"#rrggbb"`, an RGB tuple). Names are letters, digits, `_` and `-` (they name
+files). It works as the single part, as one piece of a dict, or as a lazy piece, and survives
+`Rot`/`Pos` into print orientation. The [`inlay` recipe](recipes.md#multi-colour-inlays) makes
+the pocket and the inlay from one insert.
+
+What each format does with it:
+
+| File | A multi-body part |
+| --- | --- |
+| `.3mf` | **one object** named after the file, with one part (a mesh) per body, named after the body and coloured, in order. Bambu Studio, OrcaSlicer and PrusaSlicer load it as one object with several parts: give each part its filament there. The colours are display colours (3MF base materials): slicers do not map them to filaments by themselves |
+| `.stl` | `<name>.stl` is the union (one solid, for a one-colour print); `<name>_<body>.stl` holds each body, to load together as one object's parts |
+| `.step` | a Compound whose children carry the body names and colours |
+| `.png`, `.glb` | each body in its own colour, with a legend (a node per body) |
+| `_print.md` | a **Bodies (multi-colour)** table (colour, volume, filament, Z range per body), the layers the bodies share, and how to give each part its filament |
+
+The checks treat the part as what the printer makes: overhangs, thin features, holes, bed edges,
+tip-over, the build volume and your own `Wall` and `Probe` checks run on the **union** of the
+bodies, so an inlay's floor is not an overhang and bodies that touch are not a gap. The automatic
+`bodies` check fails when two bodies overlap (the slicer would print the overlap in either
+filament), and warns on a body that touches no other (a pocket larger than its inlay, or a body
+floating) or that is narrower than one line width. It cannot tell whether an inlay fills all of
+its pocket: cut the pocket with the inlay itself.
+

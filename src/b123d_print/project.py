@@ -8,6 +8,8 @@ A part script lives at <parts_dir>/<name>/<name>.py and defines:
     def build(d) -> Part | dict[str, Part]          # printable parts, in PRINT orientation; a dict's
                                                     # values may be zero-argument callables (lazy
                                                     # pieces: built only when that piece is needed)
+                                                    # a piece may be bodies(...): several bodies
+                                                    # printed as one object (multi-colour, bodies.py)
 
 and optionally:
 
@@ -323,6 +325,10 @@ def check_specs(mod: ModuleType, d, parts: dict, asm) -> list:
         specs += [cls(p) for p in parts if p not in listed]
     gapped = {s.part or "part" for s in specs if isinstance(s, ck.Gap) and s.other is None}
     specs += [ck.Gap(p) for p in parts if p not in gapped]  # no-op for a single solid
+    from .bodies import split
+
+    listed = {s.part or "part" for s in specs if isinstance(s, ck.Bodies)}
+    specs += [ck.Bodies(p) for p, v in parts.items() if p not in listed and split(v) is not None]  # multi-body parts
     return specs
 
 
@@ -572,6 +578,8 @@ def item_cost(spec, lookup: dict, asm, orig) -> float:
         return 0.2 + n * 0.0002
     if isinstance(spec, (ck.Gap, ck.Probe)):
         return 0.1 + n * 0.0005
+    if isinstance(spec, ck.Bodies):
+        return 0.3 + n * 0.01
     return 0.02 + n * 0.00002
 
 
@@ -1043,6 +1051,10 @@ class BuildCache:
                 shape.label = str(note["label"])
             if note.get("color"):
                 shape.color = build123d.Color(*note["color"])
+            if note.get("bodies"):
+                shape = _with_bodies(shape, note["bodies"])
+                if shape is None:
+                    return None
         except Exception:  # noqa: BLE001 - an unreadable BREP or a broken note is a miss, never an error
             return None
         return shape
@@ -1130,6 +1142,8 @@ class BuildCache:
 
         import build123d
 
+        from .bodies import split
+
         kind = next((t for t in SHAPE_TYPES if isinstance(shape, getattr(build123d, t))), None)
         if kind is None or not self._ready():
             return None
@@ -1141,8 +1155,14 @@ class BuildCache:
             h = _file_hash(tmp)
             os.replace(tmp, path)
             color = tuple(shape.color) if getattr(shape, "color", None) is not None else None
+            got = split(shape)  # a multi-body part: its bodies are the BREP's top-level shapes, in order
+            kinds = [next((t for t in SHAPE_TYPES if isinstance(b, getattr(build123d, t))), None) for b, _, _ in got or ()]
+            if None in kinds:
+                return None
             return {"type": kind, "sha256": h, "faces": len(shape.faces()), "volume": shape.volume,
-                    "label": getattr(shape, "label", "") or "", "color": color}
+                    "label": getattr(shape, "label", "") or "", "color": color,
+                    "bodies": [{"type": t, "label": n, "color": tuple(c) if c is not None else None}
+                               for t, (_, c, n) in zip(kinds, got)] if got else None}
         except Exception:  # noqa: BLE001 - a cache that cannot be written is no cache, not an error
             try:
                 os.remove(tmp)
@@ -1181,6 +1201,30 @@ class BuildCache:
                 return
             notes.append({**fields, "bare": bare, "rest": [list(r) if isinstance(r, tuple) else r for r in rest]})
         _write_json(self.dir / "assembly.json", {"items": notes, "seconds": seconds, "inputs": inputs})
+
+
+def _with_bodies(shape, notes: list):
+    """A multi-body part again from its BREP (a Compound whose top-level shapes are the bodies,
+    in order) and the note's names and colours; None when they do not match."""
+    import build123d
+    from OCP.TopoDS import TopoDS_Iterator
+
+    tops, it = [], TopoDS_Iterator(shape.wrapped)
+    while it.More():
+        tops.append(it.Value())
+        it.Next()
+    if len(tops) != len(notes) or any(n.get("type") not in SHAPE_TYPES for n in notes):
+        return None
+    kids = []
+    for w, n in zip(tops, notes):
+        b = getattr(build123d, n["type"])(w)
+        b.label = str(n["label"])
+        if n.get("color"):
+            b.color = build123d.Color(*n["color"])
+        kids.append(b)
+    out = build123d.Compound(children=kids)
+    out.label, out.color = shape.label, shape.color
+    return out
 
 
 def _within(path: str, root: str) -> bool:
@@ -1261,6 +1305,8 @@ class Outputs:
 
         from build123d import Shape
 
+        from .bodies import split
+
         if self._base is None:
             import build123d
             import matplotlib
@@ -1268,7 +1314,7 @@ class Outputs:
 
             from importlib import import_module
 
-            mods = [import_module(f"{__package__}.{m}") for m in ("project", "render", "templates", "viewer")]  # never b123d_print.render, the function
+            mods = [import_module(f"{__package__}.{m}") for m in ("project", "render", "templates", "viewer", "bodies")]  # never b123d_print.render, the function
             here = [_file_hash(Path(m.__file__)) for m in mods]
             self._base = json.dumps([CACHE_VERSION, "output", here, code_version(), build123d.__version__,
                                      getattr(OCP, "__version__", "?"), matplotlib.__version__])
@@ -1276,7 +1322,9 @@ class Outputs:
         def one(x):
             if isinstance(x, Shape):
                 color = getattr(x, "color", None)
-                return ["shape", self.fingerprint(x), repr(getattr(x, "label", "")), repr(tuple(color) if color is not None else None)]
+                got = split(x)  # a multi-body part: its bodies' names and colours too
+                return ["shape", self.fingerprint(x), repr(getattr(x, "label", "")), repr(tuple(color) if color is not None else None),
+                        [one(b) for b, _, _ in got] if got else None]
             if isinstance(x, (list, tuple)):
                 return [one(v) for v in x]
             return repr(x)
@@ -1330,14 +1378,26 @@ EXPORT_ORDER = ("step", "stl", "3mf", "png", "glb")  # export_files' order
 def export_part(p, out: Path, name: str, formats, outputs: Outputs | None, template: bool = False) -> list[Path]:
     """export_files into out/'s folders (outdir.folder: print/, cad/, images/; a template's print
     files in print/templates/), skipping the files `outputs` says are current (each format on its own)."""
+    from build123d import export_stl
+
+    from .bodies import stl_files
+
     files = []
     for fmt in (f for f in EXPORT_ORDER if f in formats):
         f = outdir.path(out, f"{name}.{fmt}", template)
 
         def write(fmt=fmt, f=f):
-            return export_files(p, f.parent, name, [fmt])[0]
+            return export_files(p, f.parent, name, [fmt], body_stls=False)[0]
 
         files.append(outputs.write(f, outputs.key("part", name, fmt, p), write) if outputs is not None else write())
+        for fname, body in stl_files(p, name)[1:] if fmt == "stl" else ():  # a multi-body part: one STL per body
+
+            def write_body(fb=outdir.path(out, fname, template), body=body):
+                export_stl(body, fb, tolerance=0.005, angular_tolerance=0.1)
+                return fb
+
+            fb = outdir.path(out, fname, template)
+            files.append(outputs.write(fb, outputs.key("body", fname, body), write_body) if outputs is not None else write_body())
     return files
 
 

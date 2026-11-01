@@ -169,7 +169,14 @@ def report(part: Part) -> dict:
 
 
 def _as_list(parts) -> list[tuple[Part, str, str]]:
-    """Part | [(part, color, label)] | {label: part} -> [(part, color, label)]."""
+    """Part | [(part, color, label)] | {label: part} -> [(part, color, label)], a multi-body part
+    (bodies.py) as its bodies in their own colours."""
+    from .bodies import expand
+
+    return expand(_listed(parts))
+
+
+def _listed(parts) -> list[tuple[Part, str, str]]:
     if isinstance(parts, dict):
         parts = list(parts.items())
         return [(p, PALETTE[i % len(PALETTE)], str(k)) for i, (k, p) in enumerate(parts)]
@@ -264,7 +271,8 @@ def render(parts, path: str | Path, title: str, tol: float = 0.02, size: str = "
         ax.set_title(name)
     if len(items) > 1:
         fig.legend(
-            handles=[matplotlib.patches.Patch(color=c if isinstance(c, str) else c.mean(0), label=lbl) for _, c, lbl in items],
+            handles=[matplotlib.patches.Patch(facecolor=c.mean(0) if isinstance(c, np.ndarray) else c, edgecolor="#888888", label=lbl)
+                 for _, c, lbl in items],
             loc="lower center", ncol=len(items),
         )
     fig.tight_layout()
@@ -342,23 +350,63 @@ def section(part: Part, z: float, path: str | Path, title: str) -> Path:
 
 
 def export_3mf(part: Part, path: Path) -> Path:
-    """3MF for slicers (Bambu/Orca/Prusa): carries units (mm), unlike STL."""
+    """3MF for slicers (Bambu/Orca/Prusa): carries units (mm), unlike STL. A multi-body part
+    (bodies.py) is one object (a components object named after the file) with one named,
+    coloured mesh per body, in order: the slicer loads it as one object with parts."""
+    from .bodies import color_name, split
+
     m = Mesher(unit=Unit.MM)
-    m.add_shape(part, linear_deflection=0.005, angular_deflection=0.1, part_number=path.stem)
+    got = split(part)
+    if got is None:
+        m.add_shape(part, linear_deflection=0.005, angular_deflection=0.1, part_number=path.stem)
+        m.write(str(path))
+        return path
+    for body, _, _ in got:  # Mesher meshes, names and colours each body ...
+        m.add_shape(body, linear_deflection=0.005, angular_deflection=0.1, part_number=path.stem)
+    if len(m.meshes) != len(got):
+        raise ValueError(f"{path.name}: {len(got) - len(m.meshes)} body(ies) meshed to nothing")
+    model, wrapper = m.model, m.wrapper
+    # ... but makes each its own build item (an object of its own in the slicer) and an unused
+    # components object: replace those with one components object holding every body
+    items = model.GetBuildItems()
+    stale = []
+    while items.MoveNext():
+        stale.append(items.GetCurrent())
+    for item in stale:
+        model.RemoveBuildItem(item)
+    comps = model.GetComponentsObjects()
+    unused = []
+    while comps.MoveNext():
+        unused.append(comps.GetCurrentComponentsObject())
+    for c in unused:
+        model.RemoveResource(c)
+    obj = model.AddComponentsObject()
+    obj.SetName(path.stem)
+    obj.SetPartNumber(path.stem)
+    for mesh, (_, color, name) in zip(m.meshes, got):
+        obj.AddComponent(mesh, wrapper.GetIdentityTransform())
+        group, index, has = mesh.GetObjectLevelProperty()
+        if has:  # Mesher names the colour by its repr: name it by the body ("inlay #ffffff")
+            model.GetBaseMaterialGroupByID(group).SetName(index, f"{name} {color_name(color)}")
+    model.AddBuildItem(obj, wrapper.GetIdentityTransform())
     m.write(str(path))
     return path
 
 
-def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf", "png")) -> list[Path]:
-    """Write <name>.<fmt> into `out` for each of formats: step, stl, 3mf, png (6-view preview), glb."""
+def export_files(part: Part, out: Path, name: str, formats=("step", "stl", "3mf", "png"), body_stls: bool = True) -> list[Path]:
+    """Write <name>.<fmt> into `out` for each of formats: step, stl, 3mf, png (6-view preview), glb.
+    A multi-body part (bodies.py) also writes <name>_<body>.stl per body (body_stls)."""
+    from .bodies import stl_files
+
     out.mkdir(parents=True, exist_ok=True)
     files = []
     if "step" in formats:
         files.append(out / f"{name}.step")
         export_step(part, files[-1])
     if "stl" in formats:
-        files.append(out / f"{name}.stl")
-        export_stl(part, files[-1], tolerance=0.005, angular_tolerance=0.1)
+        for fname, shape in stl_files(part, name)[: None if body_stls else 1]:  # a multi-body part: the union, then each body
+            files.append(out / fname)
+            export_stl(shape, files[-1], tolerance=0.005, angular_tolerance=0.1)
     if "3mf" in formats:
         files.append(export_3mf(part, out / f"{name}.3mf"))
     if "png" in formats:

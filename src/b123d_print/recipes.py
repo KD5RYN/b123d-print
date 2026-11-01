@@ -929,6 +929,30 @@ def demo_vase_shell() -> Part:
 
 
 # ---------------------------------------------------------------------------------------------
+# Multi-colour inlays (bodies.py)
+
+
+def inlay(base: Part, insert: Part, color="white", base_color=None, name: str = "inlay", base_name: str = "base") -> Compound:
+    """A colour inlay: the part of `insert` (text, a logo: any solid) inside `base` becomes its
+    own body, and `base` gets the matching pocket (base - insert), so the two meet exactly with no
+    gap and no overlap. Returns a multi-body part (bodies.bodies: {base_name, name}); the 3MF holds
+    one object with both as named, coloured parts. For a flush inlay on a top face at Z = top:
+    insert = Pos(x, y, top - depth) * text_label(..., depth=depth + 1) (the part above the face is
+    trimmed off). depth: 2 or more layers (0.6 = 3 x 0.2)."""
+    from .bodies import bodies
+
+    inside = base & insert
+    if inside.volume <= 1e-6:
+        raise ValueError("inlay: the insert does not reach into the base (place it from the top face down)")
+    return bodies(**{base_name: (base - insert, base_color), name: (inside, color)})
+
+
+def demo_inlay() -> Compound:
+    plate = Box(44, 18, 3, align=BED)
+    return inlay(plate, Pos(0, 0, 3 - 0.6) * text_label("B123D", size=8, depth=1.6), color="white", base_color="#2b5fa8")
+
+
+# ---------------------------------------------------------------------------------------------
 # Registry
 
 
@@ -1303,6 +1327,23 @@ RECIPES = {r.name: r for r in [
 - One closed contour per layer: it prints in vase mode as it is (DS-D1).
 """, ["[DS-D5, DS-S3, DS-S5](https://kd5ryn.github.io/b123d-print/DESIGN_GUIDE/) pattern size, seams, texture",
       "[BP-X2](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) features >= 2 line widths"]),
+    Recipe("inlay", "Colour inlay (multi-colour 3MF)", [inlay], demo_inlay, """
+- For an AMS / MMU printer: text or a logo in a second filament, flush with the top face. The
+  part is two bodies (`bodies`): the 3MF opens as one object with two named, coloured parts; give
+  each part its filament in the slicer (the colours in the file are only display hints).
+- The pocket is cut with the insert itself, so inlay and pocket match exactly: no clearance
+  between bodies (they print fused, like one part). The `bodies` check fails on an overlap and
+  warns on a body that touches no other.
+- Depth: at least 2 layers (0.6 mm = 3 x 0.2). The printer changes filament on every layer both
+  bodies share, so a shallow inlay near the top keeps the changes (and the purge) few.
+- Strokes at least 2 line widths (~0.9 mm): bold sans-serif at 5 mm and up (BP-X1..X3). The
+  `bodies` check warns on a body narrower than one line width.
+- Any solid works as the insert: text, an imported logo, text on a curved face; place it so its
+  top is at or above the face.
+- Prints in one colour too: give both parts the same filament, or print `<name>.stl` (the union).
+""", ["[BP-X1, X2, X3](https://kd5ryn.github.io/b123d-print/BEST_PRACTICES/) text size, strokes, depth",
+      "3MF Core Specification: components (one object of several meshes) and base materials (display colours)",
+      "build123d `Mesher` (lib3mf)"]),
     Recipe("vase_shell", "Vase-mode body", [vase_shell, vase_lean], demo_vase_shell, """
 - **A solid, not a shell: the slicer makes the wall.** In vase mode ("Spiral vase" in PrusaSlicer,
   OrcaSlicer and Bambu Studio; "Spiralize Outer Contour" in Cura) it prints one continuous wall,

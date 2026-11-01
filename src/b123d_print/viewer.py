@@ -85,10 +85,11 @@ def write_glb(items, path: Path) -> Path:
     import matplotlib.colors
     from build123d import Color, Compound, export_gltf
 
+    from .bodies import expand
     from .render import PALETTE
 
     children, diag = [], 1.0
-    for i, (part, color, label) in enumerate(items):
+    for i, (part, color, label) in enumerate(expand(items)):  # a multi-body part: a node per body
         piece = Compound(part.solids())  # a new shape (placed solids): labels and colors stay off the script's own
         r, g, b, a = matplotlib.colors.to_rgba(color if color is not None else PALETTE[i % len(PALETTE)])
         piece.color = Color(r, g, b, a)

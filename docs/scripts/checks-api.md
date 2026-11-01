@@ -127,6 +127,19 @@ Automatic (with `other=None`) for every part made of several solids.
 | `within` | `None` | box `((cx, cy, cz), (sx, sy, sz))`: only measure inside it, e.g. one mating face |
 | `label` | `""` | shown in the report |
 
+## `Bodies`
+
+The bodies of a multi-body part (`bodies(...)`, see
+[Output formats](../using/formats.md#multi-colour-parts-several-bodies)): fails when two overlap,
+warns on a body that touches no other or is narrower than one line width. Automatic for every
+multi-body part; the other checks run on the bodies' union.
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `part` | — | part name from `build()` |
+| `tol` | `0.01` | overlap volume that fails, mm³ |
+| `thin` | `True` | also warn on a body narrower than one line width |
+
 ## `Probe`
 
 Material must be present (`expect="solid"`) or absent (`expect="empty"`) in a small box: for
