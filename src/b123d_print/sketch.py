@@ -17,13 +17,13 @@ Sketches are 2D and quick to make, so they are not cached; nothing here builds t
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from types import ModuleType
 
 import numpy as np
 
 from . import checks as ck
+from .bodies import valid_name  # a sketch's name goes into its picture's file name: the body-name rule
 from .checks import FAIL, OK, WARN, Finding
 
 STEP = 0.05  # mm between outline points: an arc of radius r turns STEP / r rad per point
@@ -31,7 +31,6 @@ SHARP_DEG = 25.0  # a turn this sharp at one outline point is a corner with no r
 INSIDE_R = 0.5  # mm: inside corners under this radius warn (BP-R1)
 MIN_HOLE = 1.0  # mm: holes under this warn (BP-H5)
 MAX_ORDINATES = 14  # more distinct hole/slot centres than this along one edge: listed, not drawn
-NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")  # a sketch's name goes into its picture's file name
 FILL, EDGE, MARK = "#4c8cd9", "#1d3f6e", "#cc2222"
 
 
@@ -54,7 +53,7 @@ class Sketches:
         raw = f(d) if d is not None else f()
         if not isinstance(raw, dict):
             raw = {"sketch": raw}
-        bad = [k for k in raw if not (isinstance(k, str) and NAME_RE.match(k))]
+        bad = [k for k in raw if not valid_name(k)]
         if bad:
             raise SketchError(f"sketches(d): bad sketch name(s) {bad}: a name is 1-40 letters, digits, '_' or '-', "
                               "starting with a letter or digit (it becomes part of the picture's file name)")

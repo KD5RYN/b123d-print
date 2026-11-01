@@ -130,7 +130,7 @@ def test_lazy_sketches_and_missing_hook():
         skt.Sketches(object(), None)
 
 
-@pytest.mark.parametrize("key", ["../x", "a/b", "two words", "", "-lead", "x" * 41, 3])
+@pytest.mark.parametrize("key", ["../x", "a/b", "two words", "", "-lead", "x" * 41, 3, "a\n"])
 def test_bad_sketch_names_are_refused(key):
     class Mod:
         @staticmethod
