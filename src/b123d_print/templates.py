@@ -608,8 +608,11 @@ def make(spec: Template, part: Part, label_prefix: str = "") -> tuple[str, Made]
 
 
 def pick_part(parts: dict, name: str | None) -> tuple[str, Part]:
-    """The printable part a template is cut from: `name`, or the only one ("part")."""
-    named = {(k or "part"): v for k, v in parts.items()}
+    """The printable part a template is cut from: `name`, or the only one ("part"); a multi-body
+    part's union."""
+    from .bodies import printable
+
+    named = {(k or "part"): printable(v) for k, v in parts.items()}
     if name:
         if name not in named:
             raise TemplateError(f"no part {name!r}; parts: {sorted(named)}")

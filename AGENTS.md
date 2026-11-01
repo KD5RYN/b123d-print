@@ -277,6 +277,9 @@ as a starting point, say so in the report, and never turn it into a default or a
   `text_on_path`. Same minimums, measured on the surface; sunk text forgives thin strokes more
   than raised. The text is its own solid: a second colour is `part & text` (sunk) or
   `text - part` (raised). A face that does not mesh fails `check` (a hole in the STL).
+- Text or a logo in a second colour (AMS / MMU): the `inlay` recipe, or `bodies(base=..., inlay=(shape,
+  "white"))` with each pocket cut by its own insert. The 3MF is one object with a named, coloured
+  part per body; checks run on the union plus a `bodies` overlap check. Inlay ≥ 2 layers deep.
 - Split a part when it exceeds the build volume, would need a lot of support, or when pieces can
   each print in their strongest orientation. Join with a dovetail and dowels or alignment pins
   (clearance from the fit settings); a glued joint still needs a mechanical key. Glue: CA bonds
@@ -377,6 +380,8 @@ and **PNG** previews plus the section views. The user picks: the `formats` setti
 config, or `formats="3mf,png"` on one export. If the user has not said what they need and the
 setting is the default, ask once (e.g. "3MF for Bambu/Orca/Prusa, STEP to edit in other CAD?").
 The parametric source is always the `.py` script and its `Dims`.
+A multi-body part (`bodies(...)`) exports one 3MF object with a named, coloured part per body
+(tell the user to give each part its filament in the slicer), a union STL plus one per body.
 `export` sorts `parts/<name>/out/` by purpose: `print/` (3MF, STL and the print sheet: what the
 user opens in the slicer; fit-test templates in `print/templates/`), `cad/` (STEP, GLB), `images/`
 (previews, sections, before/after, compare) and `docs/` (BOM, hardware JSON, the 3D view HTML),

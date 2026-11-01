@@ -14,7 +14,8 @@ from importlib import import_module
 from types import ModuleType
 
 _FROM = {
-    "checks": ("BedEdge", "Finding", "Fit", "Gap", "Holes", "Overhang", "Overlap", "Probe", "ThinFeature", "TipOver", "Wall",
+    "bodies": ("bodies",),
+    "checks": ("BedEdge", "Bodies", "Finding", "Fit", "Gap", "Holes", "Overhang", "Overlap", "Probe", "ThinFeature", "TipOver", "Wall",
                "holes", "overhang_faces", "overlap", "wall_thickness"),
     "config": ("Settings", "clearance", "hole_comp", "load_settings", "printer"),
     "fit": ("Mates", "align_axis", "place_on"),

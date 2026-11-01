@@ -240,3 +240,17 @@ Measures your printer's limits: ledges whose undersides are 40° to 75° from ve
 bridges of 5 to 40 mm between pillars. The steepest clean ledge is your `max_overhang`, the
 longest clean bridge your `max_bridge`. The overhang and bridge checks warn on it on purpose.
 [Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/overhang_bridge_coupon/overhang_bridge_coupon.py)
+
+## `inlay_tag`
+
+![Inlay tag: a blue key tag with the word KEYS inlaid flush in white](../images/inlay_tag.png)
+
+A key tag with flush text in a second colour, for a multi-colour printer: the
+[`inlay` recipe](../using/recipes.md#multi-colour-inlays) cuts the text's pocket with the text and
+keeps the text as its own body, so the 3MF opens as one object with two named, coloured parts
+(`tag` and `text`) and the [print sheet](../using/slicing.md#the-print-sheet) lists both bodies
+and the three layers they share. The `bodies` check confirms they do not overlap; the other checks
+run on their union. A variant `name` shows another text and colour. CC0. An example with chosen
+sizes: not printed yet.
+[Script](https://github.com/KD5RYN/b123d-print/blob/main/src/b123d_print/examples/inlay_tag/inlay_tag.py)
+

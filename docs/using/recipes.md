@@ -61,6 +61,7 @@ The AI reads them with the `recipe(name)` tool or the `b123d-print://recipes/<na
 | `twisted_loft` | Twisted loft (spiral body) | `twisted_loft`, `star_section` | A star or polygon section lofted up Z with a twist and a taper: spiral ridges |
 | `patterned_surface` | Fluted (patterned) surface | `patterned_surface`, `fluted_section` | Flutes that follow a revolved profile, straight or spiralling |
 | `vase_shell` | Vase-mode body | `vase_shell`, `vase_lean` | A solid body of revolution for vase mode; refuses a wall that leans past the overhang limit |
+| `inlay` | Colour inlay (multi-colour 3MF) | `inlay` | Text or a logo in a second filament, flush in its pocket: one object with two named, coloured parts |
 
 ## Patterns: bolt circles, grids, grilles
 
@@ -454,3 +455,35 @@ label = text_label("LINE ONE\nLINE TWO", size=6, text_align=(TextAlign.LEFT, Tex
 
 The bundled [`text_knob` example](../scripts/examples.md) wraps "VOL" into a knob's tapered side
 and sinks "VOLUME" along an arc on its top.
+
+## Multi-colour inlays
+
+For a printer with several filaments (Bambu AMS, Prusa MMU, a tool changer): text or a logo in a
+second colour, flush with a top face. `inlay` cuts the pocket with the insert itself and keeps the
+part of the insert inside the base as its own body:
+
+```python
+from build123d import Pos
+from b123d_print.recipes import inlay, text_label
+
+text = Pos(0, 0, d.TAG_T - d.INLAY_DEPTH) * text_label(d.TEXT, size=9, depth=d.INLAY_DEPTH + 1)
+return inlay(tag, text, color="white", base_color="#2b5fa8", name="text", base_name="tag")
+```
+
+- **It returns a multi-body part** (`bodies`, see [Output formats](formats.md#multi-colour-parts-several-bodies)):
+  the 3MF opens in the slicer as one object with two named, coloured parts. Give each part its
+  filament there; the colours in the file are display hints only.
+- **Pocket and inlay match exactly:** no clearance between bodies, they print fused like one
+  part. The `bodies` check fails on an overlap and warns on a body that touches no other or is
+  narrower than one line width.
+- **Depth:** at least 2 layers (0.6 mm = 3 x 0.2). The printer changes filament on every layer
+  both bodies share, so a shallow inlay at the top keeps the changes and the purge few; the print
+  sheet lists the layers.
+- **Strokes** at least 2 line widths: bold sans-serif at 5 mm and up (BP-X1..X3).
+- **Any solid is an insert:** text, an imported logo, text on a curved face; place it so its top
+  is at or above the face (what sticks out is trimmed off).
+- Several colours: build the bodies yourself with `bodies(base=..., red=(..., "red"), white=(..., "white"))`,
+  each pocket cut with its own insert.
+
+The bundled [`inlay_tag` example](../scripts/examples.md) is a key tag with flush text.
+

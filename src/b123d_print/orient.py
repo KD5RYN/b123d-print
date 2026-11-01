@@ -366,7 +366,9 @@ def for_script(mod, d, parts: dict, settings, piece: str | None = None, load=Non
     """suggest() for each printable part of a script variant (`parts`, as project.printables gives
     them; or only `piece`), with the script's style and UP: ({name: ranking}, {name: the top choice
     on the bed})."""
-    named = {(k or "part"): v for k, v in parts.items()}
+    from .bodies import printable
+
+    named = {(k or "part"): printable(v) for k, v in parts.items()}  # a multi-body part: its union
     if piece:
         if piece not in named:
             raise KeyError(f"no part {piece!r}; parts: {sorted(named)}")

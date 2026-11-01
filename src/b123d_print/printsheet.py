@@ -123,6 +123,40 @@ def _walls_lines(want: dict, style: str, p: mt.Params) -> list[str]:
     return out
 
 
+def _bodies_lines(raw: dict, p: mt.Params, title: str) -> list[str]:
+    """The "Bodies (multi-colour)" section: per multi-body piece (bodies.py) its bodies, colours,
+    volumes, filament and the layers they share, and how to give each a filament in the slicer."""
+    from .bodies import color_name, split
+
+    multi = {n: got for n, v in raw.items() if (got := split(v)) is not None}
+    if not multi:
+        return []
+    L = ["", "## Bodies (multi-colour)", "",
+         "| Piece | Body | Colour | Volume (cm³) | Filament (g) | Z (mm) |", "| --- | --- | --- | --- | --- | --- |"]
+    for n, got in multi.items():
+        for b, c, name in got:
+            bb = bbox(b)
+            L.append(f"| {n} | {name} | {color_name(c) if c is not None else '-'} | {b.volume / 1000:.2f} "
+                     f"| {mt.mass(b, mt.Mesh(b), p)['grams']:g} | {bb.min.Z:.2f}-{bb.max.Z:.2f} |")
+    L.append("")
+    for n, got in multi.items():
+        stem = f"{title}_{n}" if n != "part" else title
+        names = ", ".join(name for _, _, name in got)
+        L.append(f"- **{n}** is one object with {len(got)} parts ({names}) in `{stem}.3mf`: give each part its filament "
+                 "in the slicer (Bambu Studio / OrcaSlicer: the part in the Objects list, then its filament; PrusaSlicer: "
+                 "right-click the part, Change extruder). The colours in the file are display hints: slicers do not "
+                 "map them to filaments by themselves.")
+        zs = [(name, bbox(b)) for b, _, name in got[1:]]
+        for name, bb in zs:
+            layers = round((bb.max.Z - bb.min.Z) / p.layer)
+            L.append(f"- **{name}**: Z {bb.min.Z:.2f}-{bb.max.Z:.2f} mm, about {layers} layer(s) at {p.layer:g} mm; the "
+                     "printer changes filament on every layer two bodies share, so a shallow inlay near the top means few "
+                     "changes. Keep an inlay at least 2 layers deep" + (" (this one is thinner)." if layers < 2 else "."))
+        L.append(f"- One colour: give every part the same filament, or print `{stem}.stl` (the union). "
+                 f"`{stem}_<body>.stl` holds each body, to load together as one object's parts.")
+    return L
+
+
 def _vase_lines(why: str, p: mt.Params, per: dict) -> list[str]:
     """Vase mode (the part's PRINT says vase): the slicer switch, the one-line wall, and the layers
     or overhangs that cannot print that way (DS-D1..D4)."""
@@ -178,7 +212,10 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
     vase = bool(want.get("vase", (False,))[0])
     if vase:  # the slicer prints one wall, no infill, no top (DS-D1)
         p.walls, p.infill, p.top_layers = 1, 0.0, 0
-    named = {(k or "part"): v for k, v in parts.items()}
+    from .bodies import printable
+
+    raw = {(k or "part"): v for k, v in parts.items()}
+    named = {n: printable(v) for n, v in raw.items()}  # a multi-body part prints as the union of its bodies
     per = {n: piece_numbers(v, p, settings.tip_speed, vase) for n, v in named.items()}
     for n, m in per.items():  # supports right at the bed are bed-edge flares, listed apart
         zmin = bbox(named[n]).min.Z
@@ -202,6 +239,7 @@ def sheet(mod, d, parts: dict, settings, title: str, *, hardware_items=None, var
         g = sum(m["mass"]["grams"] for m in per.values())
         t = sum(m["time"]["minutes"] for m in per.values())
         L.append(f"| **all** | | {sum(m['volume'] for m in per.values()) / 1000:.1f} | {g:.1f} | {_minutes(t)} | |")
+    L += _bodies_lines(raw, p, title)
     L += ["", "## Orientation", "",
           "Exported in print orientation: the face on Z = 0 goes on the bed, as the file opens. Don't "
           "auto-orient or lay it on another face in the slicer; if a piece lands off the plate, use "

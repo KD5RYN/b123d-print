@@ -11,6 +11,8 @@
 - holes:    round holes; horizontal ones with a round top sag, tiny ones do not print round.
 - bed edge: fillets that start on the bed flare.
 - gap:      distance between parts, or between solids printed in place.
+- bodies:   the bodies of a multi-body part (bodies.py: a colour inlay) do not overlap, each
+            touches another, none is narrower than a line width.
 
 The rules behind each check are in docs/BEST_PRACTICES.md; `BP-<id>` comments cite them.
 Part scripts declare checks with the spec classes (`Wall`, `Overhang`, `Probe`, `Gap`, ...) from
@@ -987,9 +989,17 @@ def _face_thinnest(loops, near, radius, limit, exclude) -> dict | None:
 
 
 def _get(parts: dict, name):
-    """Part by name (a single unnamed part is "part" or ""), or a Part passed directly."""
+    """Part by name (a single unnamed part is "part" or ""), or a Part passed directly. A
+    multi-body part is the union of its bodies: what the printer makes (bodies.printable)."""
+    from .bodies import printable
+
     if isinstance(name, Part):
         return name
+    return printable(_raw(parts, name))
+
+
+def _raw(parts: dict, name):
+    """The piece as build() made it (a multi-body part with its bodies)."""
     key = name or "part"
     if key not in parts:
         raise KeyError(f"no part named {name!r}; parts: {sorted(parts)}")
@@ -1230,6 +1240,55 @@ class TipOver:
                         f"{size}: {'; '.join(why)}. The nozzle can knock it over, or it wobbles. Use a brim "
                         "(5-10 mm) or mouse ears, lay it down (suggest_orientation ranks the ways to put it on the bed), "
                         "or print several together joined by a thin tie", fp)]
+
+
+@dataclass
+class Bodies:
+    """The bodies of a multi-body part (bodies.py), which print as one object in several
+    filaments: fails if two overlap by more than `tol` mm^3 (the slicer would print the overlap
+    twice or pick one body at random); warns on a body that touches no other (a pocket larger
+    than its inlay, or an inlay floating) and on a body narrower than one line width (the nozzle
+    cannot lay a stroke of that colour). Added automatically for every multi-body part; the
+    other checks run on the bodies' union. It cannot tell whether an inlay fills all of its
+    pocket: cut the pocket with the inlay itself (recipes.inlay)."""
+
+    part: str
+    tol: float = 0.01  # mm^3
+    thin: bool = True  # also the narrowest stroke of each body against the line width
+
+    def run(self, parts, assembly, settings) -> list[Finding]:
+        from .bodies import split
+
+        name = self.part or "part"
+        got = split(_raw(parts, self.part))
+        if got is None:
+            return []
+        vols = {n: round(b.volume, 2) for b, _, n in got}
+        out = []
+        for (a, _, an), (b, _, bn) in combinations(got, 2):
+            v = (a & b).volume if _bbox_overlap(a, b) else 0.0
+            if v > self.tol:
+                out.append(Finding(FAIL, "bodies", f"{name}: {an} / {bn}",
+                                   f"bodies overlap by {v:.3f} mm^3: cut the pocket with the inlay (base - inlay), "
+                                   "or the slicer prints the overlap in either filament", {"volume": round(v, 4)}))
+        for i, (a, _, an) in enumerate(got):
+            near = min(gap(a, b) if _bbox_gap(a, b) <= 1e-3 else _bbox_gap(a, b) for j, (b, _, _) in enumerate(got) if j != i)
+            if near > 1e-3:
+                out.append(Finding(WARN, "bodies", f"{name}: {an}",
+                                   f"touches no other body (nearest {near:.3f} mm away): a pocket larger than its inlay "
+                                   "(no clearance between bodies: they print fused), or a body floating", {"gap": round(near, 4)}))
+        lw = line_width(settings)
+        for b, _, n in got if self.thin else ():
+            spots = [x for x in thin_features(b, lw, ("XY",), 2.0) if not x["taper"]]
+            if spots:
+                m = spots[0]
+                out.append(Finding(WARN, "bodies", f"{name}: {n}",
+                                   f"narrowest {m['min']:.2f} mm at {tuple(m['at'])}, under one line width ({lw:g}): "
+                                   "that part of the colour may not print; bolder text or a larger logo", {"spots": spots[:4]}))
+        if not any(f.level != OK for f in out):
+            out.append(Finding(OK, "bodies", name, f"{len(got)} bodies ({', '.join(f'{n} {v:g} mm^3' for n, v in vols.items())}): "
+                               "no overlap, each touches another", {"volumes": vols}))
+        return out
 
 
 @dataclass
