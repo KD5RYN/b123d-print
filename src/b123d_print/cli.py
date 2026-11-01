@@ -528,6 +528,8 @@ def cmd_spec(args) -> int:
     if key not in keys:
         sys.exit(f"spec: no variant {args.variant!r}; variants: {[k or 'standard' for k in keys]}")
     res = replicate.from_part(script, dims(mod, key), replicate.standard(mod, key), key)
+    if not sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):  # piped to a file (`> spec.md`): UTF-8 (Δ, ±, Ø)
+        sys.stdout.reconfigure(encoding="utf-8")
     if args.json:
         json.dump(res, sys.stdout, indent=1, ensure_ascii=False)
         print()

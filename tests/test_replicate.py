@@ -1,5 +1,6 @@
 """The replication spec (#165): MEASURE.md parsed, joined with the Dims, and its flags."""
 
+import os
 import re
 import subprocess
 import sys
@@ -127,7 +128,8 @@ def test_variant_differences_are_the_variants_own():
 
 
 def _cli(*args, cwd):
-    return subprocess.run([sys.executable, "-m", "b123d_print.cli", *args], cwd=cwd, capture_output=True, text=True)
+    return subprocess.run([sys.executable, "-m", "b123d_print.cli", *args], cwd=cwd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env={**os.environ, "PYTHONIOENCODING": "ascii"})  # an ASCII runner
 
 
 def test_example_and_cli(tmp_path):
@@ -139,6 +141,7 @@ def test_example_and_cli(tmp_path):
     r = _cli("spec", "plate", "--strict", cwd=tmp_path)
     assert r.returncode == 0, r.stderr
     assert "9 critical, 13 free" in r.stdout and "No flags" in r.stdout
+    assert "| Δ |" in r.stdout and "±0.05" in r.stdout  # piped: UTF-8 even on an ASCII console
     r = _cli("spec", "plate", "--variant", "140", cwd=tmp_path)
     assert r.stdout.count("(variant 140)") == 5
     (p.parent / "MEASURE.md").write_text((p.parent / "MEASURE.md").read_text(encoding="utf-8").replace(
