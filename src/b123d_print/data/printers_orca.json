@@ -1,7 +1,7 @@
 {
-"source": "OrcaSlicer resources/profiles at https://github.com/SoftFever/OrcaSlicer/tree/fd28f6c1894a7fb09af2af0d8a8c935d98467e2d",
+"source": "OrcaSlicer resources/profiles at https://github.com/SoftFever/OrcaSlicer/tree/b5517b693e898261a6e28f940b110cd62683fede",
 "license_note": "Facts (build volume, nozzle) extracted from OrcaSlicer's AGPL-3.0 profiles; no files copied.",
-"commit": "fd28f6c1894a7fb09af2af0d8a8c935d98467e2d",
+"commit": "b5517b693e898261a6e28f940b110cd62683fede",
 "printers": {
 "afinia_h_1_hs": {
 "label": "Afinia H+1(HS)",
@@ -450,6 +450,15 @@
 "bed_x": 256.0,
 "bed_y": 256.0,
 "height": 261.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"benfab_450": {
+"label": "BenFab 450",
+"vendor": "BenFab",
+"bed_x": 426.0,
+"bed_y": 426.0,
+"height": 480.0,
 "round_bed": false,
 "nozzle": 0.4
 },
@@ -2376,6 +2385,15 @@
 "bed_x": 175.0,
 "bed_y": 180.0,
 "height": 170.0,
+"round_bed": false,
+"nozzle": 0.4
+},
+"qidi_x_smart_5": {
+"label": "Qidi X-Smart 5",
+"vendor": "Qidi",
+"bed_x": 180.0,
+"bed_y": 180.0,
+"height": 180.0,
 "round_bed": false,
 "nozzle": 0.4
 },
