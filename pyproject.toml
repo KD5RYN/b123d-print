@@ -35,12 +35,12 @@ build-backend = "uv_build"
 
 [dependency-groups]
 # the eval runner's Claude adapter (eval/, repo only; never a runtime dependency)
-eval = ["anthropic==1.17.0"]
+eval = ["anthropic==2.3.0"]
 dev = [
     "mkdocs==1.6.1",
-    "mkdocs-material==9.7.7",
+    "mkdocs-material==9.8.0",
     "pymdown-extensions==12.3",
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-xdist==3.8.0",
 ]
 
