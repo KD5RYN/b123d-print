@@ -57,7 +57,7 @@ Rules (all of them: read_guide):
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0. Repeated features: place them with GridLocations / PolarLocations / HexLocations / Locations (or mirror) and cut or add them in one boolean (part -= GridLocations(...) * hole), not one per pass of a for loop.
 3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural, organic, decorative, toy); set STYLE in Dims. A natural object (fruit, plant, animal, figurine, shell, sculpture): STYLE organic, and start from a recipe (spine_loft, tapered_sweep, organic_blend, flat_base; example banana), not from boxes and cylinders. A vase, planter or lamp shade: STYLE decorative (twisted_loft, patterned_surface, vase_shell; example twisted_vase).
 4. The order, every part: build_part -> render_preview + section through holes and pockets -> check (fix every FAIL) -> design_metrics(name, style=...) -> suggest_orientation(name) -> export. The results end with "Before printing": make the calls it lists. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
-5. On a remote server bring the files home after export: download_part(name) (embed=True if your shell has no network).
+5. On a remote server the scripts live on the server: change one only with write_part (your own file tools edit only a downloaded copy, and build_part keeps building the server's). Bring the files home after export: download_part(name) (embed=True if your shell has no network).
 6. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own.
 ```
 
