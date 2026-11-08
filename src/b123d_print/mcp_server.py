@@ -31,7 +31,7 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from . import handoff, jobqueue, links, outdir, sandbox, sched, tokens, viewer
-from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part
+from .cli import NAME_RE, data, examples, init_workspace, new_part as _new_part, untouched_template
 from .config import WORKSPACE_FILE, formats_configured, hole_comp_source, load_settings, parse_formats, safe_console, user_config_path
 from .partfiles import find_parts, timing_lines
 
@@ -91,7 +91,7 @@ Rules (all of them: read_guide):
 2. Every dimension is a named UPPER_CASE field of the Dims dataclass, in mm; build(d) in print orientation, bottom face on Z=0. Repeated features: place them with GridLocations / PolarLocations / HexLocations / Locations (or mirror) and cut or add them in one boolean (part -= GridLocations(...) * hole), not one per pass of a for loop.
 3. Style: confirm the workspace default (list_parts) or ask the user (functional, modern, least_cost, rugged, soft, structural, organic, decorative, toy); set STYLE in Dims. A natural object (fruit, plant, animal, figurine, shell, sculpture): STYLE organic, and start from a recipe (spine_loft, tapered_sweep, organic_blend, flat_base; example banana), not from boxes and cylinders. A vase, planter or lamp shade: STYLE decorative (twisted_loft, patterned_surface, vase_shell; example twisted_vase).
 4. The order, every part: build_part -> render_preview + section through holes and pockets -> check (fix every FAIL) -> design_metrics(name, style=...) -> suggest_orientation(name) -> export. The results end with "Before printing": make the calls it lists. Report holes with their cut size: "hole for a 4 mm dowel (cut 4.30: clearance 0.15 per side)".
-5. On a remote server bring the files home after export: download_part(name) (embed=True if your shell has no network).
+5. On a remote server the scripts live on the server: change one only with write_part (your own file tools edit only a downloaded copy, and build_part keeps building the server's). Bring the files home after export: download_part(name) (embed=True if your shell has no network).
 6. After a change that built and passed check, offer "Save this version? (<part>: <what changed>)"; save_version only on a yes, never on your own."""
 
 REMOTE_DOC = """
@@ -494,6 +494,37 @@ def _with_note(result: list, name: str | None) -> list:
     return result
 
 
+def _template_notice(name: str) -> str:
+    """The notice at the top of a build / preview / check / export result while the part's script
+    is still the new_part template ("" once it has been written). The real case: a client edited
+    its own downloaded copy with its own file tools, built again and again, and got the template."""
+    try:
+        script = _script(name)
+    except ToolError:
+        return ""
+    what = untouched_template(script)
+    if not what:
+        return ""
+    rel = script.relative_to(_root()).as_posix()
+    if _remote():
+        return (f"NOTICE: {rel} is still the new_part template ({what}). Your client's own file tools do not "
+                f"reach this server: send the whole script with write_part('{name}', <whole script>), then build again.\n\n")
+    return (f"NOTICE: {rel} is still the new_part template ({what}): nothing has been written to it yet. "
+            f"Write the whole script with write_part('{name}', <whole script>) or edit that file, then build again.\n\n")
+
+
+def _noticed(name: str, result):
+    """Put _template_notice at the top of a tool result (a string, or a list whose first item is one)."""
+    note = _template_notice(name)
+    if not note:
+        return result
+    if isinstance(result, str):
+        return note + result
+    if result and isinstance(result[0], str):
+        result[0] = note + result[0]
+    return result
+
+
 def _show(image: str) -> str:
     """The image's path as the client should see it: workspace-relative over HTTP and SSH, absolute over stdio."""
     return Path(image).relative_to(_root()).as_posix() if _remote() else image
@@ -872,12 +903,12 @@ async def build_part(name: str, variant: str | None = None, parts: str | None = 
     "before_printing": the review steps this version still needs, each with its call."""
     res = await _job(name, "build", variant=variant, parts=parts, fresh=fresh or None)
     if not res.get("ok"):
-        return _error_text(res)
+        return _noticed(name, _error_text(res))
     res.pop("ok", None)
     block = _review_block(name, _script(name))
     if block:
         res["before_printing"] = block.splitlines()
-    return json.dumps(res, indent=1, default=str, ensure_ascii=False)
+    return _noticed(name, json.dumps(res, indent=1, default=str, ensure_ascii=False))
 
 
 @mcp.tool()
@@ -914,11 +945,11 @@ async def render_preview(name: str, variant: str | None = None, parts: str | Non
     ver = _version(script)
     res = await _job(name, "render", variant=variant, parts=parts, size=size, fresh=fresh or None)
     if not res.get("ok"):
-        return [_error_text(res)]
+        return _noticed(name, [_error_text(res)])
     _record(script, ver, "preview", variant=res["variant"])
     summary = {"variant": res["variant"], "layout": res["layout"], "drawn": res["drawn"], "parts": res["parts"],
                "timing": res["timing"], "file": _show(res["image"])}
-    return _with_note(_with_image(json.dumps(summary, indent=1), res["image"], inline), name)
+    return _noticed(name, _with_note(_with_image(json.dumps(summary, indent=1), res["image"], inline), name))
 
 
 @mcp.tool(structured_output=False)
@@ -1024,7 +1055,7 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     ver = _version(script)
     res = await _check(name, variant, fresh)
     if not res.get("ok"):
-        return _error_text(res)
+        return _noticed(name, _error_text(res))
     _record(script, ver, "check", passed=bool(res["passed"]), variant=variant)
     lines = [f"{'PASSED' if res['passed'] else 'FAILED'}"]
     for v, findings in res["variants"].items():
@@ -1046,7 +1077,7 @@ async def check(name: str, variant: str | None = None, fresh: bool = False) -> s
     block = _review_block(name, script) if res["passed"] else ""
     if block:
         lines.append(f"\n{block}")
-    return _scrub("\n".join(lines))
+    return _noticed(name, _scrub("\n".join(lines)))
 
 
 @mcp.tool()
@@ -1164,15 +1195,15 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     c = review.checklist(name, script, settings) if mode != "off" else None
     missing = c is not None and not c.exempt and bool(c.missing)
     if missing and mode == "required" and not skip_review:
-        return [_scrub(f"NOT EXPORTED: this workspace requires the design steps before export (review = \"required\"), "
+        return _noticed(name, [_scrub(f"NOT EXPORTED: this workspace requires the design steps before export (review = \"required\"), "
                        f"and this version of {name} is missing {c.skipped()}.\n\n{c.block()}\n\n"
                        f"Make those calls, then export('{name}') again. Only if the user says to export without them: "
-                       f"export('{name}', skip_review=\"<the user's reason>\").")]
+                       f"export('{name}', skip_review=\"<the user's reason>\").")])
     sheet = review.sheet_lines(c, skip_review if missing else "") if c is not None else []
     res = await _job(name, "export", variant=variant, formats=formats, parts=parts, fresh=fresh or None, view=layout,
                      review=sheet or None)
     if not res.get("ok"):
-        return [_error_text(res)]
+        return _noticed(name, [_error_text(res)])
     out, extra, expires, budget = [], [], None, EMBED_TOTAL
     if missing:
         out.append(f"Exported WITHOUT {c.skipped()}"
@@ -1220,7 +1251,7 @@ async def export(name: str, variant: str | None = None, formats: str | None = No
     if _remote():
         out.append("\n" + _home_note(name))
         out.append("\n" + _next_step(name))
-    return ["\n".join(out), *extra]
+    return _noticed(name, ["\n".join(out), *extra])
 
 
 def _baked_note(s) -> str:
@@ -1528,7 +1559,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
                 f"{_root() / parts_dir / name}. Nothing to download.\n{listing}"]
     if STATE["ssh_dest"]:
         out = [f"{head}\n{_pull_note(name, formats, variant)}\nThen check the files are there (e.g. ls parts/{name}/out) "
-               f"before reporting.\n{listing}\n\n{_home_note(name)}{_save_home(name)}"]
+               f"before reporting.\n{listing}\n{_copy_note(name)}\n\n{_home_note(name)}{_save_home(name)}"]
         return _embed_zip(out, files, total, prefix, f"b123d-print://download/{_ws_name()}/{name}", name) if embed else out
     query = links.zip_query(variant, formats)
     url, expires = links.sign_zip(STATE["link_secret"], _ws_name(), name, query, STATE["link_ttl"])
@@ -1542,6 +1573,7 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
             f"Then, in the project folder: unzip -o {name}.zip   (Windows: tar -xf {name}.zip)\n"
             f"It creates the same layout as a local install (paths relative to the project folder):\n{listing}\n"
             f"Check the files are there on the user's machine (e.g. ls {prefix}/out) before reporting.\n"
+            f"{_copy_note(name)}\n"
             + (f"3D view in a browser (no token, same expiry; offer it to the user):\n" + "\n".join(views) + "\n"
                if views else "")
             + "\n" + _home_note(name) + _save_home(name))
@@ -1551,6 +1583,13 @@ def download_part(name: str, variant: str | None = None, formats: str | None = N
     out: list = [text, ResourceLink(uri=uri, name=f"{name}.zip", mime_type="application/zip",
                                     description=f"the whole part as a zip (unfiltered); download: {url}")]
     return _embed_zip(out, files, total, prefix, uri, name) if embed else out
+
+
+def _copy_note(name: str) -> str:
+    """download_part: the copy at home does not feed the server's builds."""
+    return (f"The downloaded copy is for viewing and slicing. Changes to the script go back to this server with "
+            f"write_part('{name}', <whole script>): editing the local file with your own tools changes nothing "
+            "here, and build_part keeps building the server's copy.")
 
 
 def _save_home(name: str) -> str:

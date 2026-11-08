@@ -73,6 +73,34 @@ def new_part(root: Path, parts_dir: str, name: str, description: str = "", examp
     return p
 
 
+TEMPLATES = {"part_template.py": "a 40x20x10 placeholder box", "part_template_sketch.py": "a 60x30x4 placeholder plate"}
+
+
+def _template_body(src: str) -> str:
+    """A script without its module docstring (title and description vary), line endings and
+    trailing spaces normalised: what untouched_template compares."""
+    s = src.replace("\r\n", "\n").lstrip("\ufeff").strip()
+    if s.startswith('"""'):
+        end = s.find('"""', 3)
+        s = s[end + 3:] if end > 0 else s
+    return "\n".join(line.rstrip() for line in s.strip().splitlines())
+
+
+def untouched_template(script: Path) -> str | None:
+    """What a part script still is if it is the new_part template unchanged apart from its
+    docstring (the name, title and description new_part fills in): e.g. "a 40x20x10 placeholder
+    box"; None for a script that has been written. A client whose own file tools edited a
+    downloaded copy leaves the server's script like this, and every build is the placeholder."""
+    try:
+        body = _template_body(script.read_bytes().decode("utf-8", "replace"))
+    except OSError:
+        return None
+    for tpl, what in TEMPLATES.items():
+        if body == _template_body(data(tpl).format(name=script.stem, title="", description="")):
+            return what
+    return None
+
+
 def _targets(args) -> list[Path]:
     from .partfiles import find_parts, resolve_part
 

@@ -186,6 +186,7 @@ def test_download_part_results(http, monkeypatch):
     assert "curl -fLo box.zip 'https://cad.example.com/zip/alice/" in t and "variant=140" in t
     assert "parts/box/box.py" in t and "parts/box/out/box_140.3mf" in t and "parts/box/out/box.3mf " not in t
     assert "deleted after 30 days unused" in t and "Do not use ssh/scp" in t and "unzip" in t
+    assert "for viewing and slicing" in t and "write_part('box', <whole script>)" in t  # the copy does not feed builds
     assert str(root) not in t and "/work" not in t
     assert res[1].uri == "b123d-print://download/alice/box"
     emb = call(m, "download_part", "alice", name="box", embed=True)[2]

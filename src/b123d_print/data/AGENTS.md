@@ -453,6 +453,14 @@ storage: its copy is a **temporary working copy, deleted after some days unused*
 say how many). Use **only the MCP tools and the links they return**: the server gives **no
 shell, ssh or scp access**, so never try them.
 
+**The part scripts live on the server too: change one only with `write_part`** (or `set_params`).
+Your client's own file tools (write_file, edit, apply_patch, ...) reach only your machine: editing
+a downloaded copy changes nothing on the server, and `build_part` keeps building the server's
+script. A script still left as the `new_part` template builds a placeholder (a 40x20x10 box, or a
+60x30x4 plate with `sketch_first`), and `build_part`, `render_preview`, `check` and `export` say
+so at the top of their result: send the whole script with `write_part`, then build again. The
+copy `download_part` brings home is for viewing, slicing and the version history.
+
 **A part is not done until its files are on the user's machine: after export, call
 download_part (embed=True if your shell has no network) and unzip into the project folder,
 unless the user says to leave them on the server.** A remote `export` or `make_template` result
